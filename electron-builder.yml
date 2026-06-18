@@ -1,5 +1,6 @@
-appId: com.electron.app
-productName: vfan-tv-electron
+appId: com.vfantv.app
+productName: VfanTV
+icon: build/icon.png
 directories:
   buildResources: build
 files:
@@ -12,13 +13,28 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: vfan-tv-electron
+  icon: build/icon.ico
+  executableName: VfanTV
+  target:
+    - nsis
+    - portable
 nsis:
-  artifactName: ${name}-${version}-setup.${ext}
+  oneClick: false
+  perMachine: false
+  selectPerMachineByDefault: false
+  allowElevation: true
+  allowToChangeInstallationDirectory: true
+  include: build/installer.nsh
+  artifactName: VfanTV-v${version}-${arch}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
-  createDesktopShortcut: always
+  createDesktopShortcut: true
+  runAfterFinish: true
+portable:
+  artifactName: VfanTV-v${version}-${arch}-portable.${ext}
 mac:
+  icon: build/icon.icns
+  artifactName: VfanTV-v${version}-${arch}.${ext}
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.
@@ -27,17 +43,17 @@ mac:
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
   notarize: false
 dmg:
-  artifactName: ${name}-${version}.${ext}
+  artifactName: VfanTV-v${version}-${arch}.${ext}
 linux:
   target:
     - AppImage
     - snap
     - deb
-  maintainer: electronjs.org
+  maintainer: vfan
   category: Utility
 appImage:
-  artifactName: ${name}-${version}.${ext}
-npmRebuild: false
+  artifactName: VfanTV-v${version}.${ext}
+npmRebuild: true
 publish:
   provider: generic
   url: https://example.com/auto-updates

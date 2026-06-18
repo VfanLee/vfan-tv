@@ -1,0 +1,91 @@
+import Database from 'better-sqlite3'
+import { app } from 'electron'
+import { drizzle } from 'drizzle-orm/better-sqlite3'
+import { mkdirSync } from 'fs'
+import { join } from 'path'
+import * as schema from './schema'
+import { DB_FILE_NAME } from '@shared/constants/app-brand'
+
+export type AppDatabase = ReturnType<typeof drizzle<typeof schema>>
+
+export function createDatabase(): AppDatabase {
+  const dbDir = join(app.getPath('userData'), 'database')
+  mkdirSync(dbDir, { recursive: true })
+
+  const databasePath = join(dbDir, DB_FILE_NAME)
+
+  const sqlite = new Database(databasePath)
+  sqlite.pragma('journal_mode = WAL')
+  sqlite.exec(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key TEXT PRIMARY KEY NOT NULL,
+      value TEXT NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS vod_sources (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL,
+      base_url TEXT NOT NULL UNIQUE,
+      enabled INTEGER NOT NULL,
+      sort INTEGER NOT NULL,
+      headers TEXT NOT NULL,
+      remark TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS recent_plays (
+      id TEXT PRIMARY KEY NOT NULL,
+      source_id TEXT NOT NULL,
+      source_name TEXT NOT NULL,
+      vod_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      poster TEXT,
+      line_name TEXT NOT NULL,
+      episode_name TEXT NOT NULL,
+      episode_url TEXT NOT NULL,
+      current_time INTEGER NOT NULL DEFAULT 0,
+      duration INTEGER NOT NULL DEFAULT 0,
+      raw_json TEXT,
+      played_at INTEGER NOT NULL,
+      UNIQUE(source_id, vod_id, line_name, episode_name)
+    );
+
+    CREATE TABLE IF NOT EXISTS favorites (
+      id TEXT PRIMARY KEY NOT NULL,
+      source_id TEXT NOT NULL,
+      source_name TEXT NOT NULL,
+      source_base_url TEXT,
+      source_headers TEXT,
+      vod_id TEXT NOT NULL,
+      title TEXT NOT NULL,
+      poster TEXT,
+      year TEXT,
+      area TEXT,
+      language TEXT,
+      category TEXT,
+      remarks TEXT,
+      actor TEXT,
+      director TEXT,
+      description TEXT,
+      raw_json TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      UNIQUE(source_id, vod_id)
+    );
+  `)
+  ensureColumn(sqlite, 'recent_plays', 'current_time', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn(sqlite, 'recent_plays', 'duration', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn(sqlite, 'recent_plays', 'raw_json', 'TEXT')
+
+  return drizzle(sqlite, { schema })
+}
+
+function ensureColumn(sqlite: Database.Database, tableName: string, columnName: string, definition: string): void {
+  const columns = sqlite.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>
+
+  if (!columns.some((column) => column.name === columnName)) {
+    sqlite.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`)
+  }
+}

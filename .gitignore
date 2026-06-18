@@ -4,3 +4,6 @@ out
 .DS_Store
 .eslintcache
 *.log*
+
+plan.md
+design-qa.md

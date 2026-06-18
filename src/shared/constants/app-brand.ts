@@ -1,0 +1,5 @@
+export const APP_DISPLAY_NAME = 'VfanTV'
+export const APP_ID = 'com.vfantv.app'
+export const USER_DATA_DIR_NAME = 'vfantv'
+export const DB_FILE_NAME = 'vfantv.sqlite'
+export const DEFAULT_SOURCES_EXPORT_NAME = 'VfanTV-sources.json'
