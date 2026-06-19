@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Match tag to package version
         env:
@@ -42,7 +42,7 @@ jobs:
               dist/*.dmg
           - name: Windows
             os: windows-2022
-            command: pnpm run build:app && pnpm exec electron-builder --win --x64 --arm64 --publish never
+            command: pnpm run build:app && pnpm exec electron-builder --win --x64 --publish never && pnpm exec electron-builder --win --arm64 --publish never
             artifact: release-windows
             files: |
               dist/*.exe
@@ -52,15 +52,15 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v6
         with:
           version: 10.33.0
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: 22
           cache: pnpm
@@ -72,7 +72,7 @@ jobs:
         run: ${{ matrix.command }}
 
       - name: Upload installers
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}
           path: ${{ matrix.files }}
@@ -87,7 +87,7 @@ jobs:
       contents: write
     steps:
       - name: Download installers
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: release-*
           path: release-assets
