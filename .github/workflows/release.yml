@@ -43,7 +43,7 @@ jobs:
               dist/*.zip
           - name: Windows
             os: windows-2022
-            command: pnpm run build:win:x64 && pnpm run build:win:arm64
+            command: pnpm run build:app && pnpm exec electron-builder --win --x64 --arm64
             artifact: release-windows
             files: |
               dist/*.exe
