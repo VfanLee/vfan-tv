@@ -36,25 +36,25 @@ jobs:
         include:
           - name: macOS x64
             os: macos-14
-            command: pnpm run release:mac:x64
+            command: pnpm run build:mac:x64 --publish never
             artifact: release-macos-x64
             files: |
               dist/*-x64.dmg
           - name: macOS arm64
             os: macos-14
-            command: pnpm run release:mac:arm64
+            command: pnpm run build:mac:arm64 --publish never
             artifact: release-macos-arm64
             files: |
               dist/*-arm64.dmg
           - name: Windows x64
             os: windows-2022
-            command: pnpm run release:win:x64
+            command: pnpm run build:win:x64 --publish never
             artifact: release-windows-x64
             files: |
               dist/*-x64-*.exe
           - name: Windows arm64
             os: windows-2022
-            command: pnpm run release:win:arm64
+            command: pnpm run build:win:arm64 --publish never
             artifact: release-windows-arm64
             files: |
               dist/*-arm64-*.exe
