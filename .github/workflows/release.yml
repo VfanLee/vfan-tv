@@ -36,13 +36,13 @@ jobs:
         include:
           - name: macOS
             os: macos-14
-            command: pnpm run build:app && pnpm exec electron-builder --mac --x64 --arm64 --publish never
+            command: pnpm run release:mac
             artifact: release-macos
             files: |
               dist/*.dmg
           - name: Windows
             os: windows-2022
-            command: pnpm run build:app && pnpm exec electron-builder --win --x64 --publish never && pnpm exec electron-builder --win --arm64 --publish never
+            command: pnpm run release:win
             artifact: release-windows
             files: |
               dist/*.exe

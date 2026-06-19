@@ -24,6 +24,8 @@
     "build:mac": "pnpm run build:app && electron-builder --mac",
     "build:win:x64": "pnpm run build:app && electron-builder --win --x64",
     "build:win:arm64": "pnpm run build:app && electron-builder --win --arm64",
+    "release:mac": "pnpm run build:app && electron-builder --mac --x64 --arm64 --publish never",
+    "release:win": "pnpm run build:app && electron-builder --win --x64 --publish never && electron-builder --win --arm64 --publish never",
     "typecheck": "pnpm run typecheck:node && pnpm run typecheck:web",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
