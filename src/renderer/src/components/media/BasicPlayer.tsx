@@ -8,11 +8,13 @@ import {
   type PlayerSrc,
 } from '@vidstack/react'
 import { cn } from '@renderer/lib/utils'
+import { createFilteredHlsLoader } from '@renderer/lib/hls-playlist-filter'
 import { PlayerChrome } from './player/PlayerChrome'
 import type { PlayerErrorLog } from './player/types'
 
 const MAX_ERROR_LOGS = 100
 const HLS_MIME_TYPE = 'application/x-mpegurl' as const
+const HLS_PLAYLIST_FILTER_STORAGE_KEY = 'enable_blockad'
 
 export interface BasicPlayerProps {
   autoPlay?: boolean
@@ -48,8 +50,10 @@ export function BasicPlayer({
   const playerRef = useRef<MediaPlayerInstance | null>(null)
   const errorLogIdRef = useRef(0)
   const retryTimeRef = useRef(0)
+  const resumeAfterReloadRef = useRef(false)
   const appliedLoadKeyRef = useRef('')
   const [reloadNonce, setReloadNonce] = useState(0)
+  const [playlistFilteringEnabled, setPlaylistFilteringEnabled] = useState(() => readPlaylistFilteringEnabled())
   const [playbackSettings, setPlaybackSettings] = useState({ playbackRate: 1, volume: 0.8, muted: false })
   const [errorState, setErrorState] = useState<{ src: string | undefined; logs: PlayerErrorLog[] }>({
     src,
@@ -84,6 +88,20 @@ export function BasicPlayer({
     setReloadNonce((current) => current + 1)
   }
 
+  const togglePlaylistFiltering = useCallback((): void => {
+    const nextEnabled = !playlistFilteringEnabled
+    window.localStorage.setItem(HLS_PLAYLIST_FILTER_STORAGE_KEY, String(nextEnabled))
+
+    if (isHlsSource(src)) {
+      retryTimeRef.current = playerRef.current?.currentTime ?? 0
+      resumeAfterReloadRef.current = true
+      appliedLoadKeyRef.current = ''
+      setReloadNonce((current) => current + 1)
+    }
+
+    setPlaylistFilteringEnabled(nextEnabled)
+  }, [playlistFilteringEnabled, src])
+
   const handlePlaybackRateChange = useCallback((playbackRate: number): void => {
     setPlaybackSettings((current) => ({ ...current, playbackRate }))
   }, [])
@@ -101,6 +119,11 @@ export function BasicPlayer({
 
     retryTimeRef.current = 0
     appliedLoadKeyRef.current = loadKey
+
+    if (resumeAfterReloadRef.current) {
+      resumeAfterReloadRef.current = false
+      void player.play()
+    }
   }
 
   const reportProgress = (currentTime: number, duration: number): void => {
@@ -158,7 +181,16 @@ export function BasicPlayer({
       }}
       onProviderChange={(provider) => {
         if (isHLSProvider(provider)) {
-          provider.library = () => import('hls.js')
+          provider.library = async () => {
+            const hlsLibrary = await import('hls.js')
+            if (playlistFilteringEnabled) {
+              provider.config = {
+                ...provider.config,
+                loader: createFilteredHlsLoader(hlsLibrary.default),
+              }
+            }
+            return hlsLibrary
+          }
         }
       }}
       onRateChange={(playbackRate) => {
@@ -179,6 +211,7 @@ export function BasicPlayer({
         hasNextEpisode={hasNextEpisode}
         hasPreviousEpisode={hasPreviousEpisode}
         isTheaterMode={isTheaterMode}
+        playlistFilteringEnabled={playlistFilteringEnabled}
         playerRef={playerRef}
         src={src}
         title={title}
@@ -187,9 +220,18 @@ export function BasicPlayer({
         onPreviousEpisode={onPreviousEpisode}
         onRetry={retryPlayback}
         onToggleTheaterMode={onToggleTheaterMode}
+        onTogglePlaylistFiltering={togglePlaylistFiltering}
       />
     </MediaPlayer>
   )
+}
+
+function isHlsSource(src: string | undefined): boolean {
+  return Boolean(src && /\.m3u8(?:$|[?#])/i.test(src))
+}
+
+function readPlaylistFilteringEnabled(): boolean {
+  return window.localStorage.getItem(HLS_PLAYLIST_FILTER_STORAGE_KEY) !== 'false'
 }
 
 function getPlayerSource(src: string | undefined): PlayerSrc | undefined {
@@ -197,7 +239,7 @@ function getPlayerSource(src: string | undefined): PlayerSrc | undefined {
     return undefined
   }
 
-  if (/\.m3u8(?:$|[?#])/i.test(src)) {
+  if (isHlsSource(src)) {
     return { src, type: HLS_MIME_TYPE }
   }
 

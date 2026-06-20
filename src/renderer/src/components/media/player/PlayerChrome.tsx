@@ -23,6 +23,7 @@ import {
   RefreshCw,
   Rewind,
   Settings,
+  ShieldCheck,
   TimerReset,
   TriangleAlert,
   Volume1,
@@ -54,6 +55,7 @@ interface PlayerChromeProps {
   hasNextEpisode: boolean
   hasPreviousEpisode: boolean
   isTheaterMode: boolean
+  playlistFilteringEnabled: boolean
   playerRef: RefObject<MediaPlayerInstance | null>
   src: string
   title?: string
@@ -62,17 +64,20 @@ interface PlayerChromeProps {
   onPreviousEpisode?: () => void
   onRetry: () => void
   onToggleTheaterMode?: () => void
+  onTogglePlaylistFiltering: () => void
 }
 
 export function PlayerChrome({
   errorLogs,
   isTheaterMode,
+  playlistFilteringEnabled,
   playerRef,
   src,
   title,
   onPlaybackRateChange,
   onRetry,
   onToggleTheaterMode,
+  onTogglePlaylistFiltering,
 }: PlayerChromeProps): React.JSX.Element {
   const paused = useMediaState('paused')
   const currentTime = useMediaState('currentTime')
@@ -665,10 +670,12 @@ export function PlayerChrome({
                 <PlayerSettingsPanel
                   page={settingsPage}
                   playbackRate={playbackRate}
+                  playlistFilteringEnabled={playlistFilteringEnabled}
                   seekStepSeconds={seekStepSeconds}
                   onApplyPlaybackRate={applyPlaybackRate}
                   onApplySeekStep={applySeekStep}
                   onPageChange={setSettingsPage}
+                  onTogglePlaylistFiltering={onTogglePlaylistFiltering}
                 />
               ) : null}
             </div>
@@ -773,17 +780,21 @@ function PlayerVolumeControl({
 function PlayerSettingsPanel({
   page,
   playbackRate,
+  playlistFilteringEnabled,
   seekStepSeconds,
   onApplyPlaybackRate,
   onApplySeekStep,
   onPageChange,
+  onTogglePlaylistFiltering,
 }: {
   page: SettingsPage
   playbackRate: number
+  playlistFilteringEnabled: boolean
   seekStepSeconds: number
   onApplyPlaybackRate: (rate: number) => void
   onApplySeekStep: (seconds: number) => void
   onPageChange: (page: SettingsPage) => void
+  onTogglePlaylistFiltering: () => void
 }): React.JSX.Element {
   if (page === 'speed') {
     return (
@@ -836,7 +847,52 @@ function PlayerSettingsPanel({
         value={formatRate(playbackRate)}
         onClick={() => onPageChange('speed')}
       />
+      <SettingsToggleRow
+        enabled={playlistFilteringEnabled}
+        icon={<ShieldCheck size={24} />}
+        label="去广告（实验性）"
+        onToggle={onTogglePlaylistFiltering}
+      />
     </div>
+  )
+}
+
+function SettingsToggleRow({
+  enabled,
+  icon,
+  label,
+  onToggle,
+}: {
+  enabled: boolean
+  icon: React.ReactNode
+  label: string
+  onToggle: () => void
+}): React.JSX.Element {
+  return (
+    <button
+      aria-pressed={enabled}
+      className="flex w-full items-center rounded-xl px-1 py-1.5 text-left transition-colors hover:bg-white/9 focus:outline-none"
+      type="button"
+      onClick={(event) => {
+        onToggle()
+        event.currentTarget.blur()
+      }}
+    >
+      <span className="flex size-10 items-center justify-center text-white/86">{icon}</span>
+      <span className="min-w-0 flex-1 text-base leading-6 font-medium text-white/92">{label}</span>
+      <span className="mr-2 text-sm whitespace-nowrap text-white/64">{enabled ? '已开启' : '已关闭'}</span>
+      <span
+        aria-hidden="true"
+        className={cn('relative h-5 w-9 rounded-full bg-white/24 transition-colors', enabled && 'bg-primary')}
+      >
+        <span
+          className={cn(
+            'absolute top-0.5 left-0.5 size-4 rounded-full bg-white shadow-sm transition-transform',
+            enabled && 'translate-x-4',
+          )}
+        />
+      </span>
+    </button>
   )
 }
 
