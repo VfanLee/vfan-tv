@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useMatches, useNavigate, useSearchParams } from 'react-router'
 import {
+  Check,
   ChevronsLeft,
   ChevronsRight,
   Clock3,
@@ -32,14 +33,23 @@ const themeItems: Array<{ mode: ThemeMode; label: string; icon: LucideIcon }> = 
   { mode: 'system', label: '跟随系统', icon: Monitor },
 ]
 
+interface LayoutRouteHandle {
+  hideTopBar?: boolean
+  showGlobalSearch?: boolean
+}
+
 export function AppLayout(): React.JSX.Element {
   const matches = useMatches()
   const location = useLocation()
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const toggleSidebar = (): void => setIsSidebarCollapsed((current) => !current)
   const showGlobalSearch = matches.some((match) => {
-    const handle = match.handle as { showGlobalSearch?: boolean } | undefined
+    const handle = match.handle as LayoutRouteHandle | undefined
     return handle?.showGlobalSearch === true
+  })
+  const hideTopBar = matches.some((match) => {
+    const handle = match.handle as LayoutRouteHandle | undefined
+    return handle?.hideTopBar === true
   })
 
   return (
@@ -92,7 +102,7 @@ export function AppLayout(): React.JSX.Element {
       </aside>
 
       <main className="relative h-screen min-w-0 overflow-y-auto">
-        <TopBar searchKey={location.search} showSearch={showGlobalSearch} />
+        {hideTopBar ? null : <TopBar searchKey={location.search} showSearch={showGlobalSearch} />}
         <Outlet />
       </main>
     </div>
@@ -116,7 +126,7 @@ function LayoutSearchForm(): React.JSX.Element {
 
   return (
     <form
-      className="border-border bg-card mx-auto flex h-14 max-w-4xl items-center gap-3 rounded-2xl border px-5 shadow-sm"
+      className="border-border bg-card mx-auto flex h-14 max-w-4xl items-center gap-3 rounded-xl border px-5 shadow-sm"
       onSubmit={(event) => {
         event.preventDefault()
         openSearch(keyword, navigate)
@@ -131,7 +141,7 @@ function LayoutSearchForm(): React.JSX.Element {
         onChange={(event) => setKeyword(event.target.value)}
       />
       <button
-        className="bg-muted text-muted-foreground hover:text-foreground focus-visible:ring-ring rounded-lg px-3 py-1.5 text-xs font-semibold outline-none focus-visible:ring-2"
+        className="bg-muted text-muted-foreground hover:text-foreground focus-visible:ring-ring rounded-xl px-3 py-1.5 text-xs font-semibold outline-none focus-visible:ring-2"
         type="submit"
       >
         搜索
@@ -145,7 +155,7 @@ function Logo({ collapsed }: { collapsed: boolean }): React.JSX.Element {
     <NavLink
       aria-label="返回首页"
       className={cn(
-        'focus-visible:ring-ring flex min-w-0 items-center gap-3 rounded-lg outline-none focus-visible:ring-2',
+        'focus-visible:ring-ring flex min-w-0 items-center gap-3 rounded-xl outline-none focus-visible:ring-2',
         collapsed && 'justify-center',
       )}
       title="返回首页"
@@ -174,7 +184,7 @@ function SidebarLink({
       to={item.to}
       className={({ isActive }) =>
         cn(
-          'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex h-11 items-center rounded-lg text-sm font-medium transition-colors',
+          'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex h-11 items-center rounded-xl text-sm font-medium transition-colors',
           collapsed ? 'justify-center px-0' : 'gap-3 px-3',
           isActive && 'bg-sidebar-accent text-sidebar-primary',
         )
@@ -191,7 +201,7 @@ function ThemeMenu(): React.JSX.Element {
   const setMode = useThemeStore((state) => state.setMode)
   const [isOpen, setIsOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
-  const ActiveIcon = themeItems.find((item) => item.mode === mode)?.icon ?? Sun
+  const ActiveIcon = themeItems.find((item) => item.mode === mode)?.icon ?? Monitor
 
   useEffect(() => {
     if (!isOpen) {
@@ -213,6 +223,7 @@ function ThemeMenu(): React.JSX.Element {
       <button
         aria-label="切换主题"
         aria-expanded={isOpen}
+        aria-haspopup="menu"
         className="border-border bg-card text-muted-foreground hover:text-primary focus-visible:ring-ring flex size-10 items-center justify-center rounded-full border shadow-sm outline-none focus-visible:ring-2"
         type="button"
         onClick={() => setIsOpen((current) => !current)}
@@ -221,25 +232,30 @@ function ThemeMenu(): React.JSX.Element {
       </button>
 
       {isOpen ? (
-        <div className="border-border bg-popover text-popover-foreground absolute right-0 mt-2 w-36 rounded-xl border p-1.5 shadow-md">
+        <div
+          className="border-border bg-popover text-popover-foreground absolute right-0 mt-3 flex w-40 flex-col gap-1 rounded-xl border p-2 shadow-md"
+          role="menu"
+        >
           {themeItems.map((item) => (
             <button
               key={item.mode}
+              aria-checked={mode === item.mode}
               className={cn(
-                'text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:ring-ring flex h-9 w-full items-center justify-between rounded-lg px-2.5 text-sm font-medium outline-none focus-visible:ring-2',
+                'text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:ring-ring flex h-10 w-full items-center justify-between rounded-xl px-3 text-sm font-medium outline-none focus-visible:ring-2',
                 mode === item.mode && 'bg-accent text-primary',
               )}
+              role="menuitemradio"
               type="button"
               onClick={() => {
                 setMode(item.mode)
                 setIsOpen(false)
               }}
             >
-              <span className="flex items-center gap-2">
-                <item.icon size={16} />
+              <span className="flex items-center gap-3">
+                <item.icon className="shrink-0" size={17} />
                 {item.label}
               </span>
-              {mode === item.mode ? <span className="text-sm leading-none">✓</span> : null}
+              {mode === item.mode ? <Check className="shrink-0" size={17} strokeWidth={2} /> : null}
             </button>
           ))}
         </div>

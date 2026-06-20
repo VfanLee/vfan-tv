@@ -188,6 +188,8 @@
   --color-sidebar-ring: var(--sidebar-ring);
   --font-heading: var(--font-sans);
   --font-sans: 'Inter Variable', sans-serif;
+  --text-base: 14px;
+  --text-base--line-height: 20px;
 }
 
 @layer base {
@@ -196,7 +198,7 @@
   }
 
   html {
-    @apply font-sans;
+    @apply font-sans text-base;
   }
 
   body {

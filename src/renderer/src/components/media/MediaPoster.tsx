@@ -14,7 +14,7 @@ export function MediaPoster({ className, overlay, poster, title }: MediaPosterPr
   const imageSrc = poster && poster !== failedPoster ? resolveImageUrl(poster) : undefined
 
   return (
-    <div className={`border-border bg-muted relative overflow-hidden rounded-lg border shadow-sm ${className ?? ''}`}>
+    <div className={`border-border bg-muted relative overflow-hidden rounded-xl border shadow-sm ${className ?? ''}`}>
       {imageSrc ? (
         <img
           alt={title}

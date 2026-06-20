@@ -10,7 +10,6 @@ import { checkLatestRelease } from './services/update-checker'
 import { APP_DISPLAY_NAME, APP_ID, USER_DATA_DIR_NAME } from '@shared/constants/app-brand'
 
 const APP_VERSION = packageJson.version
-const APP_REPOSITORY_URL = 'https://github.com/vfanlee/VfanTV'
 let aboutWindow: BrowserWindow | null = null
 let updateCheckPromise: Promise<void> | null = null
 let hasRunStartupUpdateCheck = false
@@ -49,23 +48,20 @@ function showAboutWindow(): void {
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         -webkit-user-select: none;
       }
-      main { width: 100%; padding: 54px 32px 28px; text-align: center; }
-      img { width: 108px; height: 108px; border-radius: 24px; }
-      h1 { margin: 18px 0 8px; font-size: 28px; line-height: 1.2; }
-      .version { margin: 0; font-size: 16px; color: #555; }
-      .description { margin: 26px 0 20px; font-size: 17px; }
-      a { color: #1677ff; font-size: 15px; text-decoration: none; }
-      a:hover { text-decoration: underline; }
-      .copyright { margin: 24px 0 0; color: #666; font-size: 14px; }
+      main { width: 100%; padding: 42px 28px 28px; text-align: center; }
+      img { width: 76px; height: 76px; border-radius: 18px; }
+      h1 { margin: 16px 0 5px; font-size: 24px; line-height: 1.2; }
+      .version { margin: 0; color: #666; font-size: 13px; }
+      .description { margin: 18px auto 0; color: #444; font-size: 14px; line-height: 1.6; }
+      .copyright { margin: 24px 0 0; color: #888; font-size: 12px; }
     </style>
   </head>
   <body>
     <main>
       <img src="${iconDataUrl}" alt="${APP_DISPLAY_NAME}" />
       <h1>${APP_DISPLAY_NAME}</h1>
-      <p class="version">Version ${APP_VERSION}</p>
-      <p class="description">免费、源码公开的本地影视播放客户端</p>
-      <a href="${APP_REPOSITORY_URL}" target="_blank" rel="noreferrer">${APP_REPOSITORY_URL}</a>
+      <p class="version">v${APP_VERSION}</p>
+      <p class="description">免费开源、开箱即用、跨平台的桌面端影视聚合播放器。</p>
       <p class="copyright">Copyright © 2026 VfanLee</p>
     </main>
   </body>
@@ -74,8 +70,8 @@ function showAboutWindow(): void {
   aboutWindow = new BrowserWindow({
     parent,
     title: `关于 ${APP_DISPLAY_NAME}`,
-    width: 520,
-    height: 460,
+    width: 380,
+    height: 340,
     show: false,
     resizable: false,
     maximizable: false,
@@ -91,10 +87,6 @@ function showAboutWindow(): void {
     },
   })
 
-  aboutWindow.webContents.setWindowOpenHandler(({ url }) => {
-    void shell.openExternal(url)
-    return { action: 'deny' }
-  })
   aboutWindow.once('ready-to-show', () => aboutWindow?.show())
   aboutWindow.once('closed', () => {
     aboutWindow = null
@@ -140,7 +132,7 @@ async function runUpdateCheck(interactive: boolean): Promise<void> {
     })
 
     if (response.response === 0) {
-      await shell.openExternal(result.releaseUrl)
+      await shell.openExternal(result.downloadUrl ?? result.releaseUrl)
     }
   } catch (error) {
     if (!interactive) return

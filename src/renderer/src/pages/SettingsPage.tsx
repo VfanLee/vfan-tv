@@ -306,7 +306,7 @@ export function SettingsPage(): React.JSX.Element {
             </div>
           ) : (
             <div className="px-5 py-6">
-              <div className="border-input bg-muted rounded-lg border border-dashed p-10 text-center">
+              <div className="border-input bg-muted rounded-xl border border-dashed p-10 text-center">
                 <div className="text-foreground text-sm font-semibold">暂无播放源</div>
                 <p className="text-muted-foreground mt-2 text-sm">添加一个播放源，或导入 JSON 文件。</p>
               </div>
@@ -342,7 +342,7 @@ function SelectionCheckbox({
     <button
       aria-checked={checked}
       aria-label={label}
-      className="border-input bg-background text-primary focus-visible:ring-ring flex size-5 items-center justify-center rounded border outline-none focus-visible:ring-2"
+      className="border-input bg-background text-primary focus-visible:ring-ring flex size-5 items-center justify-center rounded-xl border outline-none focus-visible:ring-2"
       role="checkbox"
       type="button"
       onClick={onChange}
@@ -427,7 +427,7 @@ function SourceDialog({
             />
           </label>
 
-          <label className="border-border bg-muted flex items-center justify-between gap-4 rounded-lg border px-3 py-3">
+          <label className="border-border bg-muted flex items-center justify-between gap-4 rounded-xl border px-3 py-3">
             <span>
               <span className="text-foreground block text-sm font-medium">是否开启</span>
               <span className="text-muted-foreground text-xs">关闭后不会参与聚合搜索。</span>

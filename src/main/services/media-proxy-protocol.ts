@@ -33,7 +33,10 @@ export function registerMediaProxyProtocol(): void {
 
         return new Response(rewrittenPlaylist, {
           status,
-          headers: createResponseHeaders(contentType || 'application/vnd.apple.mpegurl', Buffer.byteLength(rewrittenPlaylist, 'utf-8')),
+          headers: createResponseHeaders(
+            contentType || 'application/vnd.apple.mpegurl',
+            Buffer.byteLength(rewrittenPlaylist, 'utf-8'),
+          ),
         })
       }
 
@@ -61,10 +64,7 @@ function normalizeStatus(status: number): number {
   return status >= 200 && status <= 599 ? status : 502
 }
 
-function getResponseHeader(
-  headers: RawAxiosResponseHeaders | AxiosResponseHeaders,
-  name: string,
-): string | undefined {
+function getResponseHeader(headers: RawAxiosResponseHeaders | AxiosResponseHeaders, name: string): string | undefined {
   const value = headers[name] ?? headers[name.toLowerCase()]
 
   if (value === undefined) {
@@ -78,7 +78,7 @@ function getHeaders(rawHeaders: string | null, referer: string | undefined): Rec
   const headers: Record<string, string> = {
     'User-Agent':
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36',
-    Accept: '*/*',
+    'Accept': '*/*',
   }
 
   if (referer) {

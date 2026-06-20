@@ -1,9 +1,4 @@
-import type {
-  HomeData,
-  HotRecommendationsPage,
-  HotRecommendationsRequest,
-  RecommendationItem,
-} from '@shared/types'
+import type { HomeData, HotRecommendationsPage, HotRecommendationsRequest, RecommendationItem } from '@shared/types'
 import { requireRuntimeApi } from './client'
 
 export const categorySections: Array<{

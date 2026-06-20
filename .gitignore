@@ -5,5 +5,5 @@ out
 .eslintcache
 *.log*
 
-plan.md
-design-qa.md
+tsconfig.web.tsbuildinfo
+tsconfig.node.tsbuildinfo

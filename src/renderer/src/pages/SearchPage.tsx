@@ -252,7 +252,7 @@ function SearchHistory({
               </button>
               <button
                 aria-label={`删除 ${history}`}
-                className="text-muted-foreground hover:bg-muted hover:text-destructive focus-visible:ring-ring flex size-8 items-center justify-center rounded-lg outline-none focus-visible:ring-2"
+                className="text-muted-foreground hover:bg-muted hover:text-destructive focus-visible:ring-ring flex size-8 items-center justify-center rounded-xl outline-none focus-visible:ring-2"
                 type="button"
                 onClick={() => onRemove(history)}
               >
@@ -312,7 +312,7 @@ function ViewModeSwitch({
         <button
           key={tab.value}
           className={cn(
-            'text-muted-foreground hover:text-foreground focus-visible:ring-ring h-10 rounded-lg px-5 text-sm font-semibold transition-colors outline-none focus-visible:ring-2',
+            'text-muted-foreground hover:text-foreground focus-visible:ring-ring h-10 rounded-xl px-5 text-sm font-semibold transition-colors outline-none focus-visible:ring-2',
             value === tab.value && 'bg-card text-primary shadow-sm',
           )}
           type="button"
@@ -347,7 +347,7 @@ function GroupedResults({
           type="button"
           onClick={() => onOpen(group)}
         >
-          <MediaPoster className="aspect-[2/3] rounded-lg" poster={group.poster} title={group.title} />
+          <MediaPoster className="aspect-[2/3] rounded-xl" poster={group.poster} title={group.title} />
           <div className="min-w-0">
             <h2 className="text-foreground truncate text-xl font-semibold tracking-tight">{group.title}</h2>
             <p className="text-muted-foreground mt-3 truncate text-sm font-medium">{group.meta}</p>
@@ -407,7 +407,7 @@ function SourceResults({
               ))}
             </div>
           ) : (
-            <div className="border-input text-muted-foreground flex h-24 items-center justify-center rounded-lg border border-dashed text-sm">
+            <div className="border-input text-muted-foreground flex h-24 items-center justify-center rounded-xl border border-dashed text-sm">
               暂无结果
             </div>
           )}
@@ -420,16 +420,16 @@ function SourceResults({
 function SourceResultButton({ item, onClick }: { item: VodSearchResult; onClick: () => void }): React.JSX.Element {
   return (
     <button
-      className="border-border bg-muted hover:border-primary focus-visible:ring-ring grid grid-cols-[58px_1fr] gap-3 rounded-lg border p-2 text-left transition-colors outline-none focus-visible:ring-2"
+      className="border-border bg-muted hover:border-primary focus-visible:ring-ring grid grid-cols-[58px_1fr] gap-3 rounded-xl border p-2 text-left transition-colors outline-none focus-visible:ring-2"
       type="button"
       onClick={onClick}
     >
-      <MediaPoster className="aspect-[2/3] rounded-md" poster={item.poster} title={item.title} />
+      <MediaPoster className="aspect-[2/3] rounded-xl" poster={item.poster} title={item.title} />
       <div className="min-w-0 py-1">
         <div className="text-primary text-xs font-semibold">{item.sourceName}</div>
         <h3 className="text-foreground mt-1 truncate text-sm font-semibold">{item.title}</h3>
         <p className="text-muted-foreground mt-1 truncate text-xs">{formatMeta(item)}</p>
-        <div className="bg-card text-primary mt-3 inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium">
+        <div className="bg-card text-primary mt-3 inline-flex items-center gap-1 rounded-xl px-2 py-1 text-xs font-medium">
           <Play fill="currentColor" size={12} />
           {item.remarks || '播放'}
         </div>
@@ -442,7 +442,7 @@ function StatusBadge({ status }: { status: SearchSourceStatus }): React.JSX.Elem
   return (
     <span
       className={cn(
-        'inline-flex h-8 shrink-0 items-center rounded-lg px-2.5 text-xs font-semibold',
+        'inline-flex h-8 shrink-0 items-center rounded-xl px-2.5 text-xs font-semibold',
         getStatusTone(status),
       )}
     >

@@ -10,11 +10,11 @@ interface ThemeState {
 
 function readInitialTheme(): ThemeMode {
   if (typeof window === 'undefined') {
-    return 'light'
+    return 'system'
   }
 
   const storedTheme = window.localStorage.getItem(THEME_STORAGE_KEY)
-  return storedTheme === 'light' || storedTheme === 'dark' || storedTheme === 'system' ? storedTheme : 'light'
+  return storedTheme === 'light' || storedTheme === 'dark' || storedTheme === 'system' ? storedTheme : 'system'
 }
 
 export const useThemeStore = create<ThemeState>((set) => ({

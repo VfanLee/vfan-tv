@@ -347,7 +347,7 @@ export function PlayerPage(): React.JSX.Element {
       {!isTheaterMode ? (
         <header className="border-border bg-background/95 sticky top-0 z-40 -mx-8 flex h-20 items-center border-b px-8 backdrop-blur">
           <button
-            className="text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring inline-flex h-10 items-center gap-2 rounded-lg px-3 text-sm font-semibold transition-colors outline-none focus-visible:ring-2"
+            className="text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring inline-flex h-10 items-center gap-2 rounded-xl px-3 text-sm font-semibold transition-colors outline-none focus-visible:ring-2"
             type="button"
             onClick={() => navigate(-1)}
           >
@@ -359,7 +359,9 @@ export function PlayerPage(): React.JSX.Element {
 
       <div
         className={cn(
-          isTheaterMode ? 'min-h-0 flex-1' : 'mt-5 grid gap-6 xl:h-[80vh] xl:min-h-[520px] xl:grid-cols-[minmax(0,1fr)_380px]',
+          isTheaterMode
+            ? 'min-h-0 flex-1'
+            : 'mt-5 grid gap-6 xl:h-[80vh] xl:min-h-[520px] xl:grid-cols-[minmax(0,1fr)_380px]',
         )}
       >
         <main className={cn('min-h-0 min-w-0', isTheaterMode && 'h-full')}>
@@ -391,76 +393,76 @@ export function PlayerPage(): React.JSX.Element {
 
         {!isTheaterMode ? (
           <aside className="border-border bg-card flex h-[520px] min-h-0 flex-col rounded-xl border p-4 shadow-sm xl:h-full">
-          <div className="bg-muted grid grid-cols-2 rounded-xl p-1">
-            <PanelTab
-              active={activeTab === 'episodes'}
-              icon={ListVideo}
-              label="选集"
-              onClick={() => setActiveTab('episodes')}
-            />
-            <PanelTab
-              active={activeTab === 'sources'}
-              icon={Radio}
-              label="换源"
-              onClick={() => setActiveTab('sources')}
-            />
-          </div>
+            <div className="bg-muted grid grid-cols-2 rounded-xl p-1">
+              <PanelTab
+                active={activeTab === 'episodes'}
+                icon={ListVideo}
+                label="选集"
+                onClick={() => setActiveTab('episodes')}
+              />
+              <PanelTab
+                active={activeTab === 'sources'}
+                icon={Radio}
+                label="换源"
+                onClick={() => setActiveTab('sources')}
+              />
+            </div>
 
-          <div className="min-h-0 flex-1 overflow-hidden">
-            {activeTab === 'episodes' ? (
-              <EpisodesPanel
-                activeLine={activeLine}
-                activeSelection={activeSelection}
-                lines={lines}
-                onSelectEpisode={selectEpisode}
-              />
-            ) : (
-              <SourcesPanel
-                isRefreshing={isRefreshingSources}
-                keyword={keyword}
-                refreshState={refreshState}
-                rows={sourceRows}
-                onRefresh={() => void refreshSources()}
-                onSelect={selectSource}
-              />
-            )}
-          </div>
-        </aside>
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {activeTab === 'episodes' ? (
+                <EpisodesPanel
+                  activeLine={activeLine}
+                  activeSelection={activeSelection}
+                  lines={lines}
+                  onSelectEpisode={selectEpisode}
+                />
+              ) : (
+                <SourcesPanel
+                  isRefreshing={isRefreshingSources}
+                  keyword={keyword}
+                  refreshState={refreshState}
+                  rows={sourceRows}
+                  onRefresh={() => void refreshSources()}
+                  onSelect={selectSource}
+                />
+              )}
+            </div>
+          </aside>
         ) : null}
       </div>
 
       {!isTheaterMode ? (
         <section className="border-border bg-card mt-5 rounded-xl border p-5 shadow-sm">
-        <div className="border-border flex flex-wrap items-start justify-between gap-4 border-b pb-5">
-          <div className="min-w-0 flex-1">
-            <h1 className="max-w-full truncate text-3xl font-semibold tracking-tight">
-              {current?.title ?? '资源上下文待恢复'}
-            </h1>
-            {subtitle ? <p className="text-muted-foreground mt-2 text-sm font-medium">{subtitle}</p> : null}
-            <p className="text-muted-foreground mt-2 text-sm font-medium">{metaText}</p>
+          <div className="border-border flex flex-wrap items-start justify-between gap-4 border-b pb-5">
+            <div className="min-w-0 flex-1">
+              <h1 className="max-w-full truncate text-3xl font-semibold tracking-tight">
+                {current?.title ?? '资源上下文待恢复'}
+              </h1>
+              {subtitle ? <p className="text-muted-foreground mt-2 text-sm font-medium">{subtitle}</p> : null}
+              <p className="text-muted-foreground mt-2 text-sm font-medium">{metaText}</p>
+            </div>
+            <button
+              className={cn(
+                'focus-visible:ring-ring inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border px-4 text-sm font-semibold transition-colors outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60',
+                isCurrentFavorite
+                  ? 'border-primary bg-accent text-primary'
+                  : 'border-border bg-card text-muted-foreground hover:border-input hover:text-foreground',
+              )}
+              disabled={!current || isFavoriteLoading}
+              type="button"
+              onClick={() => void toggleFavorite()}
+            >
+              <Heart fill={isCurrentFavorite ? 'currentColor' : 'none'} size={17} />
+              {isCurrentFavorite ? '已收藏' : '加入收藏'}
+            </button>
           </div>
-          <button
-            className={cn(
-              'focus-visible:ring-ring inline-flex h-10 shrink-0 items-center gap-2 rounded-lg border px-4 text-sm font-semibold transition-colors outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60',
-              isCurrentFavorite
-                ? 'border-primary bg-accent text-primary'
-                : 'border-border bg-card text-muted-foreground hover:border-input hover:text-foreground',
-            )}
-            disabled={!current || isFavoriteLoading}
-            type="button"
-            onClick={() => void toggleFavorite()}
-          >
-            <Heart fill={isCurrentFavorite ? 'currentColor' : 'none'} size={17} />
-            {isCurrentFavorite ? '已收藏' : '加入收藏'}
-          </button>
-        </div>
 
-        {detailItems.length > 0 ? <VodDetailPanel items={detailItems} /> : null}
+          {detailItems.length > 0 ? <VodDetailPanel items={detailItems} /> : null}
 
-        {current?.description ? (
-          <p className="text-muted-foreground mt-5 line-clamp-3 text-sm leading-7">{current.description}</p>
-        ) : null}
-      </section>
+          {current?.description ? (
+            <p className="text-muted-foreground mt-5 line-clamp-3 text-sm leading-7">{current.description}</p>
+          ) : null}
+        </section>
       ) : null}
     </div>
   )
@@ -495,7 +497,7 @@ function PanelTab({
   return (
     <button
       className={cn(
-        'text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-lg py-2 text-sm font-semibold transition-colors outline-none focus-visible:ring-2',
+        'text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-xl py-2 text-sm font-semibold transition-colors outline-none focus-visible:ring-2',
         active && 'bg-card text-primary shadow-sm',
       )}
       type="button"
@@ -524,7 +526,7 @@ function EpisodesPanel({
 
   if (lines.length === 0) {
     return (
-      <div className="border-input text-muted-foreground mt-4 flex h-64 items-center justify-center rounded-lg border border-dashed px-6 text-center text-sm leading-6">
+      <div className="border-input text-muted-foreground mt-4 flex h-64 items-center justify-center rounded-xl border border-dashed px-6 text-center text-sm leading-6">
         当前资源没有可用的 m3u8 播放地址，切到换源试试其他来源。
       </div>
     )
@@ -536,7 +538,7 @@ function EpisodesPanel({
         <h2 className="text-foreground text-sm font-semibold">共 {activeLine?.episodes.length ?? 0} 集</h2>
         <button
           aria-label={`切换为${isDescending ? '正序' : '倒序'}`}
-          className="border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold outline-none focus-visible:ring-2"
+          className="border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring inline-flex h-8 items-center gap-1.5 rounded-xl border px-2.5 text-xs font-semibold outline-none focus-visible:ring-2"
           type="button"
           onClick={() => setIsDescending((current) => !current)}
         >
@@ -550,7 +552,7 @@ function EpisodesPanel({
           <button
             key={`${episode.name}-${episode.url}`}
             className={cn(
-              'focus-visible:ring-ring flex h-12 min-w-0 items-center justify-center rounded-lg border px-2 text-sm font-semibold transition-colors outline-none focus-visible:ring-2',
+              'focus-visible:ring-ring flex h-12 min-w-0 items-center justify-center rounded-xl border px-2 text-sm font-semibold transition-colors outline-none focus-visible:ring-2',
               activeSelection.episodeIndex === episodeIndex
                 ? 'border-primary bg-accent text-primary'
                 : 'border-border bg-muted text-muted-foreground hover:border-input hover:text-foreground',
@@ -587,7 +589,7 @@ function SourcesPanel({
       <div className="flex items-center justify-between gap-3">
         <p className="text-muted-foreground text-sm font-medium">当前缓存来源 {rows.length} 个</p>
         <button
-          className="border-border bg-card text-primary hover:bg-accent focus-visible:ring-ring inline-flex h-9 shrink-0 items-center gap-2 rounded-lg border px-3 text-sm font-semibold transition-colors outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
+          className="border-border bg-card text-primary hover:bg-accent focus-visible:ring-ring inline-flex h-9 shrink-0 items-center gap-2 rounded-xl border px-3 text-sm font-semibold transition-colors outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60"
           disabled={isRefreshing}
           type="button"
           onClick={onRefresh}
@@ -609,7 +611,7 @@ function SourcesPanel({
             <button
               key={`${item.sourceId}-${item.vodId}`}
               className={cn(
-                'focus-visible:ring-ring grid h-auto w-full grid-cols-[24px_minmax(0,1fr)_auto] items-start gap-3 rounded-lg border p-3 text-left transition-colors outline-none focus-visible:ring-2',
+                'focus-visible:ring-ring grid h-auto w-full grid-cols-[24px_minmax(0,1fr)_auto] items-start gap-3 rounded-xl border p-3 text-left transition-colors outline-none focus-visible:ring-2',
                 isActive ? 'border-primary bg-accent' : 'border-border bg-muted hover:border-input',
               )}
               type="button"
@@ -626,7 +628,7 @@ function SourcesPanel({
               <span className="min-w-0">
                 <span className="flex min-w-0 items-center gap-2">
                   <span className="text-foreground truncate text-sm font-semibold">{item.sourceName}</span>
-                  <span className="bg-card text-primary shrink-0 rounded-md px-1.5 py-0.5 text-xs font-semibold">
+                  <span className="bg-card text-primary shrink-0 rounded-xl px-1.5 py-0.5 text-xs font-semibold">
                     缓存
                   </span>
                 </span>
@@ -636,14 +638,14 @@ function SourcesPanel({
                     '同名资源'}
                 </span>
               </span>
-              <span className="bg-card text-muted-foreground mt-0.5 shrink-0 rounded-md px-2 py-1 text-xs font-semibold">
+              <span className="bg-card text-muted-foreground mt-0.5 shrink-0 rounded-xl px-2 py-1 text-xs font-semibold">
                 {count} 集
               </span>
             </button>
           ))}
         </div>
       ) : (
-        <div className="border-input text-muted-foreground mt-4 flex h-60 items-center justify-center rounded-lg border border-dashed px-6 text-center text-sm leading-6">
+        <div className="border-input text-muted-foreground mt-4 flex h-60 items-center justify-center rounded-xl border border-dashed px-6 text-center text-sm leading-6">
           当前没有可切换的缓存来源，可以手动刷新更多来源。
         </div>
       )}

@@ -15,7 +15,7 @@ export function PosterTile({ title, subtitle, poster, meta }: PosterTileProps): 
 
   return (
     <article className="w-36 shrink-0">
-      <div className="border-border bg-muted aspect-[2/3] overflow-hidden rounded-lg border">
+      <div className="border-border bg-muted aspect-[2/3] overflow-hidden rounded-xl border">
         {imageSrc ? (
           <img
             alt={title}

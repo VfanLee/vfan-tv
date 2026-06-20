@@ -153,7 +153,7 @@ function SectionHeader({
       </div>
       <div className="group flex cursor-pointer items-center" onClick={onMore}>
         <button
-          className="text-muted-foreground group-hover:text-primary focus-visible:ring-ring rounded-md text-sm font-medium outline-none focus-visible:ring-2"
+          className="text-muted-foreground group-hover:text-primary focus-visible:ring-ring rounded-xl text-sm font-medium outline-none focus-visible:ring-2"
           type="button"
         >
           查看更多
@@ -228,14 +228,14 @@ function getProgress(item: RecentPlayItem): string {
 function RecommendationCard({ item, onClick }: { item: RecommendationItem; onClick: () => void }): React.JSX.Element {
   return (
     <button
-      className="group focus-visible:ring-ring focus-visible:ring-offset-background grid min-w-0 grid-rows-[auto_auto] self-start rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+      className="group focus-visible:ring-ring focus-visible:ring-offset-background grid min-w-0 grid-rows-[auto_auto] self-start rounded-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
       type="button"
       onClick={onClick}
     >
       <div className="relative">
         <MediaPoster className="aspect-[2/3]" poster={item.poster} title={item.title} />
         {item.isNew ? (
-          <span className="bg-primary text-primary-foreground absolute top-2 right-2 rounded-md px-2 py-1 text-xs font-semibold shadow-sm">
+          <span className="bg-primary text-primary-foreground absolute top-2 right-2 rounded-xl px-2 py-1 text-xs font-semibold shadow-sm">
             新
           </span>
         ) : null}

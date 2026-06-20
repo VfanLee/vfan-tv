@@ -58,7 +58,7 @@ export function HotPage(): React.JSX.Element {
               <button
                 key={section.key}
                 className={cn(
-                  'text-muted-foreground hover:text-foreground focus-visible:ring-ring h-9 rounded-lg px-4 text-sm font-medium outline-none focus-visible:ring-2',
+                  'text-muted-foreground hover:text-foreground focus-visible:ring-ring h-9 rounded-xl px-4 text-sm font-medium outline-none focus-visible:ring-2',
                   activeCategory === section.key && 'bg-accent text-primary',
                 )}
                 type="button"
@@ -84,7 +84,7 @@ export function HotPage(): React.JSX.Element {
         <div ref={sentinelRef} className="text-muted-foreground flex h-24 items-center justify-center text-sm">
           {categoryCache.errorMessage ? (
             <button
-              className="border-border bg-card text-muted-foreground hover:text-primary rounded-lg border px-3 py-2"
+              className="border-border bg-card text-muted-foreground hover:text-primary rounded-xl border px-3 py-2"
               type="button"
               onClick={() => void loadHotPage(activeCategory)}
             >
@@ -110,7 +110,7 @@ function HotCard({ item, onClick }: { item: RecommendationItem; onClick: () => v
 
   return (
     <button
-      className="focus-visible:ring-ring focus-visible:ring-offset-background min-w-0 self-start rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
+      className="focus-visible:ring-ring focus-visible:ring-offset-background min-w-0 self-start rounded-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
       type="button"
       onClick={onClick}
     >
