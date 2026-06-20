@@ -125,7 +125,7 @@ async function fetchLatestRelease(): Promise<LatestRelease> {
 
 function getAssetNames(version: string, platform: NodeJS.Platform, arch: string): string[] {
   if (platform === 'win32') {
-    return [`VfanTV-v${version}-${arch}-setup.exe`]
+    return [`VfanTV-v${version}-${arch}-setup.exe`, `VfanTV-v${version}-${arch}-portable.exe`]
   }
 
   if (platform === 'darwin') {

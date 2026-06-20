@@ -20,6 +20,10 @@ win:
       arch:
         - x64
         - arm64
+    - target: portable
+      arch:
+        - x64
+        - arm64
 nsis:
   oneClick: false
   perMachine: false
@@ -32,6 +36,8 @@ nsis:
   uninstallDisplayName: ${productName}
   createDesktopShortcut: true
   runAfterFinish: true
+portable:
+  artifactName: VfanTV-v${version}-${arch}-portable.${ext}
 mac:
   icon: build/icon.icns
   artifactName: VfanTV-v${version}-${arch}.${ext}
