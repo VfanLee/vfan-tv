@@ -17,8 +17,8 @@ const router = createHashRouter([
     element: <AppLayout />,
     children: [
       { index: true, element: <HomePage />, handle: { showGlobalSearch: true } },
-      { path: 'recent', element: <RecentPage /> },
-      { path: 'favorites', element: <FavoritesPage /> },
+      { path: 'recent', element: <RecentPage />, handle: { hideTopBar: true } },
+      { path: 'favorites', element: <FavoritesPage />, handle: { hideTopBar: true } },
       { path: 'hot', element: <HotPage />, handle: { showGlobalSearch: true } },
       { path: 'search', element: <SearchPage />, handle: { showGlobalSearch: true } },
       { path: 'settings', element: <SettingsPage />, handle: { hideTopBar: true } },

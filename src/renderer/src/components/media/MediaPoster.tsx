@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ReactNode } from 'react'
+import { Play } from 'lucide-react'
 import { resolveImageUrl } from '@shared/utils/media-image'
 
 interface MediaPosterProps {
@@ -33,6 +34,14 @@ export function MediaPoster({ className, overlay, poster, title }: MediaPosterPr
         </div>
       )}
       {overlay ? <div className="absolute inset-0 flex items-center justify-center">{overlay}</div> : null}
+    </div>
+  )
+}
+
+export function PosterPlayOverlay(): React.JSX.Element {
+  return (
+    <div className="bg-background/80 text-foreground flex size-10 items-center justify-center rounded-full opacity-0 shadow-sm backdrop-blur transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
+      <Play fill="currentColor" size={17} />
     </div>
   )
 }

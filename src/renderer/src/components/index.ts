@@ -1,5 +1,6 @@
 export * from './layout/AppLayout'
 export * from './layout/ThemeProvider'
+export * from './layout/ThemeSettings'
 export * from './media/BasicPlayer'
 export * from './media/MediaPoster'
 export * from './media/PosterCardSkeleton'

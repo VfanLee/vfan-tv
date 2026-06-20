@@ -1,23 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { NavLink, Outlet, useLocation, useMatches, useNavigate, useSearchParams } from 'react-router'
-import {
-  Check,
-  ChevronsLeft,
-  ChevronsRight,
-  Clock3,
-  Flame,
-  Heart,
-  Home,
-  Info,
-  Monitor,
-  Moon,
-  Search,
-  Settings,
-  Sun,
-} from 'lucide-react'
+import { ChevronsLeft, ChevronsRight, Clock3, Flame, Heart, Home, Info, Search, Settings } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
-import { useThemeStore, type ThemeMode } from '@renderer/stores/theme'
 import logoMarkUrl from '@renderer/assets/logo-mark.svg'
 
 const primaryNavItems: Array<{ to: string; label: string; icon: LucideIcon }> = [
@@ -25,12 +10,6 @@ const primaryNavItems: Array<{ to: string; label: string; icon: LucideIcon }> = 
   { to: '/hot', label: '近期热门', icon: Flame },
   { to: '/recent', label: '最近播放', icon: Clock3 },
   { to: '/favorites', label: '我的收藏', icon: Heart },
-]
-
-const themeItems: Array<{ mode: ThemeMode; label: string; icon: LucideIcon }> = [
-  { mode: 'light', label: '明亮', icon: Sun },
-  { mode: 'dark', label: '暗黑', icon: Moon },
-  { mode: 'system', label: '跟随系统', icon: Monitor },
 ]
 
 interface LayoutRouteHandle {
@@ -113,7 +92,6 @@ function TopBar({ searchKey, showSearch }: { searchKey: string; showSearch: bool
   return (
     <header className="border-border bg-background/90 sticky top-0 z-30 flex h-[90px] items-center gap-5 border-b px-10 backdrop-blur">
       <div className="min-w-0 flex-1">{showSearch ? <LayoutSearchForm key={searchKey} /> : null}</div>
-      <ThemeMenu />
     </header>
   )
 }
@@ -193,74 +171,6 @@ function SidebarLink({
       <item.icon size={17} />
       <span className={cn('truncate', collapsed && 'sr-only')}>{item.label}</span>
     </NavLink>
-  )
-}
-
-function ThemeMenu(): React.JSX.Element {
-  const mode = useThemeStore((state) => state.mode)
-  const setMode = useThemeStore((state) => state.setMode)
-  const [isOpen, setIsOpen] = useState(false)
-  const menuRef = useRef<HTMLDivElement>(null)
-  const ActiveIcon = themeItems.find((item) => item.mode === mode)?.icon ?? Monitor
-
-  useEffect(() => {
-    if (!isOpen) {
-      return
-    }
-
-    const closeMenu = (event: MouseEvent): void => {
-      if (!menuRef.current?.contains(event.target as Node)) {
-        setIsOpen(false)
-      }
-    }
-
-    window.addEventListener('mousedown', closeMenu)
-    return () => window.removeEventListener('mousedown', closeMenu)
-  }, [isOpen])
-
-  return (
-    <div ref={menuRef} className="relative shrink-0">
-      <button
-        aria-label="切换主题"
-        aria-expanded={isOpen}
-        aria-haspopup="menu"
-        className="border-border bg-card text-muted-foreground hover:text-primary focus-visible:ring-ring flex size-10 items-center justify-center rounded-full border shadow-sm outline-none focus-visible:ring-2"
-        type="button"
-        onClick={() => setIsOpen((current) => !current)}
-      >
-        <ActiveIcon size={18} />
-      </button>
-
-      {isOpen ? (
-        <div
-          className="border-border bg-popover text-popover-foreground absolute right-0 mt-3 flex w-40 flex-col gap-1 rounded-xl border p-2 shadow-md"
-          role="menu"
-        >
-          {themeItems.map((item) => (
-            <button
-              key={item.mode}
-              aria-checked={mode === item.mode}
-              className={cn(
-                'text-muted-foreground hover:bg-accent hover:text-accent-foreground focus-visible:ring-ring flex h-10 w-full items-center justify-between rounded-xl px-3 text-sm font-medium outline-none focus-visible:ring-2',
-                mode === item.mode && 'bg-accent text-primary',
-              )}
-              role="menuitemradio"
-              type="button"
-              onClick={() => {
-                setMode(item.mode)
-                setIsOpen(false)
-              }}
-            >
-              <span className="flex items-center gap-3">
-                <item.icon className="shrink-0" size={17} />
-                {item.label}
-              </span>
-              {mode === item.mode ? <Check className="shrink-0" size={17} strokeWidth={2} /> : null}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
   )
 }
 

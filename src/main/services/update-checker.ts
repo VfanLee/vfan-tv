@@ -1,10 +1,12 @@
 import { DOMParser } from '@xmldom/xmldom'
+import { applyReleaseRoutePrefix, RELEASE_ROUTE_PREFIXES } from '@shared/constants/release-routes'
 import type { UpdateCheckResult } from '@shared/types'
 
 const REPOSITORY_URL = 'https://github.com/VfanLee/VfanTV'
-const RELEASES_FEED_URL = `${REPOSITORY_URL}/releases.atom`
-const LATEST_RELEASE_URL = `${REPOSITORY_URL}/releases/latest`
+const RELEASES_FEED_PATH = `${REPOSITORY_URL}/releases.atom`
+const LATEST_RELEASE_PATH = `${REPOSITORY_URL}/releases/latest`
 const REQUEST_HEADERS = { 'User-Agent': 'VfanTV-Update-Checker' }
+const REQUEST_TIMEOUT_MS = 10_000
 
 interface LatestRelease {
   name: string
@@ -74,17 +76,17 @@ function parseReleaseFeed(xml: string): LatestRelease {
     name: getTextContent(entry.getElementsByTagName('title')[0]) || `VfanTV ${tag}`,
     notes: getReleaseNotes(entry.getElementsByTagName('content')[0]),
     tag,
-    url: releaseUrl,
+    url: `${REPOSITORY_URL}/releases/tag/${tag}`,
   }
 }
 
-async function fetchLatestReleaseFromFeed(): Promise<LatestRelease> {
-  const response = await fetch(RELEASES_FEED_URL, {
+async function fetchLatestReleaseFromFeed(routePrefix: string): Promise<LatestRelease> {
+  const response = await fetch(applyReleaseRoutePrefix(RELEASES_FEED_PATH, routePrefix), {
     headers: {
       ...REQUEST_HEADERS,
       Accept: 'application/atom+xml',
     },
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
 
   if (!response.ok) {
@@ -94,11 +96,11 @@ async function fetchLatestReleaseFromFeed(): Promise<LatestRelease> {
   return parseReleaseFeed(await response.text())
 }
 
-async function fetchLatestReleaseFromRedirect(): Promise<LatestRelease> {
-  const response = await fetch(LATEST_RELEASE_URL, {
+async function fetchLatestReleaseFromRedirect(routePrefix: string): Promise<LatestRelease> {
+  const response = await fetch(applyReleaseRoutePrefix(LATEST_RELEASE_PATH, routePrefix), {
     headers: REQUEST_HEADERS,
     redirect: 'manual',
-    signal: AbortSignal.timeout(10_000),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
   const releaseUrl = response.headers.get('location') ?? ''
   const tag = releaseUrl.match(/\/tag\/([^/?#]+)/)?.[1]
@@ -111,16 +113,31 @@ async function fetchLatestReleaseFromRedirect(): Promise<LatestRelease> {
     name: `VfanTV ${tag}`,
     notes: '请前往 GitHub Release 页面查看更新说明。',
     tag,
-    url: releaseUrl,
+    url: `${REPOSITORY_URL}/releases/tag/${tag}`,
+  }
+}
+
+async function fetchLatestReleaseViaRoute(routePrefix: string): Promise<LatestRelease> {
+  try {
+    return await fetchLatestReleaseFromFeed(routePrefix)
+  } catch {
+    return fetchLatestReleaseFromRedirect(routePrefix)
   }
 }
 
 async function fetchLatestRelease(): Promise<LatestRelease> {
-  try {
-    return await fetchLatestReleaseFromFeed()
-  } catch {
-    return fetchLatestReleaseFromRedirect()
+  const errors: string[] = []
+
+  for (const route of RELEASE_ROUTE_PREFIXES) {
+    try {
+      return await fetchLatestReleaseViaRoute(route.prefix)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      errors.push(`${route.label}：${message}`)
+    }
   }
+
+  throw new Error(errors.join('；') || '所有更新检查线路均不可用')
 }
 
 function getAssetNames(version: string, platform: NodeJS.Platform, arch: string): string[] {
@@ -135,34 +152,41 @@ function getAssetNames(version: string, platform: NodeJS.Platform, arch: string)
   return []
 }
 
+async function assetExists(url: string): Promise<boolean> {
+  try {
+    const response = await fetch(url, {
+      headers: REQUEST_HEADERS,
+      method: 'HEAD',
+      redirect: 'manual',
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    })
+
+    return response.ok || response.status === 302
+  } catch {
+    return false
+  }
+}
+
 async function resolveDownloadAsset(
   tag: string,
   version: string,
   platform: NodeJS.Platform,
   arch: string,
 ): Promise<DownloadAsset | undefined> {
-  const candidates = getAssetNames(version, platform, arch).map((name) => ({
-    name,
-    url: `${REPOSITORY_URL}/releases/download/${tag}/${name}`,
-  }))
+  const assetNames = getAssetNames(version, platform, arch)
 
-  const results = await Promise.all(
-    candidates.map(async (candidate) => {
-      try {
-        const response = await fetch(candidate.url, {
-          headers: REQUEST_HEADERS,
-          method: 'HEAD',
-          redirect: 'manual',
-          signal: AbortSignal.timeout(10_000),
-        })
-        return response.ok || response.status === 302 ? candidate : undefined
-      } catch {
-        return undefined
+  for (const name of assetNames) {
+    const canonicalUrl = `${REPOSITORY_URL}/releases/download/${tag}/${name}`
+
+    for (const route of RELEASE_ROUTE_PREFIXES) {
+      const exists = await assetExists(applyReleaseRoutePrefix(canonicalUrl, route.prefix))
+      if (exists) {
+        return { name, url: canonicalUrl }
       }
-    }),
-  )
+    }
+  }
 
-  return results.find((candidate) => candidate !== undefined)
+  return undefined
 }
 
 export async function checkLatestRelease(

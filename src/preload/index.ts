@@ -49,6 +49,9 @@ const api: AppApi = {
     isMaximized: () => ipcRenderer.invoke('window:is-maximized'),
     toggleMaximize: () => ipcRenderer.invoke('window:toggle-maximize'),
   },
+  shell: {
+    openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
+  },
 }
 
 // Use `contextBridge` APIs to expose Electron APIs to

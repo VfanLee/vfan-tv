@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { readFile, writeFile } from 'fs/promises'
 import type { AppApi, SearchEvent } from '@shared/types'
 import { DEFAULT_SOURCES_EXPORT_NAME } from '@shared/constants/app-brand'
@@ -18,6 +18,15 @@ import { VodSearchService } from '../services/vod-search.service'
 import { checkLatestRelease } from '../services/update-checker'
 
 let mainWindow: BrowserWindow | null = null
+
+function isAllowedExternalUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
 
 export function setMainWindow(window: BrowserWindow): void {
   mainWindow = window
@@ -145,5 +154,12 @@ export function registerIpcHandlers(): void {
 
     mainWindow.maximize()
     return true
+  })
+  ipcMain.handle('shell:open-external', (_event, url: string) => {
+    if (!isAllowedExternalUrl(url)) {
+      throw new Error('仅支持打开 http 或 https 链接')
+    }
+
+    return shell.openExternal(url)
   })
 }

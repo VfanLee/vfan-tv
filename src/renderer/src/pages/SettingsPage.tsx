@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Check, Download, Pencil, Plus, Trash2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import type { VodSourceConfig, VodSourceInput } from '@shared/types'
-import { Badge, Button, Card, Input, Switch } from '@renderer/components'
+import { Badge, Button, Card, Input, Switch, ThemeSettings } from '@renderer/components'
 import {
   createSource,
   deleteSource,
@@ -206,6 +206,8 @@ export function SettingsPage(): React.JSX.Element {
       </header>
 
       <div className="grid gap-5">
+        <ThemeSettings />
+
         <Card className="overflow-hidden">
           <div className="border-border border-b px-5 py-5">
             <div className="flex flex-wrap items-start justify-between gap-4">

@@ -14,6 +14,15 @@ let aboutWindow: BrowserWindow | null = null
 let updateCheckPromise: Promise<void> | null = null
 let hasRunStartupUpdateCheck = false
 
+function isAllowedExternalUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
 app.setName(APP_DISPLAY_NAME)
 process.title = APP_DISPLAY_NAME
 
@@ -271,9 +280,18 @@ function createWindow(): void {
     mainWindow.show()
   })
 
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (isAllowedExternalUrl(url)) {
+      void shell.openExternal(url)
+    }
     return { action: 'deny' }
+  })
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (isAllowedExternalUrl(url)) {
+      event.preventDefault()
+      void shell.openExternal(url)
+    }
   })
 
   // HMR for renderer base on electron-vite cli.

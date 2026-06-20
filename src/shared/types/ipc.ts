@@ -75,4 +75,7 @@ export interface AppApi {
     isMaximized: () => Promise<boolean>
     toggleMaximize: () => Promise<boolean>
   }
+  shell: {
+    openExternal: (url: string) => Promise<void>
+  }
 }

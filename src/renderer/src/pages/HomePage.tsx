@@ -1,9 +1,9 @@
 import { useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router'
-import { ChevronRight, Clapperboard, Mic2, Play, Star, Trash2, Tv } from 'lucide-react'
+import { ChevronRight, Clapperboard, Mic2, Star, Trash2, Tv } from 'lucide-react'
 import { toast } from 'sonner'
 import type { RecentPlayItem, RecommendationItem } from '@shared/types'
-import { MediaPoster, PosterCardSkeleton } from '@renderer/components'
+import { MediaPoster, PosterCardSkeleton, PosterPlayOverlay } from '@renderer/components'
 import { categorySections, removeRecentPlay } from '@renderer/services/api'
 import { recentPlayToVodSearchResult } from '@renderer/services/playback'
 import { useAppDataStore } from '@renderer/stores/app-data'
@@ -182,16 +182,7 @@ function RecentPlayCard({
         type="button"
         onClick={onClick}
       >
-        <MediaPoster
-          className="aspect-[2/3]"
-          poster={item.poster}
-          title={item.title}
-          overlay={
-            <div className="bg-background/80 text-foreground flex size-10 items-center justify-center rounded-full shadow-sm backdrop-blur">
-              <Play fill="currentColor" size={17} />
-            </div>
-          }
-        />
+        <MediaPoster className="aspect-[2/3]" poster={item.poster} title={item.title} overlay={<PosterPlayOverlay />} />
         <div className="mt-3 min-w-0">
           <h3 className="text-foreground truncate text-[15px] font-semibold">{item.title}</h3>
           <p className="text-muted-foreground mt-1 truncate text-sm">
