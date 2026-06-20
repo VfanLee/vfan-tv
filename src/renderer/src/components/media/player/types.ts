@@ -18,6 +18,4 @@ export interface KeyHoldState {
   timer: ReturnType<typeof setTimeout> | null
   interval: ReturnType<typeof setInterval> | null
   isLongPress: boolean
-  playbackRate: number
-  wasPaused?: boolean
 }

@@ -102,7 +102,14 @@ function FavoriteCard({
         type="button"
         onClick={onClick}
       >
-        <MediaPoster className="aspect-[2/3]" poster={item.poster} title={item.title} overlay={<PosterPlayOverlay />} />
+        <MediaPoster
+          baseUrl={item.sourceBaseUrl}
+          className="aspect-[2/3]"
+          headers={item.sourceHeaders}
+          poster={item.poster}
+          title={item.title}
+          overlay={<PosterPlayOverlay />}
+        />
         <h2 className="text-foreground mt-3 truncate text-[15px] font-semibold">{item.title}</h2>
         <p className="text-muted-foreground mt-1 truncate text-sm">
           {[item.sourceName, item.year, item.category || item.remarks].filter(Boolean).join(' · ')}

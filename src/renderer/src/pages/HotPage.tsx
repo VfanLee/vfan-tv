@@ -1,26 +1,41 @@
 import { useEffect, useRef } from 'react'
-import { useNavigate, useSearchParams } from 'react-router'
-import type { RecommendationItem } from '@shared/types'
+import { useNavigate, useParams, useSearchParams } from 'react-router'
+import type { HotRecommendationType, RecommendationItem } from '@shared/types'
 import { MediaPoster, PosterCardSkeleton } from '@renderer/components'
-import { categorySections } from '@renderer/services/api'
+import { categorySections, getHotCacheKey, getHotCategorySection } from '@renderer/services/api'
 import { cn } from '@renderer/lib/utils'
 import { useAppDataStore } from '@renderer/stores/app-data'
 import { Flame } from 'lucide-react'
 
 export function HotPage(): React.JSX.Element {
   const navigate = useNavigate()
+  const { category } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
-  const activeCategory = readCategory(searchParams.get('category'))
-  const categoryCache = useAppDataStore((state) => state.hot[activeCategory])
+  const activeSection = getHotCategorySection(category)
+  const activeType = readType(activeSection, searchParams.get('type'))
+  const cacheKey = getHotCacheKey(activeSection.key, activeType)
+  const categoryCache = useAppDataStore((state) => state.hot[cacheKey])
   const loadHotPage = useAppDataStore((state) => state.loadHotPage)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const showInitialSkeleton = !categoryCache.initialized && !categoryCache.errorMessage
 
   useEffect(() => {
-    if (!categoryCache.initialized) {
-      void loadHotPage(activeCategory)
+    if (!categorySections.some((section) => section.key === category)) {
+      navigate('/hot/movie', { replace: true })
     }
-  }, [activeCategory, categoryCache.initialized, loadHotPage])
+  }, [category, navigate])
+
+  useEffect(() => {
+    if (searchParams.get('type') !== activeType) {
+      setSearchParams({ type: activeType }, { replace: true })
+    }
+  }, [activeType, searchParams, setSearchParams])
+
+  useEffect(() => {
+    if (!categoryCache.initialized) {
+      void loadHotPage(activeSection.key, activeType)
+    }
+  }, [activeSection.key, activeType, categoryCache.initialized, loadHotPage])
 
   useEffect(() => {
     const sentinel = sentinelRef.current
@@ -32,7 +47,7 @@ export function HotPage(): React.JSX.Element {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) {
-          void loadHotPage(activeCategory)
+          void loadHotPage(activeSection.key, activeType)
         }
       },
       { rootMargin: '420px' },
@@ -40,7 +55,14 @@ export function HotPage(): React.JSX.Element {
 
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [activeCategory, categoryCache.errorMessage, categoryCache.hasMore, categoryCache.isLoading, loadHotPage])
+  }, [
+    activeSection.key,
+    activeType,
+    categoryCache.errorMessage,
+    categoryCache.hasMore,
+    categoryCache.isLoading,
+    loadHotPage,
+  ])
 
   return (
     <div className="bg-background text-foreground min-h-full px-10 py-7">
@@ -49,22 +71,24 @@ export function HotPage(): React.JSX.Element {
           <div>
             <div className="flex items-center gap-2">
               <Flame className="text-primary" size={22} />
-              <h1 className="text-2xl font-semibold tracking-tight">近期热门</h1>
+              <h1 className="text-2xl font-semibold tracking-tight">热门{activeSection.title}</h1>
             </div>
-            <p className="text-muted-foreground mt-2 text-sm">按类型浏览豆瓣热门推荐，滚动到底部自动加载更多。</p>
+            <p className="text-muted-foreground mt-2 text-sm">
+              选择类型浏览豆瓣热门{activeSection.title}，滚动到底部自动加载更多。
+            </p>
           </div>
-          <div className="border-border bg-card flex rounded-xl border p-1">
-            {categorySections.map((section) => (
+          <div className="border-border bg-card flex flex-wrap rounded-xl border p-1">
+            {activeSection.filters.map((filter) => (
               <button
-                key={section.key}
+                key={filter.value}
                 className={cn(
                   'text-muted-foreground hover:text-foreground focus-visible:ring-ring h-9 rounded-xl px-4 text-sm font-medium outline-none focus-visible:ring-2',
-                  activeCategory === section.key && 'bg-accent text-primary',
+                  activeType === filter.value && 'bg-accent text-primary',
                 )}
                 type="button"
-                onClick={() => setSearchParams({ category: section.key })}
+                onClick={() => setSearchParams({ type: filter.value })}
               >
-                {section.title}
+                {filter.label}
               </button>
             ))}
           </div>
@@ -86,7 +110,7 @@ export function HotPage(): React.JSX.Element {
             <button
               className="border-border bg-card text-muted-foreground hover:text-primary rounded-xl border px-3 py-2"
               type="button"
-              onClick={() => void loadHotPage(activeCategory)}
+              onClick={() => void loadHotPage(activeSection.key, activeType)}
             >
               加载失败，点击重试
             </button>
@@ -196,12 +220,13 @@ function splitPeople(value?: string): string[] {
     .filter(Boolean)
 }
 
-function readCategory(category: string | null): RecommendationItem['category'] {
-  if (category === 'movie' || category === 'tv' || category === 'show') {
-    return category
+function readType(section: ReturnType<typeof getHotCategorySection>, type: string | null): HotRecommendationType {
+  const filter = section.filters.find((item) => item.value === type)
+  if (filter) {
+    return filter.value
   }
 
-  return 'movie'
+  return section.defaultType
 }
 
 function formatRating(rating: number | undefined): string {

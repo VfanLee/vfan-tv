@@ -1,10 +1,10 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { ChevronRight, Clapperboard, Mic2, Star, Trash2, Tv } from 'lucide-react'
 import { toast } from 'sonner'
 import type { RecentPlayItem, RecommendationItem } from '@shared/types'
 import { MediaPoster, PosterCardSkeleton, PosterPlayOverlay } from '@renderer/components'
-import { categorySections, removeRecentPlay } from '@renderer/services/api'
+import { categorySections, listRecentPlays, removeRecentPlay } from '@renderer/services/api'
 import { recentPlayToVodSearchResult } from '@renderer/services/playback'
 import { useAppDataStore } from '@renderer/stores/app-data'
 import { useSearchContextStore } from '@renderer/stores/search-context'
@@ -21,11 +21,28 @@ export function HomePage(): React.JSX.Element {
   const homeData = useAppDataStore((state) => state.homeData)
   const isLoading = useAppDataStore((state) => !state.homeInitialized && !state.homeErrorMessage)
   const loadHome = useAppDataStore((state) => state.loadHome)
-  const removeRecentPlayFromCache = useAppDataStore((state) => state.removeRecentPlayFromCache)
+  const [recentPlays, setRecentPlays] = useState<RecentPlayItem[]>([])
+  const [recentLoading, setRecentLoading] = useState(true)
 
   useEffect(() => {
     void loadHome()
   }, [loadHome])
+
+  useEffect(() => {
+    let active = true
+
+    void listRecentPlays(20)
+      .then((items) => {
+        if (active) setRecentPlays(items)
+      })
+      .finally(() => {
+        if (active) setRecentLoading(false)
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   const recommendationsByCategory = useMemo(() => {
     return categorySections.reduce(
@@ -44,7 +61,7 @@ export function HomePage(): React.JSX.Element {
 
     try {
       await removeRecentPlay(item.title)
-      removeRecentPlayFromCache(item.title)
+      setRecentPlays((current) => current.filter((recent) => recent.title !== item.title))
       toast.success('已删除播放记录')
     } catch (error) {
       toast.error('删除失败', {
@@ -58,11 +75,11 @@ export function HomePage(): React.JSX.Element {
       <div className="mx-auto max-w-[1500px]">
         <section className="mb-11">
           <SectionHeader title="最近播放" onMore={() => navigate('/recent')} />
-          {isLoading ? (
+          {recentLoading ? (
             <HomeShelfSkeleton />
-          ) : homeData.recentPlays.length > 0 ? (
+          ) : recentPlays.length > 0 ? (
             <div className="no-scrollbar grid auto-cols-[minmax(180px,194px)] grid-flow-col items-start gap-6 overflow-x-auto pb-4">
-              {homeData.recentPlays.map((item) => (
+              {recentPlays.map((item) => (
                 <RecentPlayCard
                   key={item.id}
                   item={item}
@@ -81,7 +98,7 @@ export function HomePage(): React.JSX.Element {
             </div>
           ) : (
             <EmptyShelf
-              description={isLoading ? '正在加载最近播放' : '播放过的视频会出现在这里'}
+              description={recentLoading ? '正在加载最近播放' : '播放过的视频会出现在这里'}
               title="还没有播放记录"
             />
           )}
@@ -94,11 +111,7 @@ export function HomePage(): React.JSX.Element {
 
             return (
               <section key={section.key}>
-                <SectionHeader
-                  icon={Icon}
-                  title={section.title}
-                  onMore={() => navigate(`/hot?category=${section.key}`)}
-                />
+                <SectionHeader icon={Icon} title={section.title} onMore={() => navigate(`/hot/${section.key}`)} />
                 {isLoading ? (
                   <HomeShelfSkeleton />
                 ) : items.length > 0 ? (

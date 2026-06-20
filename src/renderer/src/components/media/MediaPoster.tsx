@@ -4,15 +4,24 @@ import { Play } from 'lucide-react'
 import { resolveImageUrl } from '@shared/utils/media-image'
 
 interface MediaPosterProps {
+  baseUrl?: string
   className?: string
+  headers?: Record<string, string>
   overlay?: ReactNode
   poster?: string
   title: string
 }
 
-export function MediaPoster({ className, overlay, poster, title }: MediaPosterProps): React.JSX.Element {
+export function MediaPoster({
+  baseUrl,
+  className,
+  headers,
+  overlay,
+  poster,
+  title,
+}: MediaPosterProps): React.JSX.Element {
   const [failedPoster, setFailedPoster] = useState<string>()
-  const imageSrc = poster && poster !== failedPoster ? resolveImageUrl(poster) : undefined
+  const imageSrc = poster && poster !== failedPoster ? resolveImageUrl(poster, { baseUrl, headers }) : undefined
 
   return (
     <div className={`border-border bg-muted relative overflow-hidden rounded-xl border shadow-sm ${className ?? ''}`}>

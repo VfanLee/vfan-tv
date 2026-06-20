@@ -24,6 +24,8 @@ import {
   Rewind,
   Settings,
   ShieldCheck,
+  SkipBack,
+  SkipForward,
   TimerReset,
   TriangleAlert,
   Volume1,
@@ -38,17 +40,14 @@ const SPEED_PRESETS = [1, 1.25, 1.5, 2, 3] as const
 const SEEK_PRESETS = [5, 10, 15, 30] as const
 const MIN_PLAYBACK_RATE = 0.1
 const MAX_PLAYBACK_RATE = 10
-const MAX_BOOSTED_PLAYBACK_RATE = MAX_PLAYBACK_RATE
 const DEFAULT_SEEK_STEP_SECONDS = 5
 const SEEK_STEP_STORAGE_KEY = 'vfan-player-seek-step'
 const LONG_PRESS_MS = 400
-const LONG_PROGRESS_INTERVAL_MS = 80
 const LONG_VOLUME_INTERVAL_MS = 80
 const ACTION_HINT_HIDE_MS = 700
 const CONTROLS_IDLE_HIDE_MS = 5000
 
 type SettingsPage = 'root' | 'seek' | 'speed'
-type SpeedHint = { rate: number; mode: 'forward' | 'reverse' }
 
 interface PlayerChromeProps {
   errorLogs: PlayerErrorLog[]
@@ -69,12 +68,16 @@ interface PlayerChromeProps {
 
 export function PlayerChrome({
   errorLogs,
+  hasNextEpisode,
+  hasPreviousEpisode,
   isTheaterMode,
   playlistFilteringEnabled,
   playerRef,
   src,
   title,
+  onNextEpisode,
   onPlaybackRateChange,
+  onPreviousEpisode,
   onRetry,
   onToggleTheaterMode,
   onTogglePlaylistFiltering,
@@ -96,7 +99,6 @@ export function PlayerChrome({
   const settingsOpenRef = useRef(false)
   const waitingRef = useRef(waiting)
   const [actionHint, setActionHint] = useState<ActionHint | null>(null)
-  const [speedHint, setSpeedHint] = useState<SpeedHint | null>(null)
   const [controlsLayerVisible, setControlsLayerVisible] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsPage, setSettingsPage] = useState<SettingsPage>('root')
@@ -315,68 +317,6 @@ export function PlayerChrome({
     keyHoldRef.current = null
   }, [])
 
-  const restoreBoostedSpeed = useCallback(
-    (rate: number): void => {
-      applyPlaybackRate(rate)
-      setSpeedHint(null)
-    },
-    [applyPlaybackRate],
-  )
-
-  const startBoostedReversePlayback = useCallback(
-    (hold: KeyHoldState, boosted: number): void => {
-      const player = playerRef.current
-      if (!player || !Number.isFinite(player.duration)) {
-        return
-      }
-
-      hold.wasPaused = player.paused
-      applyPlaybackRate(boosted)
-      setSpeedHint({ rate: boosted, mode: 'reverse' })
-      if (!player.paused) {
-        void player.pause()
-      }
-
-      hold.interval = setInterval(() => {
-        const currentPlayer = playerRef.current
-        if (!currentPlayer) {
-          return
-        }
-
-        const rewindSeconds = (boosted * LONG_PROGRESS_INTERVAL_MS) / 1000
-        currentPlayer.currentTime = Math.max(0, currentPlayer.currentTime - rewindSeconds)
-      }, LONG_PROGRESS_INTERVAL_MS)
-    },
-    [applyPlaybackRate, playerRef],
-  )
-
-  const startBoostedForwardPlayback = useCallback(
-    (hold: KeyHoldState, boosted: number): void => {
-      const player = playerRef.current
-      if (!player || !Number.isFinite(player.duration)) {
-        return
-      }
-
-      hold.wasPaused = player.paused
-      applyPlaybackRate(boosted)
-      setSpeedHint({ rate: boosted, mode: 'forward' })
-      if (!player.paused) {
-        return
-      }
-
-      hold.interval = setInterval(() => {
-        const currentPlayer = playerRef.current
-        if (!currentPlayer || !Number.isFinite(currentPlayer.duration)) {
-          return
-        }
-
-        const advanceSeconds = (boosted * LONG_PROGRESS_INTERVAL_MS) / 1000
-        currentPlayer.currentTime = Math.min(currentPlayer.duration, currentPlayer.currentTime + advanceSeconds)
-      }, LONG_PROGRESS_INTERVAL_MS)
-    },
-    [applyPlaybackRate, playerRef],
-  )
-
   const handleArrowKeyDown = useCallback(
     (key: string): void => {
       if (keyHoldRef.current?.key === key) {
@@ -384,23 +324,12 @@ export function PlayerChrome({
       }
       clearKeyHold()
 
-      const hold: KeyHoldState = { key, timer: null, interval: null, isLongPress: false, playbackRate }
+      const hold: KeyHoldState = { key, timer: null, interval: null, isLongPress: false }
       keyHoldRef.current = hold
       hold.timer = setTimeout(() => {
         if (keyHoldRef.current !== hold) return
         hold.isLongPress = true
         if (waitingRef.current) return
-
-        if (key === 'ArrowLeft' || key === 'ArrowRight') {
-          const boosted = Math.min(MAX_BOOSTED_PLAYBACK_RATE, hold.playbackRate * 2)
-          if (key === 'ArrowLeft') {
-            startBoostedReversePlayback(hold, boosted)
-            return
-          }
-
-          startBoostedForwardPlayback(hold, boosted)
-          return
-        }
 
         if (key !== 'ArrowUp' && key !== 'ArrowDown') {
           return
@@ -412,7 +341,7 @@ export function PlayerChrome({
         }, LONG_VOLUME_INTERVAL_MS)
       }, LONG_PRESS_MS)
     },
-    [applyVolume, clearKeyHold, playbackRate, playerRef, startBoostedForwardPlayback, startBoostedReversePlayback],
+    [applyVolume, clearKeyHold, playerRef],
   )
 
   const handleArrowKeyUp = useCallback(
@@ -422,24 +351,15 @@ export function PlayerChrome({
       if (hold.timer) clearTimeout(hold.timer)
       if (hold.interval) clearInterval(hold.interval)
 
-      if (hold.isLongPress) {
-        if (key === 'ArrowLeft' || key === 'ArrowRight') restoreBoostedSpeed(hold.playbackRate)
-        if (key === 'ArrowLeft' && hold.wasPaused === false) {
-          void playerRef.current?.play()
-        }
-      } else if (key === 'ArrowUp') {
+      if (!hold.isLongPress && key === 'ArrowUp') {
         applyVolume(playerRef.current?.volume ?? volume, 'up')
-      } else if (key === 'ArrowDown') {
+      } else if (!hold.isLongPress && key === 'ArrowDown') {
         applyVolume(playerRef.current?.volume ?? volume, 'down')
-      } else if (key === 'ArrowLeft') {
-        seekBy(-seekStepSeconds, true)
-      } else if (key === 'ArrowRight') {
-        seekBy(seekStepSeconds, true)
       }
 
       keyHoldRef.current = null
     },
-    [applyVolume, playerRef, restoreBoostedSpeed, seekBy, seekStepSeconds, volume],
+    [applyVolume, playerRef, volume],
   )
 
   useEffect(() => {
@@ -452,11 +372,20 @@ export function PlayerChrome({
       }
       if (isArrowKey(event.key)) {
         event.preventDefault()
-        if (!event.repeat) handleArrowKeyDown(event.key)
+        if (event.repeat) return
+        if (event.key === 'ArrowLeft') {
+          seekBy(-seekStepSeconds, true)
+        } else if (event.key === 'ArrowRight') {
+          seekBy(seekStepSeconds, true)
+        } else {
+          handleArrowKeyDown(event.key)
+        }
       }
     }
     const onKeyUp = (event: KeyboardEvent): void => {
-      if (!isEditableTarget(event.target) && isArrowKey(event.key)) handleArrowKeyUp(event.key)
+      if (!isEditableTarget(event.target) && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+        handleArrowKeyUp(event.key)
+      }
     }
 
     window.addEventListener('keydown', onKeyDown)
@@ -465,7 +394,7 @@ export function PlayerChrome({
       window.removeEventListener('keydown', onKeyDown)
       window.removeEventListener('keyup', onKeyUp)
     }
-  }, [handleArrowKeyDown, handleArrowKeyUp, togglePlay])
+  }, [handleArrowKeyDown, handleArrowKeyUp, seekBy, seekStepSeconds, togglePlay])
 
   useEffect(() => {
     return () => clearKeyHold()
@@ -569,7 +498,7 @@ export function PlayerChrome({
           )}
         >
           {title ? (
-            <div className="pointer-events-none min-w-0 flex-1 rounded-xl bg-black/72 px-3 py-2 text-[15px] leading-5 font-semibold text-white shadow-lg shadow-black/25 backdrop-blur-sm">
+            <div className="pointer-events-none min-w-0 flex-1 px-1 py-2 text-[17px] leading-6 font-semibold text-white">
               <span className="block truncate">{title}</span>
             </div>
           ) : (
@@ -602,6 +531,16 @@ export function PlayerChrome({
 
           <div className="mt-1.5 flex items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-1">
+              <PlayerControlTooltip label="上一集">
+                <PlayerIconButton
+                  aria-label="上一集"
+                  disabled={!hasPreviousEpisode}
+                  onClick={() => onPreviousEpisode?.()}
+                >
+                  <SkipBack fill="currentColor" size={20} />
+                </PlayerIconButton>
+              </PlayerControlTooltip>
+
               <PlayButton
                 aria-label={paused ? '播放' : '暂停'}
                 className="inline-flex size-10 shrink-0 items-center justify-center rounded-full text-white transition-colors hover:bg-white/14 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none"
@@ -612,6 +551,12 @@ export function PlayerChrome({
                   <Pause fill="currentColor" size={21} />
                 )}
               </PlayButton>
+
+              <PlayerControlTooltip label="下一集">
+                <PlayerIconButton aria-label="下一集" disabled={!hasNextEpisode} onClick={() => onNextEpisode?.()}>
+                  <SkipForward fill="currentColor" size={20} />
+                </PlayerIconButton>
+              </PlayerControlTooltip>
 
               <PlayerVolumeControl
                 expanded={volumeExpanded}
@@ -684,11 +629,6 @@ export function PlayerChrome({
       </Controls.Root>
 
       <ActionFeedbackOverlay hint={actionHint} />
-      {speedHint !== null ? (
-        <div className="pointer-events-none absolute top-1/2 left-1/2 z-30 flex -translate-x-1/2 -translate-y-1/2 items-center rounded-xl bg-black/70 px-4 py-3 text-sm font-semibold text-white">
-          正在以 {formatHintRate(speedHint.rate)} 倍速{speedHint.mode === 'forward' ? '快进' : '倒退'}播放
-        </div>
-      ) : null}
 
       {isSourceOpen ? <PlaySourceDialog src={src} onClose={() => setIsSourceOpen(false)} /> : null}
       {isErrorLogOpen ? <PlayerErrorLogDialog logs={errorLogs} onClose={() => setIsErrorLogOpen(false)} /> : null}
@@ -1073,7 +1013,7 @@ function PlayerTopButton({
     <button
       aria-label={label}
       className={cn(
-        'inline-flex size-10 items-center justify-center rounded-xl bg-black/75 text-white shadow-lg shadow-black/25 backdrop-blur-sm transition-colors hover:bg-black/90',
+        'inline-flex size-10 items-center justify-center rounded-full text-white/92 transition-colors hover:bg-white/14 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none',
         tone === 'warning' && 'text-destructive',
       )}
       title={label}
@@ -1203,10 +1143,6 @@ function formatTime(seconds: number): string {
 
 function formatRate(rate: number): string {
   return `${rate.toFixed(2)}x`
-}
-
-function formatHintRate(rate: number): string {
-  return rate.toFixed(2).replace(/\.?0+$/, '')
 }
 
 function getPointerVolumePercent(element: HTMLElement, clientX: number): number {

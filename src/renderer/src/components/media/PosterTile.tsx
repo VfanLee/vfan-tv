@@ -3,15 +3,17 @@ import { Badge } from '@renderer/components/ui'
 import { resolveImageUrl } from '@shared/utils/media-image'
 
 interface PosterTileProps {
+  baseUrl?: string
+  headers?: Record<string, string>
   title: string
   subtitle?: string
   poster?: string
   meta?: string
 }
 
-export function PosterTile({ title, subtitle, poster, meta }: PosterTileProps): React.JSX.Element {
+export function PosterTile({ baseUrl, headers, title, subtitle, poster, meta }: PosterTileProps): React.JSX.Element {
   const [failedPoster, setFailedPoster] = useState<string>()
-  const imageSrc = poster && poster !== failedPoster ? resolveImageUrl(poster) : undefined
+  const imageSrc = poster && poster !== failedPoster ? resolveImageUrl(poster, { baseUrl, headers }) : undefined
 
   return (
     <article className="w-36 shrink-0">

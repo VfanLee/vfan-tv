@@ -20,6 +20,8 @@ interface GroupedSearchResult {
   key: string
   title: string
   poster?: string
+  posterBaseUrl?: string
+  posterHeaders?: Record<string, string>
   meta: string
   remarks?: string
   items: VodSearchResult[]
@@ -347,7 +349,13 @@ function GroupedResults({
           type="button"
           onClick={() => onOpen(group)}
         >
-          <MediaPoster className="aspect-[2/3] rounded-xl" poster={group.poster} title={group.title} />
+          <MediaPoster
+            baseUrl={group.posterBaseUrl}
+            className="aspect-[2/3] rounded-xl"
+            headers={group.posterHeaders}
+            poster={group.poster}
+            title={group.title}
+          />
           <div className="min-w-0">
             <h2 className="text-foreground truncate text-xl font-semibold tracking-tight">{group.title}</h2>
             <p className="text-muted-foreground mt-3 truncate text-sm font-medium">{group.meta}</p>
@@ -424,7 +432,13 @@ function SourceResultButton({ item, onClick }: { item: VodSearchResult; onClick:
       type="button"
       onClick={onClick}
     >
-      <MediaPoster className="aspect-[2/3] rounded-xl" poster={item.poster} title={item.title} />
+      <MediaPoster
+        baseUrl={item.sourceBaseUrl}
+        className="aspect-[2/3] rounded-xl"
+        headers={item.sourceHeaders}
+        poster={item.poster}
+        title={item.title}
+      />
       <div className="min-w-0 py-1">
         <div className="text-primary text-xs font-semibold">{item.sourceName}</div>
         <h3 className="text-foreground mt-1 truncate text-sm font-semibold">{item.title}</h3>
@@ -495,7 +509,11 @@ function groupSearchResults(items: VodSearchResult[]): GroupedSearchResult[] {
     if (current) {
       current.items.push(item)
       current.sourceNames = Array.from(new Set([...current.sourceNames, item.sourceName]))
-      current.poster ||= item.poster
+      if (!current.poster && item.poster) {
+        current.poster = item.poster
+        current.posterBaseUrl = item.sourceBaseUrl
+        current.posterHeaders = item.sourceHeaders
+      }
       current.remarks ||= item.remarks
       continue
     }
@@ -504,6 +522,8 @@ function groupSearchResults(items: VodSearchResult[]): GroupedSearchResult[] {
       key,
       title: item.title,
       poster: item.poster,
+      posterBaseUrl: item.sourceBaseUrl,
+      posterHeaders: item.sourceHeaders,
       meta: formatMeta(item),
       remarks: item.remarks,
       items: [item],

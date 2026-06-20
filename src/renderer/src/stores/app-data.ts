@@ -1,9 +1,8 @@
 import { create } from 'zustand'
-import type { HomeData, HotRecommendationsPage, RecommendationItem } from '@shared/types'
-import { getHomeData, getHotRecommendationsPage } from '@renderer/services/api'
+import type { HomeData, HotRecommendationType, HotRecommendationsPage, RecommendationItem } from '@shared/types'
+import { categorySections, getHomeData, getHotCacheKey, getHotRecommendationsPage } from '@renderer/services/api'
 
 const hotPageSize = 24
-const categories: RecommendationItem['category'][] = ['movie', 'tv', 'show']
 
 interface HotCategoryCache {
   errorMessage: string
@@ -19,11 +18,10 @@ interface AppDataState {
   homeErrorMessage: string
   homeInitialized: boolean
   homeLoading: boolean
-  hot: Record<RecommendationItem['category'], HotCategoryCache>
+  hot: Record<string, HotCategoryCache>
   initialize: () => Promise<void>
   loadHome: () => Promise<void>
-  loadHotPage: (category: RecommendationItem['category']) => Promise<void>
-  removeRecentPlayFromCache: (title: string) => void
+  loadHotPage: (category: RecommendationItem['category'], type: HotRecommendationType) => Promise<void>
 }
 
 const emptyHotCache = (): HotCategoryCache => ({
@@ -36,20 +34,19 @@ const emptyHotCache = (): HotCategoryCache => ({
 })
 
 let homeRequest: Promise<void> | undefined
-const hotRequests = new Map<RecommendationItem['category'], Promise<void>>()
+const hotRequests = new Map<string, Promise<void>>()
 
 export const useAppDataStore = create<AppDataState>((set, get) => ({
   homeData: { recentPlays: [], recommendations: [] },
   homeErrorMessage: '',
   homeInitialized: false,
   homeLoading: false,
-  hot: {
-    movie: emptyHotCache(),
-    tv: emptyHotCache(),
-    show: emptyHotCache(),
-  },
+  hot: createHotCache(),
   initialize: async () => {
-    await Promise.allSettled([get().loadHome(), ...categories.map((category) => get().loadHotPage(category))])
+    await Promise.allSettled([
+      get().loadHome(),
+      ...categorySections.map((section) => get().loadHotPage(section.key, section.defaultType)),
+    ])
   },
   loadHome: async () => {
     if (get().homeInitialized) return
@@ -57,7 +54,7 @@ export const useAppDataStore = create<AppDataState>((set, get) => ({
 
     set({ homeLoading: true, homeErrorMessage: '' })
     homeRequest = getHomeData()
-      .then((homeData) => set({ homeData, homeInitialized: true }))
+      .then(({ recommendations }) => set({ homeData: { recentPlays: [], recommendations }, homeInitialized: true }))
       .catch((error: unknown) => set({ homeErrorMessage: toErrorMessage(error) }))
       .finally(() => {
         set({ homeLoading: false })
@@ -66,20 +63,21 @@ export const useAppDataStore = create<AppDataState>((set, get) => ({
 
     return homeRequest
   },
-  loadHotPage: async (category) => {
-    const current = get().hot[category]
-    if (!current.hasMore || hotRequests.has(category)) return hotRequests.get(category)
+  loadHotPage: async (category, type) => {
+    const cacheKey = getHotCacheKey(category, type)
+    const current = get().hot[cacheKey]
+    if (!current.hasMore || hotRequests.has(cacheKey)) return hotRequests.get(cacheKey)
 
     set((state) => ({
-      hot: { ...state.hot, [category]: { ...state.hot[category], errorMessage: '', isLoading: true } },
+      hot: { ...state.hot, [cacheKey]: { ...state.hot[cacheKey], errorMessage: '', isLoading: true } },
     }))
 
-    const request = getHotRecommendationsPage({ category, start: current.nextStart, limit: hotPageSize })
+    const request = getHotRecommendationsPage({ category, type, start: current.nextStart, limit: hotPageSize })
       .then((page) => {
         set((state) => ({
           hot: {
             ...state.hot,
-            [category]: mergeHotPage(state.hot[category], page),
+            [cacheKey]: mergeHotPage(state.hot[cacheKey], page),
           },
         }))
       })
@@ -87,29 +85,29 @@ export const useAppDataStore = create<AppDataState>((set, get) => ({
         set((state) => ({
           hot: {
             ...state.hot,
-            [category]: { ...state.hot[category], errorMessage: toErrorMessage(error) },
+            [cacheKey]: { ...state.hot[cacheKey], errorMessage: toErrorMessage(error) },
           },
         }))
       })
       .finally(() => {
-        hotRequests.delete(category)
+        hotRequests.delete(cacheKey)
         set((state) => ({
-          hot: { ...state.hot, [category]: { ...state.hot[category], isLoading: false } },
+          hot: { ...state.hot, [cacheKey]: { ...state.hot[cacheKey], isLoading: false } },
         }))
       })
 
-    hotRequests.set(category, request)
+    hotRequests.set(cacheKey, request)
     return request
   },
-  removeRecentPlayFromCache: (title) => {
-    set((state) => ({
-      homeData: {
-        ...state.homeData,
-        recentPlays: state.homeData.recentPlays.filter((item) => item.title !== title),
-      },
-    }))
-  },
 }))
+
+function createHotCache(): Record<string, HotCategoryCache> {
+  return Object.fromEntries(
+    categorySections.flatMap((section) =>
+      section.filters.map((filter) => [getHotCacheKey(section.key, filter.value), emptyHotCache()]),
+    ),
+  )
+}
 
 function mergeHotPage(current: HotCategoryCache, page: HotRecommendationsPage): HotCategoryCache {
   const seen = new Set(current.items.map((item) => `${item.category}-${item.id}`))

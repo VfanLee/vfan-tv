@@ -2,25 +2,25 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { Clock3, Search, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import type { HomeData, RecentPlayItem } from '@shared/types'
+import type { RecentPlayItem } from '@shared/types'
 import { MediaPoster, PosterPlayOverlay } from '@renderer/components'
-import { getHomeData, removeRecentPlay } from '@renderer/services/api'
+import { listRecentPlays, removeRecentPlay } from '@renderer/services/api'
 import { recentPlayToVodSearchResult } from '@renderer/services/playback'
 import { useSearchContextStore } from '@renderer/stores/search-context'
 
 export function RecentPage(): React.JSX.Element {
   const navigate = useNavigate()
   const setContext = useSearchContextStore((state) => state.setContext)
-  const [homeData, setHomeData] = useState<HomeData>({ recentPlays: [], recommendations: [] })
+  const [recentPlays, setRecentPlays] = useState<RecentPlayItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
     let active = true
 
-    void getHomeData()
-      .then((nextHomeData) => {
+    void listRecentPlays()
+      .then((items) => {
         if (active) {
-          setHomeData(nextHomeData)
+          setRecentPlays(items)
         }
       })
       .finally(() => {
@@ -41,10 +41,7 @@ export function RecentPage(): React.JSX.Element {
 
     try {
       await removeRecentPlay(item.title)
-      setHomeData((current) => ({
-        ...current,
-        recentPlays: current.recentPlays.filter((recentItem) => recentItem.title !== item.title),
-      }))
+      setRecentPlays((current) => current.filter((recentItem) => recentItem.title !== item.title))
       toast.success('已删除播放记录')
     } catch (error) {
       toast.error('删除失败', {
@@ -63,9 +60,9 @@ export function RecentPage(): React.JSX.Element {
           </div>
         </header>
 
-        {homeData.recentPlays.length > 0 ? (
+        {recentPlays.length > 0 ? (
           <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] items-start gap-x-6 gap-y-9">
-            {homeData.recentPlays.map((item) => (
+            {recentPlays.map((item) => (
               <RecentCard
                 key={item.id}
                 item={item}

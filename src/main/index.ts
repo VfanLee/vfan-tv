@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, Menu, protocol, nativeImage, dialog } from 'electron'
+import { app, BrowserWindow, Menu, protocol, nativeImage, dialog } from 'electron'
 import type { MenuItemConstructorOptions, MessageBoxOptions, MessageBoxReturnValue } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -6,6 +6,7 @@ import icon from '../../resources/icon.png?asset'
 import packageJson from '../../package.json'
 import { registerIpcHandlers, setMainWindow } from './ipc/register-handlers'
 import { registerMediaProxyProtocol } from './services/media-proxy-protocol'
+import { isAllowedExternalUrl, openExternalUrl } from './services/external-link'
 import { checkLatestRelease } from './services/update-checker'
 import { APP_DISPLAY_NAME, APP_ID, USER_DATA_DIR_NAME } from '@shared/constants/app-brand'
 
@@ -13,15 +14,6 @@ const APP_VERSION = packageJson.version
 let aboutWindow: BrowserWindow | null = null
 let updateCheckPromise: Promise<void> | null = null
 let hasRunStartupUpdateCheck = false
-
-function isAllowedExternalUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url)
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
-  } catch {
-    return false
-  }
-}
 
 app.setName(APP_DISPLAY_NAME)
 process.title = APP_DISPLAY_NAME
@@ -141,7 +133,7 @@ async function runUpdateCheck(interactive: boolean): Promise<void> {
     })
 
     if (response.response === 0) {
-      await shell.openExternal(result.downloadUrl ?? result.releaseUrl)
+      await openExternalUrl(result.downloadUrl ?? result.releaseUrl)
     }
   } catch (error) {
     if (!interactive) return
@@ -282,7 +274,9 @@ function createWindow(): void {
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (isAllowedExternalUrl(url)) {
-      void shell.openExternal(url)
+      void openExternalUrl(url).catch((error: unknown) => {
+        console.error('Failed to open external URL:', url, error)
+      })
     }
     return { action: 'deny' }
   })
@@ -290,7 +284,9 @@ function createWindow(): void {
   mainWindow.webContents.on('will-navigate', (event, url) => {
     if (isAllowedExternalUrl(url)) {
       event.preventDefault()
-      void shell.openExternal(url)
+      void openExternalUrl(url).catch((error: unknown) => {
+        console.error('Failed to open external URL:', url, error)
+      })
     }
   })
 

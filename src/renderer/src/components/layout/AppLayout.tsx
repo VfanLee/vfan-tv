@@ -1,13 +1,15 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useLocation, useMatches, useNavigate, useSearchParams } from 'react-router'
-import { ChevronsLeft, ChevronsRight, Clock3, Flame, Heart, Home, Info, Search, Settings } from 'lucide-react'
+import { ChevronsLeft, ChevronsRight, Clock3, Film, Heart, Home, Info, Mic2, Search, Settings, Tv } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
 import logoMarkUrl from '@renderer/assets/logo-mark.svg'
 
 const primaryNavItems: Array<{ to: string; label: string; icon: LucideIcon }> = [
   { to: '/', label: '首页', icon: Home },
-  { to: '/hot', label: '近期热门', icon: Flame },
+  { to: '/hot/movie', label: '电影', icon: Film },
+  { to: '/hot/tv', label: '剧集', icon: Tv },
+  { to: '/hot/show', label: '综艺', icon: Mic2 },
   { to: '/recent', label: '最近播放', icon: Clock3 },
   { to: '/favorites', label: '我的收藏', icon: Heart },
 ]

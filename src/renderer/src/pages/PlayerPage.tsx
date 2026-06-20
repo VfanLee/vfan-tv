@@ -3,7 +3,7 @@ import { useLocation, useNavigate, useParams } from 'react-router'
 import { ArrowLeft, ArrowUpDown, CheckCircle2, Heart, ListVideo, Loader2, Radio, RefreshCw } from 'lucide-react'
 import type { FavoriteInput, PlayLine, RecentPlayInput, VodSearchResult } from '@shared/types'
 import { parseVodPlayUrl } from '@shared/utils/vod-play-url'
-import { BasicPlayer } from '@renderer/components'
+import { BasicPlayer, MediaPoster } from '@renderer/components'
 import { cn } from '@renderer/lib/utils'
 import {
   addFavorite,
@@ -46,6 +46,7 @@ export function PlayerPage(): React.JSX.Element {
   const keyword = useSearchContextStore((state) => state.keyword)
   const mergeCandidates = useSearchContextStore((state) => state.mergeCandidates)
   const [activeTab, setActiveTab] = useState<PlayerTab>('episodes')
+  const [isEpisodeDescending, setIsEpisodeDescending] = useState(false)
   const [selection, setSelection] = useState<EpisodeSelection>()
   const [isRefreshingSources, setIsRefreshingSources] = useState(false)
   const [isFavorite, setIsFavorite] = useState(false)
@@ -97,8 +98,12 @@ export function PlayerPage(): React.JSX.Element {
   const activeLine = lines[activeSelection.lineIndex]
   const activeEpisode = activeLine?.episodes[activeSelection.episodeIndex]
   const playerSrc = activeEpisode?.url
-  const hasPreviousEpisode = activeSelection.episodeIndex > 0
-  const hasNextEpisode = Boolean(activeLine && activeSelection.episodeIndex < activeLine.episodes.length - 1)
+  const previousEpisodeIndex = activeSelection.episodeIndex + (isEpisodeDescending ? 1 : -1)
+  const nextEpisodeIndex = activeSelection.episodeIndex + (isEpisodeDescending ? -1 : 1)
+  const hasPreviousEpisode = Boolean(
+    activeLine && previousEpisodeIndex >= 0 && previousEpisodeIndex < activeLine.episodes.length,
+  )
+  const hasNextEpisode = Boolean(activeLine && nextEpisodeIndex >= 0 && nextEpisodeIndex < activeLine.episodes.length)
   const initialTime =
     shouldApplyLocationInitialTime(locationState, activeSelection, playerSrc) && locationState?.initialTime
       ? Math.max(0, Math.floor(locationState.initialTime))
@@ -382,9 +387,9 @@ export function PlayerPage(): React.JSX.Element {
               isTheaterMode={isTheaterMode}
               src={playerSrc}
               title={playerTitle}
-              onEnded={hasNextEpisode ? () => selectEpisode(activeSelection.episodeIndex + 1) : undefined}
-              onNextEpisode={() => selectEpisode(activeSelection.episodeIndex + 1)}
-              onPreviousEpisode={() => selectEpisode(activeSelection.episodeIndex - 1)}
+              onEnded={hasNextEpisode ? () => selectEpisode(nextEpisodeIndex) : undefined}
+              onNextEpisode={() => selectEpisode(nextEpisodeIndex)}
+              onPreviousEpisode={() => selectEpisode(previousEpisodeIndex)}
               onProgress={(progress) => void saveRecentProgress(progress)}
               onToggleTheaterMode={() => setIsTheaterMode((current) => !current)}
             />
@@ -413,8 +418,10 @@ export function PlayerPage(): React.JSX.Element {
                 <EpisodesPanel
                   activeLine={activeLine}
                   activeSelection={activeSelection}
+                  isDescending={isEpisodeDescending}
                   lines={lines}
                   onSelectEpisode={selectEpisode}
+                  onToggleOrder={() => setIsEpisodeDescending((current) => !current)}
                 />
               ) : (
                 <SourcesPanel
@@ -432,8 +439,16 @@ export function PlayerPage(): React.JSX.Element {
       </div>
 
       {!isTheaterMode ? (
-        <section className="border-border bg-card mt-5 rounded-xl border p-5 shadow-sm">
-          <div className="border-border flex flex-wrap items-start justify-between gap-4 border-b pb-5">
+        <section className="border-border bg-card mt-5 flow-root rounded-xl border p-5 shadow-sm">
+          <MediaPoster
+            baseUrl={current?.sourceBaseUrl}
+            className="float-left mr-6 mb-4 aspect-[2/3] w-[clamp(11rem,18vw,14rem)]"
+            headers={current?.sourceHeaders}
+            poster={current?.poster}
+            title={current?.title ?? '影片海报'}
+          />
+
+          <div className="border-border flex min-w-0 flex-wrap items-start justify-between gap-4 border-b pb-5">
             <div className="min-w-0 flex-1">
               <h1 className="max-w-full truncate text-3xl font-semibold tracking-tight">
                 {current?.title ?? '资源上下文待恢复'}
@@ -512,15 +527,18 @@ function PanelTab({
 function EpisodesPanel({
   activeLine,
   activeSelection,
+  isDescending,
   lines,
   onSelectEpisode,
+  onToggleOrder,
 }: {
   activeLine?: PlayLine
   activeSelection: EpisodeSelection
+  isDescending: boolean
   lines: PlayLine[]
   onSelectEpisode: (episodeIndex: number) => void
+  onToggleOrder: () => void
 }): React.JSX.Element {
-  const [isDescending, setIsDescending] = useState(false)
   const episodeEntries = (activeLine?.episodes ?? []).map((episode, episodeIndex) => ({ episode, episodeIndex }))
   const visibleEpisodes = isDescending ? [...episodeEntries].reverse() : episodeEntries
 
@@ -540,7 +558,7 @@ function EpisodesPanel({
           aria-label={`切换为${isDescending ? '正序' : '倒序'}`}
           className="border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring inline-flex h-8 items-center gap-1.5 rounded-xl border px-2.5 text-xs font-semibold outline-none focus-visible:ring-2"
           type="button"
-          onClick={() => setIsDescending((current) => !current)}
+          onClick={onToggleOrder}
         >
           <ArrowUpDown size={14} />
           {isDescending ? '倒序' : '正序'}

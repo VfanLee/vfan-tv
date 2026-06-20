@@ -1,4 +1,4 @@
-import { createHashRouter, RouterProvider } from 'react-router'
+import { createHashRouter, Navigate, RouterProvider } from 'react-router'
 import { AppLayout } from '@renderer/components'
 import {
   AboutPage,
@@ -19,7 +19,8 @@ const router = createHashRouter([
       { index: true, element: <HomePage />, handle: { showGlobalSearch: true } },
       { path: 'recent', element: <RecentPage />, handle: { hideTopBar: true } },
       { path: 'favorites', element: <FavoritesPage />, handle: { hideTopBar: true } },
-      { path: 'hot', element: <HotPage />, handle: { showGlobalSearch: true } },
+      { path: 'hot', element: <Navigate replace to="/hot/movie" /> },
+      { path: 'hot/:category', element: <HotPage />, handle: { showGlobalSearch: true } },
       { path: 'search', element: <SearchPage />, handle: { showGlobalSearch: true } },
       { path: 'settings', element: <SettingsPage />, handle: { hideTopBar: true } },
       { path: 'about', element: <AboutPage />, handle: { hideTopBar: true } },

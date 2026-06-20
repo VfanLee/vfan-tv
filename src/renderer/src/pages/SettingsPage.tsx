@@ -213,6 +213,7 @@ export function SettingsPage(): React.JSX.Element {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex gap-3">
                 <h2 className="text-foreground text-lg font-semibold">数据源管理</h2>
+                <p className="text-muted-foreground mt-1 text-sm">管理应用的数据源。</p>
               </div>
 
               <div className="flex flex-wrap gap-2">
