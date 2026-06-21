@@ -1,6 +1,6 @@
 {
   "name": "vfantv",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "productName": "VfanTV",
   "description": "A free, source-available, non-commercial local media player with configurable content sources.",
   "main": "./out/main/index.js",
