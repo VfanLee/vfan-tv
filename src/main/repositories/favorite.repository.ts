@@ -8,7 +8,7 @@ type FavoriteRow = typeof favoritesTable.$inferSelect
 function toFavoriteItem(row: FavoriteRow): FavoriteItem {
   return {
     ...row,
-    sourceBaseUrl: row.sourceBaseUrl ?? undefined,
+    sourceUrl: row.sourceUrl ?? undefined,
     poster: row.poster ?? undefined,
     year: row.year ?? undefined,
     area: row.area ?? undefined,
@@ -54,7 +54,7 @@ export class FavoriteRepository {
         target: [favoritesTable.sourceId, favoritesTable.vodId],
         set: {
           sourceName: item.sourceName,
-          sourceBaseUrl: item.sourceBaseUrl,
+          sourceUrl: item.sourceUrl,
           title: item.title,
           poster: item.poster,
           year: item.year,
@@ -72,6 +72,36 @@ export class FavoriteRepository {
       .run()
 
     return this.get(input.sourceId, input.vodId) ?? item
+  }
+
+  importItem(item: FavoriteItem): FavoriteItem {
+    this.db
+      .insert(favoritesTable)
+      .values(item)
+      .onConflictDoUpdate({
+        target: [favoritesTable.sourceId, favoritesTable.vodId],
+        set: {
+          id: item.id,
+          sourceName: item.sourceName,
+          sourceUrl: item.sourceUrl,
+          title: item.title,
+          poster: item.poster,
+          year: item.year,
+          area: item.area,
+          language: item.language,
+          category: item.category,
+          remarks: item.remarks,
+          actor: item.actor,
+          director: item.director,
+          description: item.description,
+          rawJson: item.rawJson,
+          createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
+        },
+      })
+      .run()
+
+    return this.get(item.sourceId, item.vodId) ?? item
   }
 
   delete(sourceId: string, vodId: string): void {

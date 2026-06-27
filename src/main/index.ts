@@ -1,11 +1,10 @@
-import { app, BrowserWindow, Menu, protocol, nativeImage, dialog } from 'electron'
+import { app, BrowserWindow, Menu, nativeImage, dialog } from 'electron'
 import type { MenuItemConstructorOptions, MessageBoxOptions, MessageBoxReturnValue } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import packageJson from '../../package.json'
 import { registerIpcHandlers, setMainWindow } from './ipc/register-handlers'
-import { registerMediaProxyProtocol } from './services/media-proxy-protocol'
 import { isAllowedExternalUrl, openExternalUrl } from './services/external-link'
 import { checkLatestRelease } from './services/update-checker'
 import { APP_DISPLAY_NAME, APP_ID, USER_DATA_DIR_NAME } from '@shared/constants/app-brand'
@@ -238,19 +237,6 @@ function createApplicationMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
-protocol.registerSchemesAsPrivileged([
-  {
-    scheme: 'vfan-media',
-    privileges: {
-      standard: true,
-      secure: true,
-      supportFetchAPI: true,
-      stream: true,
-      corsEnabled: true,
-    },
-  },
-])
-
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
     title: APP_DISPLAY_NAME,
@@ -310,7 +296,6 @@ app.whenReady().then(() => {
   app.dock?.setIcon(icon)
   electronApp.setAppUserModelId(APP_ID)
   createApplicationMenu()
-  registerMediaProxyProtocol()
   registerIpcHandlers()
 
   // Default open or close DevTools by F12 in development

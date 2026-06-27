@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useMatches, useNavigate, useSearchParams } from 'react-router'
-import { ChevronsLeft, ChevronsRight, Clock3, Heart, Home, Info, Search, Settings } from 'lucide-react'
+import { ChevronsLeft, ChevronsRight, Clock3, Heart, Home, Info, Search, Settings, Tv } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@renderer/lib/utils'
 import { categoryIcons } from '@renderer/lib/category-icons'
@@ -11,8 +11,14 @@ const primaryNavItems: Array<{ to: string; label: string; icon: LucideIcon }> = 
   { to: '/hot/movie', label: '电影', icon: categoryIcons.movie },
   { to: '/hot/tv', label: '剧集', icon: categoryIcons.tv },
   { to: '/hot/show', label: '综艺', icon: categoryIcons.show },
+  { to: '/live', label: '直播', icon: Tv },
+]
+
+const secondaryNavItems: Array<{ to: string; label: string; icon: LucideIcon }> = [
   { to: '/recent', label: '最近播放', icon: Clock3 },
   { to: '/favorites', label: '我的收藏', icon: Heart },
+  { to: '/settings', label: '设置', icon: Settings },
+  { to: '/about', label: '关于', icon: Info },
 ]
 
 interface LayoutRouteHandle {
@@ -87,8 +93,9 @@ export function AppLayout(): React.JSX.Element {
         </nav>
 
         <nav className="mt-auto flex flex-col gap-1.5">
-          <SidebarLink collapsed={isSidebarCollapsed} item={{ to: '/settings', label: '设置', icon: Settings }} />
-          <SidebarLink collapsed={isSidebarCollapsed} item={{ to: '/about', label: '关于', icon: Info }} />
+          {secondaryNavItems.map((item) => (
+            <SidebarLink key={item.to} collapsed={isSidebarCollapsed} item={item} />
+          ))}
         </nav>
       </aside>
 

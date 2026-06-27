@@ -361,7 +361,7 @@ export function PlayerPage(): React.JSX.Element {
       const result = url
         ? await probeMediaSource({
             url,
-            referer: item.sourceBaseUrl,
+            referer: item.sourceUrl,
           })
         : undefined
 
@@ -522,7 +522,7 @@ export function PlayerPage(): React.JSX.Element {
       {!isTheaterMode ? (
         <section className="border-border bg-card mt-5 flow-root rounded-xl border p-5 shadow-sm">
           <MediaPoster
-            baseUrl={current?.sourceBaseUrl}
+            baseUrl={current?.sourceUrl}
             className="float-left mr-6 mb-4 aspect-[2/3] w-[clamp(11rem,18vw,14rem)]"
             overlay={
               doubanScore ? (
@@ -1028,7 +1028,7 @@ function createFavoriteInput(item: VodSearchResult): FavoriteInput {
     id: createRecordId(item.sourceId, item.vodId),
     sourceId: item.sourceId,
     sourceName: item.sourceName,
-    sourceBaseUrl: item.sourceBaseUrl,
+    sourceUrl: item.sourceUrl,
     vodId: item.vodId,
     title: item.title,
     poster: item.poster,

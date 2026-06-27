@@ -22,11 +22,13 @@ export interface BasicPlayerProps {
   autoPlay?: boolean
   className?: string
   src?: string
+  sourceType?: 'hls'
   title?: string
   initialTime?: number
   hasNextEpisode?: boolean
   hasPreviousEpisode?: boolean
   isTheaterMode?: boolean
+  loop?: boolean
   onNextEpisode?: () => void
   onEnded?: () => void
   onPreviousEpisode?: () => void
@@ -41,12 +43,14 @@ export function BasicPlayer({
   hasPreviousEpisode = false,
   initialTime = 0,
   isTheaterMode = false,
+  loop = false,
   onNextEpisode,
   onEnded,
   onPreviousEpisode,
   onProgress,
   onToggleTheaterMode,
   src,
+  sourceType,
   title,
 }: BasicPlayerProps): React.JSX.Element {
   const playerRef = useRef<MediaPlayerInstance | null>(null)
@@ -65,7 +69,7 @@ export function BasicPlayer({
     src,
     logs: [],
   })
-  const playerSrc = useMemo<PlayerSrc | undefined>(() => getPlayerSource(src), [src])
+  const playerSrc = useMemo<PlayerSrc | undefined>(() => getPlayerSource(src, sourceType), [sourceType, src])
   const errorLogs = errorState.src === src ? errorState.logs : []
   const loadKey = `${src ?? ''}:${reloadNonce}`
 
@@ -180,6 +184,7 @@ export function BasicPlayer({
       keyDisabled
       load="eager"
       logLevel="warn"
+      loop={loop}
       muted={playbackSettings.muted}
       playbackRate={playbackSettings.playbackRate}
       playsInline
@@ -251,7 +256,15 @@ export function BasicPlayer({
 }
 
 function isHlsSource(src: string | undefined): boolean {
-  return Boolean(src && /\.m3u8(?:$|[?#])/i.test(src))
+  if (!src) {
+    return false
+  }
+
+  if (/\.m3u8(?:$|[?#])/i.test(src)) {
+    return true
+  }
+
+  return false
 }
 
 function readPlaylistFilteringEnabled(): boolean {
@@ -268,12 +281,12 @@ function readStoredPlayerVolume(): number {
   return Number.isFinite(volume) && volume >= 0 && volume <= 1 ? volume : DEFAULT_PLAYER_VOLUME
 }
 
-function getPlayerSource(src: string | undefined): PlayerSrc | undefined {
+function getPlayerSource(src: string | undefined, sourceType: BasicPlayerProps['sourceType']): PlayerSrc | undefined {
   if (!src) {
     return undefined
   }
 
-  if (isHlsSource(src)) {
+  if (sourceType === 'hls' || isHlsSource(src)) {
     return { src, type: HLS_MIME_TYPE }
   }
 

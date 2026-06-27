@@ -1,12 +1,14 @@
 export interface VodSourceImportItem {
   name: string
-  baseUrl: string
+  url: string
+  referer?: string
   enabled?: boolean
 }
 
 export interface VodSourceExportItem {
   name: string
-  baseUrl: string
+  url: string
+  referer?: string
   enabled: boolean
 }
 
@@ -14,14 +16,16 @@ export type VodSourceOrigin = 'manual' | 'subscription'
 
 export interface VodSourceSubscriptionItem {
   name: string
-  baseUrl: string
+  url: string
+  referer?: string
   enabled?: boolean
 }
 
 export interface VodSourceConfig {
   id: string
   name: string
-  baseUrl: string
+  url: string
+  referer?: string
   enabled: boolean
   sort: number
   origin: VodSourceOrigin
@@ -30,7 +34,12 @@ export interface VodSourceConfig {
   updatedAt: number
 }
 
-export type VodSourceInput = Pick<VodSourceImportItem, 'name' | 'baseUrl' | 'enabled'>
+export interface VodSourceInput {
+  name: string
+  url: string
+  referer?: string
+  enabled?: boolean
+}
 
 export interface VodSourceImportPreview {
   validItems: VodSourceImportItem[]
@@ -62,8 +71,16 @@ export interface VodSourceExportResult {
   cancelled: boolean
 }
 
-export interface VodSourceSubscriptionResult {
+export interface SourceSubscriptionResult {
+  vod: SourceSubscriptionSectionResult
+  live: SourceSubscriptionSectionResult
+  updatedAt?: number
+}
+
+export interface SourceSubscriptionSectionResult {
   created: number
   updated: number
   unchanged: number
 }
+
+export type VodSourceSubscriptionResult = SourceSubscriptionSectionResult

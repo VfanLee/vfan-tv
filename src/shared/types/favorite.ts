@@ -2,7 +2,7 @@ export interface FavoriteItem {
   id: string
   sourceId: string
   sourceName: string
-  sourceBaseUrl?: string
+  sourceUrl?: string
   vodId: string
   title: string
   poster?: string

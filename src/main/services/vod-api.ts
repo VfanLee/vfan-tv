@@ -1,7 +1,7 @@
 import type { VodApiItem, VodApiResponse, VodSearchResult, VodSourceConfig } from '@shared/types'
 
-export function buildVodSearchUrl(baseUrl: string, keyword: string): string {
-  const url = new URL(baseUrl)
+export function buildVodSearchUrl(sourceUrl: string, keyword: string): string {
+  const url = new URL(sourceUrl)
   url.searchParams.set('ac', 'detail')
   url.searchParams.set('wd', keyword)
   url.searchParams.set('pagesize', '30')
@@ -66,7 +66,7 @@ function normalizeVodItem(item: VodApiItem, source: VodSourceConfig): VodSearchR
   return {
     sourceId: source.id,
     sourceName: source.name,
-    sourceBaseUrl: source.baseUrl,
+    sourceUrl: source.url,
     vodId: getString(item.vod_id),
     title: getString(item.vod_name),
     subtitle: getOptionalString(item.vod_sub),

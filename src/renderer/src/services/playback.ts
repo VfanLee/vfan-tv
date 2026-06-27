@@ -19,7 +19,7 @@ export function favoriteToVodSearchResult(item: FavoriteItem): VodSearchResult {
   return {
     sourceId: item.sourceId,
     sourceName: item.sourceName,
-    sourceBaseUrl: item.sourceBaseUrl,
+    sourceUrl: item.sourceUrl,
     vodId: item.vodId,
     title: item.title,
     poster: item.poster,

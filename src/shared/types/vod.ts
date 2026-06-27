@@ -1,7 +1,7 @@
 export interface VodSearchResult {
   sourceId: string
   sourceName: string
-  sourceBaseUrl?: string
+  sourceUrl?: string
   vodId: string
   title: string
   subtitle?: string

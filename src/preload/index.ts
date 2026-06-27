@@ -16,6 +16,18 @@ const api: AppApi = {
     exportToFile: () => ipcRenderer.invoke('sources:export-to-file'),
     syncSubscription: (url) => ipcRenderer.invoke('sources:sync-subscription', url),
   },
+  liveSources: {
+    list: () => ipcRenderer.invoke('live-sources:list'),
+    create: (input) => ipcRenderer.invoke('live-sources:create', input),
+    update: (id, input) => ipcRenderer.invoke('live-sources:update', id, input),
+    reorder: (sourceIds) => ipcRenderer.invoke('live-sources:reorder', sourceIds),
+    delete: (id) => ipcRenderer.invoke('live-sources:delete', id),
+    clear: () => ipcRenderer.invoke('live-sources:clear'),
+    previewImport: (payload) => ipcRenderer.invoke('live-sources:preview-import', payload),
+    confirmImport: (payload) => ipcRenderer.invoke('live-sources:confirm-import', payload),
+    importFromFile: () => ipcRenderer.invoke('live-sources:import-from-file'),
+    exportToFile: () => ipcRenderer.invoke('live-sources:export-to-file'),
+  },
   home: {
     get: () => ipcRenderer.invoke('home:get'),
     getHot: (input) => ipcRenderer.invoke('home:get-hot', input),
@@ -41,9 +53,18 @@ const api: AppApi = {
       return () => ipcRenderer.removeListener('vod:search-event', handler)
     },
   },
+  live: {
+    loadPlaylist: (url) => ipcRenderer.invoke('live:load-playlist', url),
+  },
+  media: {
+    getProxyBaseUrl: () => ipcRenderer.invoke('media:get-proxy-base-url'),
+  },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     update: (input) => ipcRenderer.invoke('settings:update', input),
+    initializeAppData: () => ipcRenderer.invoke('settings:initialize-app-data'),
+    exportAppData: (clientData) => ipcRenderer.invoke('settings:export-app-data', clientData),
+    importAppData: () => ipcRenderer.invoke('settings:import-app-data'),
   },
   updates: {
     getCurrentVersion: () => ipcRenderer.invoke('updates:get-current-version'),

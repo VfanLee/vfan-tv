@@ -47,6 +47,76 @@
 | 数据存储    | [SQLite](https://www.sqlite.org/)、[Drizzle ORM](https://orm.drizzle.team/)                                     |
 | 代码质量    | [ESLint](https://eslint.org/)、[Prettier](https://prettier.io/)                                                 |
 
+## ⚒️ 重要配置说明
+
+### 订阅源格式
+
+订阅源地址返回内容是 **Base58 编码后的 JSON 字符串**。
+
+解码后必须是配置对象：
+
+```jsonc
+{
+  // 上次更新时间
+  "updatedAt": 1782518400000,
+  // VOD 数据源
+  "vod": [
+    {
+      "name": "示例影视源",
+      "url": "https://example.com/api.php/provide/vod",
+      "referer": "https://example.com",
+      "enabled": true,
+    },
+  ],
+  // 直播源
+  "live": [
+    {
+      "name": "示例直播源",
+      "url": "https://example.com/live.m3u",
+      "enabled": true,
+    },
+  ],
+}
+```
+
+### 数据源格式
+
+- `name`: 数据源名称
+- `url`: 数据源 URL
+- `referer`: 数据源 Referer。可选，默认为空
+- `enabled`: 是否启用。可选，默认为 `false`
+
+示例：
+
+```json
+[
+  {
+    "name": "示例源",
+    "url": "https://example.com/api.php/provide/vod",
+    "referer": "https://example.com",
+    "enabled": true
+  }
+]
+```
+
+### 直播源格式
+
+- `name`: 直播源名称
+- `url`: 直播源 URL
+- `enabled`: 是否启用。可选，默认为 `true`
+
+示例：
+
+```json
+[
+  {
+    "name": "示例源",
+    "url": "https://example.com/live.m3u",
+    "enabled": true
+  }
+]
+```
+
 ## ⚠️ 重要声明
 
 - 本项目**仅供学习和个人使用**

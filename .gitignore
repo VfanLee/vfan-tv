@@ -1,11 +1,39 @@
-node_modules
-dist
-out
-.DS_Store
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build outputs
+dist/
+out/
+release/
+
+# Caches
 .eslintcache
-*.log*
+*.tsbuildinfo
 
-tsconfig.web.tsbuildinfo
-tsconfig.node.tsbuildinfo
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
 
+# Local environment
+.env
+.env.*
+!.env.example
+
+# Local databases
+*.db
+*.db-*
+*.sqlite
+*.sqlite-*
+
+# Local agent instructions
 AGENTS.md
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+.idea/

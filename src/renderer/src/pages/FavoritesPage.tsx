@@ -114,7 +114,7 @@ function FavoriteCard({
         onClick={onClick}
       >
         <MediaPoster
-          baseUrl={item.sourceBaseUrl}
+          baseUrl={item.sourceUrl}
           className="aspect-[2/3]"
           poster={item.poster}
           title={item.title}

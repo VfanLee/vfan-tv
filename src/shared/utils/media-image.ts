@@ -1,5 +1,10 @@
-const MEDIA_PROXY_SCHEME = 'vfan-media'
 const DOUBAN_IMAGE_REFERER = 'https://movie.douban.com/explore'
+
+let mediaProxyBaseUrl = ''
+
+export function setMediaProxyBaseUrl(baseUrl: string): void {
+  mediaProxyBaseUrl = baseUrl
+}
 
 export interface ImageProxyOptions {
   baseUrl?: string
@@ -23,7 +28,11 @@ export function resolveImageUrl(url: string, options: ImageProxyOptions = {}): s
     return url
   }
 
-  const proxyUrl = new URL(`${MEDIA_PROXY_SCHEME}://proxy/resource`)
+  if (!mediaProxyBaseUrl) {
+    return targetUrl.toString()
+  }
+
+  const proxyUrl = new URL('/image', mediaProxyBaseUrl)
   proxyUrl.searchParams.set('url', targetUrl.toString())
   proxyUrl.searchParams.set(
     'referer',

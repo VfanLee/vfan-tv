@@ -1,14 +1,24 @@
 import type {
+  SourceSubscriptionResult,
   VodSourceConfig,
   VodSourceExportResult,
   VodSourceFileResult,
   VodSourceImportPreview,
   VodSourceImportResult,
   VodSourceInput,
-  VodSourceSubscriptionResult,
 } from './source'
+import type { AppDataClientPayload, AppDataExportResult, AppDataImportResult } from './app-data'
 import type { AppSettings } from './settings'
 import type { FavoriteInput, FavoriteItem } from './favorite'
+import type {
+  LivePlaylist,
+  LiveSourceConfig,
+  LiveSourceExportResult,
+  LiveSourceFileResult,
+  LiveSourceImportPreview,
+  LiveSourceImportResult,
+  LiveSourceInput,
+} from './live'
 import type { RecentPlayInput, RecentPlayItem } from './recent'
 import type { SearchEvent } from './search'
 import type { MediaProbeInput, MediaProbeResult, RecommendationItem } from './vod'
@@ -63,7 +73,19 @@ export interface AppApi {
     confirmImport: (payload: unknown) => Promise<VodSourceImportResult>
     importFromFile: () => Promise<VodSourceFileResult>
     exportToFile: () => Promise<VodSourceExportResult>
-    syncSubscription: (url: string) => Promise<VodSourceSubscriptionResult>
+    syncSubscription: (url: string) => Promise<SourceSubscriptionResult>
+  }
+  liveSources: {
+    list: () => Promise<LiveSourceConfig[]>
+    create: (input: LiveSourceInput) => Promise<LiveSourceConfig>
+    update: (id: string, input: LiveSourceInput) => Promise<LiveSourceConfig>
+    reorder: (sourceIds: string[]) => Promise<LiveSourceConfig[]>
+    delete: (id: string) => Promise<void>
+    clear: () => Promise<void>
+    previewImport: (payload: unknown) => Promise<LiveSourceImportPreview>
+    confirmImport: (payload: unknown) => Promise<LiveSourceImportResult>
+    importFromFile: () => Promise<LiveSourceFileResult>
+    exportToFile: () => Promise<LiveSourceExportResult>
   }
   home: {
     get: () => Promise<HomeData>
@@ -86,9 +108,18 @@ export interface AppApi {
     probeMedia: (input: MediaProbeInput) => Promise<MediaProbeResult>
     onSearchEvent: (listener: (event: SearchEvent) => void) => () => void
   }
+  live: {
+    loadPlaylist: (url: string) => Promise<LivePlaylist>
+  }
+  media: {
+    getProxyBaseUrl: () => Promise<string>
+  }
   settings: {
     get: () => Promise<AppSettings>
     update: (input: Partial<AppSettings>) => Promise<AppSettings>
+    initializeAppData: () => Promise<AppSettings>
+    exportAppData: (clientData: AppDataClientPayload) => Promise<AppDataExportResult>
+    importAppData: () => Promise<AppDataImportResult>
   }
   updates: {
     getCurrentVersion: () => Promise<string>

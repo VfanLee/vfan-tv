@@ -89,7 +89,8 @@ export class VodSearchService {
     })
 
     try {
-      const response = await this.httpClient.get(buildVodSearchUrl(source.baseUrl, keyword), {
+      const response = await this.httpClient.get(buildVodSearchUrl(source.url, keyword), {
+        headers: source.referer ? { Referer: source.referer } : undefined,
         signal,
         timeout: SOURCE_TIMEOUT_MS,
       })

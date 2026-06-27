@@ -20,7 +20,7 @@ interface GroupedSearchResult {
   key: string
   title: string
   poster?: string
-  posterBaseUrl?: string
+  posterSourceUrl?: string
   meta: string
   remarks?: string
   items: VodSearchResult[]
@@ -349,7 +349,7 @@ function GroupedResults({
           onClick={() => onOpen(group)}
         >
           <MediaPoster
-            baseUrl={group.posterBaseUrl}
+            baseUrl={group.posterSourceUrl}
             className="aspect-[2/3] rounded-xl"
             poster={group.poster}
             title={group.title}
@@ -431,7 +431,7 @@ function SourceResultButton({ item, onClick }: { item: VodSearchResult; onClick:
       onClick={onClick}
     >
       <MediaPoster
-        baseUrl={item.sourceBaseUrl}
+        baseUrl={item.sourceUrl}
         className="aspect-[2/3] rounded-xl"
         poster={item.poster}
         title={item.title}
@@ -508,7 +508,7 @@ function groupSearchResults(items: VodSearchResult[]): GroupedSearchResult[] {
       current.sourceNames = Array.from(new Set([...current.sourceNames, item.sourceName]))
       if (!current.poster && item.poster) {
         current.poster = item.poster
-        current.posterBaseUrl = item.sourceBaseUrl
+        current.posterSourceUrl = item.sourceUrl
       }
       current.remarks ||= item.remarks
       continue
@@ -518,7 +518,7 @@ function groupSearchResults(items: VodSearchResult[]): GroupedSearchResult[] {
       key,
       title: item.title,
       poster: item.poster,
-      posterBaseUrl: item.sourceBaseUrl,
+      posterSourceUrl: item.sourceUrl,
       meta: formatMeta(item),
       remarks: item.remarks,
       items: [item],

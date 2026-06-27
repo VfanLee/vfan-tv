@@ -8,6 +8,7 @@ type VodSourceRow = typeof vodSourcesTable.$inferSelect
 function toVodSourceConfig(row: VodSourceRow): VodSourceConfig {
   return {
     ...row,
+    referer: row.referer ?? undefined,
     remark: row.remark ?? undefined,
   }
 }
@@ -19,8 +20,8 @@ export class VodSourceRepository {
     return this.db.select().from(vodSourcesTable).orderBy(asc(vodSourcesTable.sort)).all().map(toVodSourceConfig)
   }
 
-  findByBaseUrl(baseUrl: string): VodSourceConfig | undefined {
-    const row = this.db.select().from(vodSourcesTable).where(eq(vodSourcesTable.baseUrl, baseUrl)).get()
+  findByUrl(url: string): VodSourceConfig | undefined {
+    const row = this.db.select().from(vodSourcesTable).where(eq(vodSourcesTable.url, url)).get()
     return row ? toVodSourceConfig(row) : undefined
   }
 
@@ -34,9 +35,10 @@ export class VodSourceRepository {
       .insert(vodSourcesTable)
       .values(source)
       .onConflictDoUpdate({
-        target: vodSourcesTable.baseUrl,
+        target: vodSourcesTable.url,
         set: {
           name: source.name,
+          referer: source.referer,
           enabled: source.enabled,
           sort: source.sort,
           origin: source.origin,
@@ -46,7 +48,7 @@ export class VodSourceRepository {
       })
       .run()
 
-    return this.findByBaseUrl(source.baseUrl) ?? source
+    return this.findByUrl(source.url) ?? source
   }
 
   update(source: VodSourceConfig): VodSourceConfig {
@@ -54,7 +56,8 @@ export class VodSourceRepository {
       .update(vodSourcesTable)
       .set({
         name: source.name,
-        baseUrl: source.baseUrl,
+        url: source.url,
+        referer: source.referer,
         enabled: source.enabled,
         remark: source.remark,
         updatedAt: source.updatedAt,
@@ -70,6 +73,8 @@ export class VodSourceRepository {
       .update(vodSourcesTable)
       .set({
         name: source.name,
+        referer: source.referer,
+        enabled: source.enabled,
         origin: 'subscription',
         updatedAt: source.updatedAt,
       })

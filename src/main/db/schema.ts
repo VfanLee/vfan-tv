@@ -11,7 +11,8 @@ export const vodSourcesTable = sqliteTable(
   {
     id: text('id').primaryKey(),
     name: text('name').notNull(),
-    baseUrl: text('base_url').notNull(),
+    url: text('url').notNull(),
+    referer: text('referer'),
     enabled: integer('enabled', { mode: 'boolean' }).notNull(),
     sort: integer('sort').notNull(),
     origin: text('origin', { enum: ['manual', 'subscription'] })
@@ -21,7 +22,24 @@ export const vodSourcesTable = sqliteTable(
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },
-  (table) => [uniqueIndex('vod_sources_base_url_unique').on(table.baseUrl)],
+  (table) => [uniqueIndex('vod_sources_url_unique').on(table.url)],
+)
+
+export const liveSourcesTable = sqliteTable(
+  'live_sources',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    url: text('url').notNull(),
+    enabled: integer('enabled', { mode: 'boolean' }).notNull(),
+    sort: integer('sort').notNull(),
+    origin: text('origin', { enum: ['manual', 'subscription'] })
+      .notNull()
+      .default('manual'),
+    createdAt: integer('created_at').notNull(),
+    updatedAt: integer('updated_at').notNull(),
+  },
+  (table) => [uniqueIndex('live_sources_url_unique').on(table.url)],
 )
 
 export const recentPlaysTable = sqliteTable(
@@ -52,7 +70,7 @@ export const favoritesTable = sqliteTable(
     id: text('id').primaryKey(),
     sourceId: text('source_id').notNull(),
     sourceName: text('source_name').notNull(),
-    sourceBaseUrl: text('source_base_url'),
+    sourceUrl: text('source_url'),
     vodId: text('vod_id').notNull(),
     title: text('title').notNull(),
     poster: text('poster'),

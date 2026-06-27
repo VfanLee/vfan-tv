@@ -1,11 +1,11 @@
 import type {
+  SourceSubscriptionResult,
   VodSourceConfig,
   VodSourceExportResult,
   VodSourceFileResult,
   VodSourceImportPreview,
   VodSourceImportResult,
   VodSourceInput,
-  VodSourceSubscriptionResult,
 } from '@shared/types'
 import { getRuntimeApi, requireRuntimeApi } from './client'
 
@@ -50,6 +50,6 @@ export async function exportSourcesToFile(): Promise<VodSourceExportResult> {
   return requireRuntimeApi().sources.exportToFile()
 }
 
-export async function syncSourceSubscription(url: string): Promise<VodSourceSubscriptionResult> {
+export async function syncSourceSubscription(url: string): Promise<SourceSubscriptionResult> {
   return requireRuntimeApi().sources.syncSubscription(url)
 }
