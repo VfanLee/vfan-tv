@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router'
 import { AlertCircle, CheckCircle2, ChevronRight, Clock3, Loader2, MinusCircle, Play, Search, X } from 'lucide-react'
+import { SEARCH_HISTORY_STORAGE_KEY, SEARCH_VIEW_MODE_STORAGE_KEY } from '@shared/constants'
 import type { SearchEvent, SearchSourceStatus, VodSearchResult } from '@shared/types'
 import { MediaPoster } from '@renderer/components'
 import { cn } from '@renderer/lib/utils'
 import { cancelVodSearch, isApiAvailable, listSources, onVodSearchEvent, searchVod } from '@renderer/services/api'
 import { useSearchContextStore } from '@renderer/stores/search-context'
-import { SEARCH_HISTORY_STORAGE_KEY, SEARCH_VIEW_MODE_STORAGE_KEY } from '@shared/constants/storage-keys'
 
 interface SourceSearchState {
   sourceId: string

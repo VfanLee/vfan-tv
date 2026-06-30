@@ -63,6 +63,8 @@ export interface LiveChannelStream {
   id: string
   name: string
   url: string
+  /** M3U #EXTINF 时长为负数时视为真直播，否则按点播处理 */
+  isLive: boolean
 }
 
 export interface LiveChannel {

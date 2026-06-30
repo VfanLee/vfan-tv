@@ -1,44 +1,50 @@
 {
-  "name": "vfantv",
+  "name": "vfan-tv",
   "version": "0.3.3",
-  "productName": "VfanTV",
-  "description": "A free, source-available, non-commercial local media player with configurable content sources.",
-  "main": "./out/main/index.js",
-  "author": "VfanLee",
-  "license": "SEE LICENSE IN LICENSE",
+  "description": "一款免费开源、开箱即用、跨平台的桌面端影视聚合播放器。",
   "homepage": "https://github.com/vfanlee/VfanTV#readme",
+  "bugs": {
+    "url": "https://github.com/vfanlee/VfanTV/issues"
+  },
   "repository": {
     "type": "git",
     "url": "git+https://github.com/vfanlee/VfanTV.git"
   },
-  "bugs": {
-    "url": "https://github.com/vfanlee/VfanTV/issues"
-  },
+  "license": "GPL-3.0",
+  "author": "VfanLee",
+  "main": "./out/main/index.js",
   "scripts": {
-    "prepare": "husky",
-    "postinstall": "electron-builder install-app-deps",
-    "dev": "electron-vite dev",
-    "start": "electron-vite preview",
-    "build:app": "pnpm run typecheck && electron-vite build",
     "build": "pnpm run build:app && electron-builder",
+    "build:app": "pnpm run typecheck && electron-vite build",
     "build:dir": "pnpm run build:app && electron-builder --dir",
     "build:mac": "pnpm run build:app && electron-builder --mac",
     "build:win": "pnpm run build:app && electron-builder --win",
+    "db:generate": "drizzle-kit generate",
+    "dev": "electron-vite dev",
+    "format": "prettier --write .",
+    "icons:generate": "node scripts/generate-app-icons.cjs",
+    "postinstall": "electron-builder install-app-deps",
+    "lint": "eslint --cache .",
+    "logo:png": "node scripts/logo-to-png.cjs",
+    "prepare": "husky",
     "release": "pnpm run build:app && electron-builder --publish onTagOrDraft",
+    "start": "electron-vite preview",
     "typecheck": "pnpm run typecheck:node && pnpm run typecheck:web",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
-    "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
-    "lint": "eslint --cache .",
-    "format": "prettier --write .",
-    "db:generate": "drizzle-kit generate",
-    "logo:png": "node scripts/logo-to-png.cjs",
-    "icons:generate": "node scripts/generate-app-icons.cjs"
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false"
+  },
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,mjs,cjs,json,css,md,html}": "prettier --write"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@fontsource-variable/noto-sans": "^5.2.10",
     "@xmldom/xmldom": "^0.8.13",
+    "artplayer": "5.4.0",
+    "artplayer-plugin-ambilight": "1.1.0",
+    "artplayer-plugin-audio-track": "1.1.0",
+    "artplayer-plugin-hls-control": "1.1.0",
     "axios": "^1.17.0",
     "better-sqlite3": "^12.10.0",
     "class-variance-authority": "^0.7.1",
@@ -58,7 +64,6 @@
     "@types/node": "^22.19.1",
     "@types/react": "^19.2.7",
     "@types/react-dom": "^19.2.3",
-    "@vidstack/react": "1.15.6",
     "@vitejs/plugin-react": "^5.1.1",
     "clsx": "^2.1.1",
     "drizzle-kit": "^0.31.10",
@@ -74,6 +79,7 @@
     "lint-staged": "^17.0.7",
     "lucide-react": "^1.18.0",
     "prettier": "^3.7.4",
+    "prettier-plugin-packagejson": "^3.0.2",
     "prettier-plugin-tailwindcss": "^0.8.0",
     "react": "^19.2.1",
     "react-dom": "^19.2.1",
@@ -89,14 +95,9 @@
     "vite": "^7.2.6",
     "zustand": "^5.0.14"
   },
-  "lint-staged": {
-    "*.{js,jsx,ts,tsx,mjs,cjs,json,css,md,html}": "prettier --write"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "better-sqlite3",
-      "electron",
-      "esbuild"
-    ]
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=22 <23",
+    "pnpm": "11.7.0"
   }
 }

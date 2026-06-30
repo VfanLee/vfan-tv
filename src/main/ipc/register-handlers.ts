@@ -7,7 +7,7 @@ import {
   DEFAULT_APP_DATA_EXPORT_NAME,
   DEFAULT_LIVE_SOURCES_EXPORT_NAME,
   DEFAULT_SOURCES_EXPORT_NAME,
-} from '@shared/constants/app-brand'
+} from '@shared/constants'
 import packageJson from '../../../package.json'
 import { createDatabase, resetAppDatabase } from '../db/client'
 import { FavoriteRepository } from '../repositories/favorite.repository'

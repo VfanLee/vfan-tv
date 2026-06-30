@@ -76,7 +76,7 @@ export class MediaProxyServer {
         response,
         parsedTargetUrl.toString(),
         this.baseUrl ?? '',
-        requestUrl.searchParams.get('referer') ?? undefined,
+        requestUrl.searchParams.get('referer') ?? `${parsedTargetUrl.origin}/`,
       )
     } catch (error) {
       console.error('Live media proxy failed:', targetUrl, error)

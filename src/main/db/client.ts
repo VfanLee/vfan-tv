@@ -4,7 +4,7 @@ import { drizzle } from 'drizzle-orm/better-sqlite3'
 import { mkdirSync } from 'fs'
 import { join } from 'path'
 import * as schema from './schema'
-import { DB_FILE_NAME } from '@shared/constants/app-brand'
+import { DB_FILE_NAME } from '@shared/constants'
 
 export type AppDatabase = ReturnType<typeof drizzle<typeof schema>>
 

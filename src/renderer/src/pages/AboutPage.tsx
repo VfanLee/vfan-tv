@@ -3,6 +3,7 @@ import { CircleUserRound, Lightbulb, MessageCircle, SquareArrowOutUpRight } from
 import type { LucideIcon } from 'lucide-react'
 import { FaGithub } from 'react-icons/fa'
 import { toast } from 'sonner'
+import { RELEASE_ROUTE_PREFIXES, UPDATE_CHECK_CACHE_KEY, applyReleaseRoutePrefix } from '@shared/constants'
 import type { UpdateCheckResult } from '@shared/types'
 import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
@@ -17,7 +18,6 @@ import {
 } from '@renderer/components/ui/select'
 import logoMarkUrl from '@renderer/assets/logo-mark.svg'
 import { checkForUpdates, getCurrentVersion, isApiAvailable } from '@renderer/services/api'
-import { RELEASE_ROUTE_PREFIXES, applyReleaseRoutePrefix } from '@shared/constants/release-routes'
 import { openExternalUrl } from '@renderer/lib/open-external'
 import { cn } from '@renderer/lib/utils'
 
@@ -25,7 +25,6 @@ const REPOSITORY_URL = 'https://github.com/vfanlee/VfanTV'
 const AUTHOR_URL = 'https://github.com/vfanlee'
 const FEEDBACK_URL = `${REPOSITORY_URL}/issues/new`
 const DOWNLOAD_SPEED_TEST_TIMEOUT_MS = 6000
-const UPDATE_CHECK_CACHE_KEY = 'vfantv-update-check-cache'
 const UPDATE_CHECK_CACHE_TTL_MS = 30 * 60 * 1000
 
 interface DownloadRouteSpeed {
@@ -246,23 +245,27 @@ function DownloadOptions({ fileName, url }: { fileName?: string; url: string }):
   useEffect(() => {
     let active = true
 
-    setIsTestingSpeed(true)
-    setSpeedResults(Object.fromEntries(downloadRoutePrefixes.map((route) => [route.label, { status: 'testing' }])))
-    void Promise.all(
-      downloadRoutePrefixes.map(async (route) => {
-        const result = await testDownloadRoute(applyReleaseRoutePrefix(url, route.prefix))
-        return [route.label, result] as const
-      }),
-    ).then((results) => {
+    queueMicrotask(() => {
       if (!active) return
 
-      const nextResults = Object.fromEntries(results)
-      const fastest = getFastestRoute(nextResults)
-      setSpeedResults(nextResults)
-      if (fastest) {
-        setSelectedRouteLabel(fastest.label)
-      }
-      setIsTestingSpeed(false)
+      setIsTestingSpeed(true)
+      setSpeedResults(Object.fromEntries(downloadRoutePrefixes.map((route) => [route.label, { status: 'testing' }])))
+      void Promise.all(
+        downloadRoutePrefixes.map(async (route) => {
+          const result = await testDownloadRoute(applyReleaseRoutePrefix(url, route.prefix))
+          return [route.label, result] as const
+        }),
+      ).then((results) => {
+        if (!active) return
+
+        const nextResults = Object.fromEntries(results)
+        const fastest = getFastestRoute(nextResults)
+        setSpeedResults(nextResults)
+        if (fastest) {
+          setSelectedRouteLabel(fastest.label)
+        }
+        setIsTestingSpeed(false)
+      })
     })
 
     return () => {

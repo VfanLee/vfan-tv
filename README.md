@@ -20,20 +20,20 @@
 ## ✨ 功能特性
 
 - 🖥️ **跨平台桌面客户端**：支持 Windows / macOS 平台
-- 🔍 **多源聚合搜索**：一次搜索，聚合多个数据源结果
-- ▶️ **流畅在线播放**：集成 HLS.js，支持剧集选集播放
-- ⚙️ **数据源管理**：支持数据源导入 / 导出与批量管理
-- 🌗 **暗黑主题**：支持暗黑主题
-- ...
+- 🔍 **多源聚合搜索**：一次搜索聚合多个 VOD 数据源，支持按影片聚合或按数据源查看结果
+- ▶️ **支持点播**：支持剧集选集、换源、播放进度记录、历史续播、收藏和自动续播
+- 📺 **支持直播**：支持 M3U 直播源、频道分组、频道搜索、多线路切换和上次选择记忆
+- ⚙️ **数据管理**：支持 VOD 数据源、直播源的导入 / 导出 / 订阅同步，以及应用数据备份、导入和初始化
+- 🌗 **主题切换**：支持浅色、深色和跟随系统主题
 
 ## 📥 下载
 
 前往 [**Releases**](https://github.com/vfanlee/VfanTV/releases/latest) 下载对应平台的安装包：
 
-| 平台       | 架构        | 说明                    |
-| ---------- | ----------- | ----------------------- |
-| 🪟 Windows | x64 / arm64 | 安装包（setup）或便携版 |
-| 🍎 macOS   | arm64       | `.dmg` 安装包           |
+| 平台       | 架构        | 说明           |
+| ---------- | ----------- | -------------- |
+| 🪟 Windows | x64 / arm64 | 安装包、便携版 |
+| 🍎 macOS   | arm64       | `.dmg` 安装包  |
 
 ## 🧰 技术栈
 
@@ -43,7 +43,7 @@
 | 桌面框架    | [Electron](https://www.electronjs.org/)、[electron-vite](https://github.com/alex8088/electron-vite)             |
 | 前端框架    | [React](https://react.dev/)、[React Router](https://reactrouter.com/)、[Zustand](https://zustand.docs.pmnd.rs/) |
 | UI 框架组件 | [Tailwind CSS](https://tailwindcss.com/)、[shadcn/ui](https://ui.shadcn.com/)                                   |
-| 播放器      | [HLS.js](https://github.com/video-dev/hls.js/)                                                                  |
+| 播放器      | [ArtPlayer](https://artplayer.org/)、[HLS.js](https://github.com/video-dev/hls.js/)                             |
 | 数据存储    | [SQLite](https://www.sqlite.org/)、[Drizzle ORM](https://orm.drizzle.team/)                                     |
 | 代码质量    | [ESLint](https://eslint.org/)、[Prettier](https://prettier.io/)                                                 |
 

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { THEME_STORAGE_KEY } from '@shared/constants/storage-keys'
+import { THEME_STORAGE_KEY } from '@shared/constants'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 

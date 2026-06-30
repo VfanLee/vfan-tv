@@ -18,19 +18,19 @@ const router = createHashRouter([
     element: <AppLayout />,
     children: [
       { index: true, element: <HomePage />, handle: { showGlobalSearch: true } },
-      { path: 'recent', element: <RecentPage />, handle: { hideTopBar: true } },
-      { path: 'favorites', element: <FavoritesPage />, handle: { hideTopBar: true } },
-      { path: 'live', element: <LivePage />, handle: { hideTopBar: true } },
       { path: 'hot', element: <Navigate replace to="/hot/movie" /> },
       { path: 'hot/:category', element: <HotPage />, handle: { showGlobalSearch: true } },
-      { path: 'search', element: <SearchPage />, handle: { showGlobalSearch: true } },
+
+      { path: 'recent', element: <RecentPage />, handle: { hideTopBar: true } },
+      { path: 'favorites', element: <FavoritesPage />, handle: { hideTopBar: true } },
+
       { path: 'settings', element: <SettingsPage />, handle: { hideTopBar: true } },
       { path: 'about', element: <AboutPage />, handle: { hideTopBar: true } },
+
+      { path: 'search', element: <SearchPage />, handle: { showGlobalSearch: true } },
+      { path: 'live', element: <LivePage />, handle: { hideTopBar: true } },
+      { path: 'player/:sourceId/:vodId', element: <PlayerPage />, handle: { hideTopBar: true } },
     ],
-  },
-  {
-    path: '/player/:sourceId/:vodId',
-    element: <PlayerPage />,
   },
 ])
 

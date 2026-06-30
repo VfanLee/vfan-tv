@@ -4,12 +4,71 @@ import type { LoaderCallbacks, LoaderConfiguration, LoaderContext, LoaderRespons
 type PlaylistLoaderContext = LoaderContext & { type?: string }
 
 export function filterM3U8(content: string): string {
-  if (!content) return ''
+  if (!content) {
+    return ''
+  }
 
-  return content
-    .split(/\r?\n/)
-    .filter((line) => !line.trim().startsWith('#EXT-X-DISCONTINUITY'))
-    .join('\n')
+  return filterDiscontinuityAds(filterCueAdBlocks(content))
+}
+
+function filterCueAdBlocks(content: string): string {
+  const lines = content.split(/\r?\n/)
+  const filteredLines: string[] = []
+  let isSkippingAdBreak = false
+
+  for (const line of lines) {
+    const trimmedLine = line.trim()
+
+    if (isAdBreakStart(trimmedLine)) {
+      isSkippingAdBreak = true
+      continue
+    }
+
+    if (isAdBreakEnd(trimmedLine)) {
+      isSkippingAdBreak = false
+      continue
+    }
+
+    if (!isSkippingAdBreak) {
+      filteredLines.push(line)
+    }
+  }
+
+  return filteredLines.join('\n')
+}
+
+function filterDiscontinuityAds(content: string): string {
+  const lines = content.split(/\r?\n/)
+  const filteredLines: string[] = []
+
+  for (const line of lines) {
+    const trimmedLine = line.trim()
+
+    if (!trimmedLine.includes('#EXT-X-DISCONTINUITY')) {
+      filteredLines.push(line)
+      continue
+    }
+
+    // 常见点播广告：广告分片在 discontinuity 之前（EXTINF + ts）
+    if (filteredLines.length >= 2) {
+      const uriLine = filteredLines[filteredLines.length - 1]?.trim() ?? ''
+      const extinfLine = filteredLines[filteredLines.length - 2]?.trim() ?? ''
+      if (extinfLine.startsWith('#EXTINF') && uriLine && !uriLine.startsWith('#')) {
+        filteredLines.pop()
+        filteredLines.pop()
+      }
+    }
+  }
+
+  return filteredLines.join('\n')
+}
+
+function isAdBreakStart(line: string): boolean {
+  return /^#EXT-X-CUE-OUT(?::|$)/.test(line)
+}
+
+function isAdBreakEnd(line: string): boolean {
+  return line.startsWith('#EXT-X-CUE-IN')
 }
 
 export function createFilteredHlsLoader(HlsConstructor: typeof Hls): typeof Hls.DefaultConfig.loader {

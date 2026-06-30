@@ -10,6 +10,7 @@ interface ParsedExtInf {
   logo?: string
   tvgName?: string
   epgUrl?: string
+  isLive: boolean
 }
 
 export class LivePlaylistService {
@@ -83,6 +84,7 @@ function parseExtInf(line: string): ParsedExtInf {
   const attributes = parseAttributes(metadata)
   const tvgName = attributes['tvg-name']?.trim()
   const title = displayName || tvgName || '未命名频道'
+  const duration = parseExtInfDuration(metadata)
 
   return {
     title,
@@ -90,7 +92,18 @@ function parseExtInf(line: string): ParsedExtInf {
     logo: attributes['tvg-logo']?.trim() || undefined,
     tvgName: tvgName || undefined,
     epgUrl: attributes['epg-url']?.trim() || undefined,
+    isLive: duration !== undefined && duration < 0,
   }
+}
+
+function parseExtInfDuration(metadata: string): number | undefined {
+  const match = /^#EXTINF:([-+]?\d+(?:\.\d+)?)/i.exec(metadata)
+  if (!match) {
+    return undefined
+  }
+
+  const duration = Number.parseFloat(match[1])
+  return Number.isFinite(duration) ? duration : undefined
 }
 
 function parseAttributes(input: string): Record<string, string> {
@@ -111,6 +124,7 @@ function addStream(channelMap: Map<string, LiveChannel>, info: ParsedExtInf, url
     id: createStableId(`${info.group}:${info.title}:${url}`),
     name: `线路 ${((channelMap.get(channelId)?.streams.length ?? 0) + 1).toString()}`,
     url,
+    isLive: info.isLive,
   }
   const current = channelMap.get(channelId)
 

@@ -7,7 +7,7 @@ import packageJson from '../../package.json'
 import { registerIpcHandlers, setMainWindow } from './ipc/register-handlers'
 import { isAllowedExternalUrl, openExternalUrl } from './services/external-link'
 import { checkLatestRelease } from './services/update-checker'
-import { APP_DISPLAY_NAME, APP_ID, USER_DATA_DIR_NAME } from '@shared/constants/app-brand'
+import { APP_DISPLAY_NAME, APP_ID, USER_DATA_DIR_NAME } from '@shared/constants'
 
 const APP_VERSION = packageJson.version
 let aboutWindow: BrowserWindow | null = null
@@ -268,6 +268,10 @@ function createWindow(): void {
   })
 
   mainWindow.webContents.on('will-navigate', (event, url) => {
+    if (isSameAppOrigin(mainWindow, url)) {
+      return
+    }
+
     if (isAllowedExternalUrl(url)) {
       event.preventDefault()
       void openExternalUrl(url).catch((error: unknown) => {
@@ -282,6 +286,19 @@ function createWindow(): void {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
     mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+  }
+}
+
+function isSameAppOrigin(window: BrowserWindow, url: string): boolean {
+  try {
+    const currentUrl = window.webContents.getURL()
+    if (!currentUrl) {
+      return false
+    }
+
+    return new URL(url).origin === new URL(currentUrl).origin
+  } catch {
+    return false
   }
 }
 

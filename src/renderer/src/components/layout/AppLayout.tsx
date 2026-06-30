@@ -2,6 +2,7 @@ import { useLayoutEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useMatches, useNavigate, useSearchParams } from 'react-router'
 import { ChevronsLeft, ChevronsRight, Clock3, Heart, Home, Info, Search, Settings, Tv } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { SIDEBAR_COLLAPSED_STORAGE_KEY } from '@shared/constants'
 import { cn } from '@renderer/lib/utils'
 import { categoryIcons } from '@renderer/lib/category-icons'
 import logoMarkUrl from '@renderer/assets/logo-mark.svg'
@@ -32,8 +33,14 @@ export function AppLayout(): React.JSX.Element {
   const matches = useMatches()
   const location = useLocation()
   const mainRef = useRef<HTMLElement>(null)
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
-  const toggleSidebar = (): void => setIsSidebarCollapsed((current) => !current)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => readSidebarCollapsed())
+  const toggleSidebar = (): void => {
+    setIsSidebarCollapsed((current) => {
+      const next = !current
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(next))
+      return next
+    })
+  }
   const showGlobalSearch = matches.some((match) => {
     const handle = match.handle as LayoutRouteHandle | undefined
     return handle?.showGlobalSearch === true
@@ -140,7 +147,7 @@ function LayoutSearchForm(): React.JSX.Element {
         onChange={(event) => setKeyword(event.target.value)}
       />
       <button
-        className="bg-muted text-muted-foreground hover:text-foreground focus-visible:ring-ring rounded-xl px-3 py-1.5 text-xs font-semibold outline-none focus-visible:ring-2"
+        className="bg-muted text-muted-foreground hover:text-foreground focus-visible:ring-ring rounded-xl px-5 py-2.5 text-sm font-semibold outline-none focus-visible:ring-2"
         type="submit"
       >
         搜索
@@ -203,4 +210,8 @@ function openSearch(keyword: string, navigate: ReturnType<typeof useNavigate>): 
   } else {
     navigate('/search')
   }
+}
+
+function readSidebarCollapsed(): boolean {
+  return window.localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === 'true'
 }

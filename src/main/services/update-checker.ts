@@ -1,5 +1,5 @@
 import { DOMParser } from '@xmldom/xmldom'
-import { applyReleaseRoutePrefix, RELEASE_ROUTE_PREFIXES } from '@shared/constants/release-routes'
+import { applyReleaseRoutePrefix, RELEASE_ROUTE_PREFIXES } from '@shared/constants'
 import type { UpdateCheckResult } from '@shared/types'
 
 const REPOSITORY_URL = 'https://github.com/VfanLee/VfanTV'
