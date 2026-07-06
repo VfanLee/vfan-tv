@@ -1,6 +1,6 @@
 {
   "name": "vfan-tv",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "一款免费开源、开箱即用、跨平台的桌面端影视聚合播放器。",
   "homepage": "https://github.com/vfanlee/VfanTV#readme",
   "bugs": {
@@ -22,10 +22,8 @@
     "db:generate": "drizzle-kit generate",
     "dev": "electron-vite dev",
     "format": "prettier --write .",
-    "icons:generate": "node scripts/generate-app-icons.cjs",
     "postinstall": "electron-builder install-app-deps",
     "lint": "eslint --cache .",
-    "logo:png": "node scripts/logo-to-png.cjs",
     "prepare": "husky",
     "release": "pnpm run build:app && electron-builder --publish onTagOrDraft",
     "start": "electron-vite preview",
@@ -86,7 +84,6 @@
     "react-icons": "^5.6.0",
     "react-router": "^7.17.0",
     "shadcn": "^4.12.0",
-    "sharp": "^0.35.1",
     "sonner": "^2.0.7",
     "tailwind-merge": "^3.6.0",
     "tailwindcss": "^4.3.0",
