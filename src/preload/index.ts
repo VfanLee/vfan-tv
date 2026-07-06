@@ -63,6 +63,7 @@ const api: AppApi = {
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),
     update: (input) => ipcRenderer.invoke('settings:update', input),
+    testGitHubProxy: (routeId, customPrefix) => ipcRenderer.invoke('settings:test-github-proxy', routeId, customPrefix),
     initializeAppData: () => ipcRenderer.invoke('settings:initialize-app-data'),
     exportAppData: (clientData) => ipcRenderer.invoke('settings:export-app-data', clientData),
     importAppData: () => ipcRenderer.invoke('settings:import-app-data'),

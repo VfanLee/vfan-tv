@@ -1,4 +1,8 @@
 import { BrowserWindow, clipboard, dialog, shell } from 'electron'
+import { resolveGitHubUrl } from '@shared/constants'
+import type { AppSettings } from '@shared/types'
+import { createDatabase } from '../db/client'
+import { SettingsRepository } from '../repositories/settings.repository'
 
 export function isAllowedExternalUrl(url: string): boolean {
   try {
@@ -9,16 +13,17 @@ export function isAllowedExternalUrl(url: string): boolean {
   }
 }
 
-export async function openExternalUrl(url: string): Promise<void> {
+export async function openExternalUrl(url: string, settings = getStoredSettings()): Promise<void> {
   if (!isAllowedExternalUrl(url)) {
     throw new Error('仅支持打开 http 或 https 链接')
   }
 
+  const resolvedUrl = resolveGitHubUrl(url, settings)
   const options = {
     type: 'question' as const,
     title: '访问外部链接',
     message: '是否访问外部链接？',
-    detail: url,
+    detail: resolvedUrl,
     buttons: ['复制链接', '确定'],
     defaultId: 1,
     cancelId: 0,
@@ -28,9 +33,13 @@ export async function openExternalUrl(url: string): Promise<void> {
   const { response } = parent ? await dialog.showMessageBox(parent, options) : await dialog.showMessageBox(options)
 
   if (response === 1) {
-    await shell.openExternal(url)
+    await shell.openExternal(resolvedUrl)
     return
   }
 
-  clipboard.writeText(url)
+  clipboard.writeText(resolvedUrl)
+}
+
+function getStoredSettings(): AppSettings {
+  return new SettingsRepository(createDatabase()).get()
 }

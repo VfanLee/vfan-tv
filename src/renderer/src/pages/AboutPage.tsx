@@ -3,19 +3,11 @@ import { CircleUserRound, Lightbulb, MessageCircle, SquareArrowOutUpRight } from
 import type { LucideIcon } from 'lucide-react'
 import { FaGithub } from 'react-icons/fa'
 import { toast } from 'sonner'
-import { RELEASE_ROUTE_PREFIXES, UPDATE_CHECK_CACHE_KEY, applyReleaseRoutePrefix } from '@shared/constants'
+import { UPDATE_CHECK_CACHE_KEY } from '@shared/constants'
 import type { UpdateCheckResult } from '@shared/types'
 import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
 import { Card } from '@renderer/components/ui/card'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@renderer/components/ui/select'
 import logoMarkUrl from '@renderer/assets/logo-mark.svg'
 import { checkForUpdates, getCurrentVersion, isApiAvailable } from '@renderer/services/api'
 import { openExternalUrl } from '@renderer/lib/open-external'
@@ -24,14 +16,7 @@ import { cn } from '@renderer/lib/utils'
 const REPOSITORY_URL = 'https://github.com/vfanlee/vfan-tv'
 const AUTHOR_URL = 'https://github.com/vfanlee'
 const FEEDBACK_URL = `${REPOSITORY_URL}/issues/new`
-const DOWNLOAD_SPEED_TEST_TIMEOUT_MS = 6000
 const UPDATE_CHECK_CACHE_TTL_MS = 30 * 60 * 1000
-
-interface DownloadRouteSpeed {
-  elapsedMs?: number
-  errorMessage?: string
-  status: 'idle' | 'testing' | 'success' | 'error'
-}
 
 interface UpdateCheckCache {
   checkedAt: string
@@ -208,107 +193,18 @@ export function AboutPage(): React.JSX.Element {
   )
 }
 
-const downloadRoutePrefixes = RELEASE_ROUTE_PREFIXES
-
 function DownloadOptions({ fileName, url }: { fileName?: string; url: string }): React.JSX.Element {
-  const [selectedRouteLabel, setSelectedRouteLabel] = useState(downloadRoutePrefixes[0]?.label ?? '')
-  const [speedResults, setSpeedResults] = useState<Record<string, DownloadRouteSpeed>>(() =>
-    Object.fromEntries(downloadRoutePrefixes.map((route) => [route.label, { status: 'idle' }])),
-  )
-  const [isTestingSpeed, setIsTestingSpeed] = useState(false)
-  const selectedRoute =
-    downloadRoutePrefixes.find((route) => route.label === selectedRouteLabel) ?? downloadRoutePrefixes[0]
-  const hasSpeedResult = Object.values(speedResults).some(
-    (result) => result.status === 'success' || result.status === 'error',
-  )
-
-  const testDownloadSpeed = useCallback(async (): Promise<void> => {
-    setIsTestingSpeed(true)
-    setSpeedResults(Object.fromEntries(downloadRoutePrefixes.map((route) => [route.label, { status: 'testing' }])))
-
-    const results = await Promise.all(
-      downloadRoutePrefixes.map(async (route) => {
-        const result = await testDownloadRoute(applyReleaseRoutePrefix(url, route.prefix))
-        return [route.label, result] as const
-      }),
-    )
-    const nextResults = Object.fromEntries(results)
-    const fastest = getFastestRoute(nextResults)
-
-    setSpeedResults(nextResults)
-    if (fastest) {
-      setSelectedRouteLabel(fastest.label)
-    }
-    setIsTestingSpeed(false)
-  }, [url])
-
-  useEffect(() => {
-    let active = true
-
-    queueMicrotask(() => {
-      if (!active) return
-
-      setIsTestingSpeed(true)
-      setSpeedResults(Object.fromEntries(downloadRoutePrefixes.map((route) => [route.label, { status: 'testing' }])))
-      void Promise.all(
-        downloadRoutePrefixes.map(async (route) => {
-          const result = await testDownloadRoute(applyReleaseRoutePrefix(url, route.prefix))
-          return [route.label, result] as const
-        }),
-      ).then((results) => {
-        if (!active) return
-
-        const nextResults = Object.fromEntries(results)
-        const fastest = getFastestRoute(nextResults)
-        setSpeedResults(nextResults)
-        if (fastest) {
-          setSelectedRouteLabel(fastest.label)
-        }
-        setIsTestingSpeed(false)
-      })
-    })
-
-    return () => {
-      active = false
-    }
-  }, [url])
-
   return (
     <div className="bg-muted/40 mt-4 rounded-xl p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h4 className="text-sm font-semibold">更新下载</h4>
         {fileName ? <span className="text-muted-foreground max-w-full truncate text-xs">{fileName}</span> : null}
       </div>
-      <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-        <Select value={selectedRouteLabel} onValueChange={setSelectedRouteLabel}>
-          <SelectTrigger className="w-full flex-1">
-            <SelectValue placeholder="选择下载线路" />
-          </SelectTrigger>
-          <SelectContent position="popper" align="start">
-            <SelectGroup>
-              {downloadRoutePrefixes.map((route) => (
-                <SelectItem key={route.label} value={route.label}>
-                  <span className="min-w-0 flex-1 truncate">{route.label}</span>
-                  <SpeedResultTag result={speedResults[route.label]} />
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          </SelectContent>
-        </Select>
-        <div className="flex shrink-0 gap-2">
-          <Button
-            disabled={!selectedRoute}
-            size="lg"
-            onClick={() => {
-              if (selectedRoute) void openExternalUrl(applyReleaseRoutePrefix(url, selectedRoute.prefix))
-            }}
-          >
-            手动下载
-          </Button>
-          <Button disabled={isTestingSpeed} size="lg" variant="outline" onClick={() => void testDownloadSpeed()}>
-            {isTestingSpeed ? '测速中' : hasSpeedResult ? '重新测速' : '测速'}
-          </Button>
-        </div>
+      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-muted-foreground text-xs leading-5">下载链接将使用「设置 / 网络 - GitHub 代理」中的配置。</p>
+        <Button className="shrink-0" size="lg" onClick={() => void openExternalUrl(url)}>
+          手动下载
+        </Button>
       </div>
     </div>
   )
@@ -336,7 +232,7 @@ function VersionItem({
 function getUpdateHint(result: UpdateCheckResult | undefined, isChecking: boolean): string {
   if (isChecking) return '正在获取最新版本信息…'
   if (!result) return '提示：点击「检查更新」获取最新版本'
-  if (result.updateAvailable) return `发现新版本 v${result.latestVersion}，可查看更新说明并选择下载线路`
+  if (result.updateAvailable) return `发现新版本 v${result.latestVersion}，可查看更新说明并前往下载`
   return '当前已是最新版本'
 }
 
@@ -392,98 +288,6 @@ function clearUpdateCheckCache(): void {
   } catch {
     // Ignore storage cleanup failures.
   }
-}
-
-async function testDownloadRoute(url: string): Promise<DownloadRouteSpeed> {
-  const controller = new AbortController()
-  const timeoutId = window.setTimeout(() => controller.abort(), DOWNLOAD_SPEED_TEST_TIMEOUT_MS)
-  const startedAt = performance.now()
-
-  try {
-    await fetch(url, {
-      cache: 'no-store',
-      method: 'HEAD',
-      mode: 'no-cors',
-      signal: controller.signal,
-    })
-
-    return {
-      elapsedMs: Math.round(performance.now() - startedAt),
-      status: 'success',
-    }
-  } catch (error) {
-    return {
-      errorMessage: error instanceof DOMException && error.name === 'AbortError' ? '超时' : '不可用',
-      status: 'error',
-    }
-  } finally {
-    window.clearTimeout(timeoutId)
-  }
-}
-
-function getFastestRoute(
-  results: Record<string, DownloadRouteSpeed>,
-): { elapsedMs: number; label: string } | undefined {
-  return Object.entries(results).reduce<{ elapsedMs: number; label: string } | undefined>(
-    (fastest, [label, result]) => {
-      if (result.status !== 'success' || typeof result.elapsedMs !== 'number') return fastest
-      if (!fastest || result.elapsedMs < fastest.elapsedMs) return { elapsedMs: result.elapsedMs, label }
-      return fastest
-    },
-    undefined,
-  )
-}
-
-function formatSpeedResult(result: DownloadRouteSpeed | undefined): string {
-  if (!result || result.status === 'idle') return '待测速'
-  if (result.status === 'testing') return '测速中'
-  if (result.status === 'error') return result.errorMessage ?? '不可用'
-  return formatElapsedMs(result.elapsedMs)
-}
-
-function formatElapsedMs(elapsedMs: number | undefined): string {
-  return typeof elapsedMs === 'number' ? `${elapsedMs} ms` : '未知'
-}
-
-function SpeedResultTag({ result }: { result: DownloadRouteSpeed | undefined }): React.JSX.Element {
-  return (
-    <span
-      className={cn(
-        'inline-flex h-5 shrink-0 items-center rounded-md px-1.5 text-[11px] font-semibold',
-        getSpeedResultTagClassName(result),
-      )}
-    >
-      {formatSpeedResult(result)}
-    </span>
-  )
-}
-
-function getSpeedResultTagClassName(result: DownloadRouteSpeed | undefined): string {
-  if (!result || result.status === 'idle') {
-    return 'bg-muted text-muted-foreground'
-  }
-
-  if (result.status === 'testing') {
-    return 'bg-primary/10 text-primary'
-  }
-
-  if (result.status === 'error') {
-    return 'bg-destructive/10 text-destructive'
-  }
-
-  if (typeof result.elapsedMs !== 'number') {
-    return 'bg-muted text-muted-foreground'
-  }
-
-  if (result.elapsedMs <= 800) {
-    return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-  }
-
-  if (result.elapsedMs <= 2000) {
-    return 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400'
-  }
-
-  return 'bg-orange-500/15 text-orange-700 dark:text-orange-400'
 }
 
 function LinkCard({ href, icon: Icon, title }: { href: string; icon: LucideIcon; title: string }): React.JSX.Element {

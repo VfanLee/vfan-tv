@@ -1,12 +1,16 @@
 import { DOMParser } from '@xmldom/xmldom'
-import { applyReleaseRoutePrefix, RELEASE_ROUTE_PREFIXES } from '@shared/constants'
-import type { UpdateCheckResult } from '@shared/types'
+import { resolveGitHubUrl } from '@shared/constants'
+import type { AppSettings, UpdateCheckResult } from '@shared/types'
 
 const REPOSITORY_URL = 'https://github.com/vfanlee/vfan-tv'
 const RELEASES_FEED_PATH = `${REPOSITORY_URL}/releases.atom`
 const LATEST_RELEASE_PATH = `${REPOSITORY_URL}/releases/latest`
 const REQUEST_HEADERS = { 'User-Agent': 'vfan-tv-update-checker' }
 const REQUEST_TIMEOUT_MS = 10_000
+const DEFAULT_GITHUB_PROXY_SETTINGS: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'> = {
+  githubProxyCustomPrefix: '',
+  githubProxyRoute: 'direct',
+}
 
 interface LatestRelease {
   name: string
@@ -80,8 +84,10 @@ function parseReleaseFeed(xml: string): LatestRelease {
   }
 }
 
-async function fetchLatestReleaseFromFeed(routePrefix: string): Promise<LatestRelease> {
-  const response = await fetch(applyReleaseRoutePrefix(RELEASES_FEED_PATH, routePrefix), {
+async function fetchLatestReleaseFromFeed(
+  settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'>,
+): Promise<LatestRelease> {
+  const response = await fetch(resolveGitHubUrl(RELEASES_FEED_PATH, settings), {
     headers: {
       ...REQUEST_HEADERS,
       Accept: 'application/atom+xml',
@@ -96,8 +102,10 @@ async function fetchLatestReleaseFromFeed(routePrefix: string): Promise<LatestRe
   return parseReleaseFeed(await response.text())
 }
 
-async function fetchLatestReleaseFromRedirect(routePrefix: string): Promise<LatestRelease> {
-  const response = await fetch(applyReleaseRoutePrefix(LATEST_RELEASE_PATH, routePrefix), {
+async function fetchLatestReleaseFromRedirect(
+  settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'>,
+): Promise<LatestRelease> {
+  const response = await fetch(resolveGitHubUrl(LATEST_RELEASE_PATH, settings), {
     headers: REQUEST_HEADERS,
     redirect: 'manual',
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -117,27 +125,20 @@ async function fetchLatestReleaseFromRedirect(routePrefix: string): Promise<Late
   }
 }
 
-async function fetchLatestReleaseViaRoute(routePrefix: string): Promise<LatestRelease> {
+async function fetchLatestReleaseViaRoute(
+  settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'>,
+): Promise<LatestRelease> {
   try {
-    return await fetchLatestReleaseFromFeed(routePrefix)
+    return await fetchLatestReleaseFromFeed(settings)
   } catch {
-    return fetchLatestReleaseFromRedirect(routePrefix)
+    return fetchLatestReleaseFromRedirect(settings)
   }
 }
 
-async function fetchLatestRelease(): Promise<LatestRelease> {
-  const errors: string[] = []
-
-  for (const route of RELEASE_ROUTE_PREFIXES) {
-    try {
-      return await fetchLatestReleaseViaRoute(route.prefix)
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      errors.push(`${route.label}：${message}`)
-    }
-  }
-
-  throw new Error(errors.join('；') || '所有更新检查线路均不可用')
+async function fetchLatestRelease(
+  settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'>,
+): Promise<LatestRelease> {
+  return fetchLatestReleaseViaRoute(settings)
 }
 
 function getAssetNames(version: string, platform: NodeJS.Platform, arch: string): string[] {
@@ -172,17 +173,15 @@ async function resolveDownloadAsset(
   version: string,
   platform: NodeJS.Platform,
   arch: string,
+  settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'>,
 ): Promise<DownloadAsset | undefined> {
   const assetNames = getAssetNames(version, platform, arch)
 
   for (const name of assetNames) {
     const canonicalUrl = `${REPOSITORY_URL}/releases/download/${tag}/${name}`
-
-    for (const route of RELEASE_ROUTE_PREFIXES) {
-      const exists = await assetExists(applyReleaseRoutePrefix(canonicalUrl, route.prefix))
-      if (exists) {
-        return { name, url: canonicalUrl }
-      }
+    const exists = await assetExists(resolveGitHubUrl(canonicalUrl, settings))
+    if (exists) {
+      return { name, url: canonicalUrl }
     }
   }
 
@@ -191,12 +190,13 @@ async function resolveDownloadAsset(
 
 export async function checkLatestRelease(
   currentVersion: string,
+  settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'> = DEFAULT_GITHUB_PROXY_SETTINGS,
   platform: NodeJS.Platform = process.platform,
   arch: string = process.arch,
 ): Promise<UpdateCheckResult> {
-  const release = await fetchLatestRelease()
+  const release = await fetchLatestRelease(settings)
   const latestVersion = release.tag.replace(/^v/, '')
-  const downloadAsset = await resolveDownloadAsset(release.tag, latestVersion, platform, arch)
+  const downloadAsset = await resolveDownloadAsset(release.tag, latestVersion, platform, arch, settings)
 
   return {
     currentVersion,

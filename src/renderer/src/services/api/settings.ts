@@ -1,4 +1,11 @@
-import type { AppDataClientPayload, AppDataExportResult, AppDataImportResult, AppSettings } from '@shared/types'
+import type {
+  AppDataClientPayload,
+  AppDataExportResult,
+  AppDataImportResult,
+  AppSettings,
+  GitHubProxyRouteId,
+  GitHubProxyTestResult,
+} from '@shared/types'
 import { getRuntimeApi, requireRuntimeApi } from './client'
 
 export async function getSettings(): Promise<AppSettings | undefined> {
@@ -8,6 +15,13 @@ export async function getSettings(): Promise<AppSettings | undefined> {
 
 export async function updateSettings(input: Partial<AppSettings>): Promise<AppSettings> {
   return requireRuntimeApi().settings.update(input)
+}
+
+export async function testGitHubProxy(
+  routeId: GitHubProxyRouteId,
+  customPrefix?: string,
+): Promise<GitHubProxyTestResult> {
+  return requireRuntimeApi().settings.testGitHubProxy(routeId, customPrefix)
 }
 
 export async function initializeAppData(): Promise<AppSettings> {

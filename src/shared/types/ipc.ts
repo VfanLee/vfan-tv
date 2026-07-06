@@ -8,7 +8,7 @@ import type {
   VodSourceInput,
 } from './source'
 import type { AppDataClientPayload, AppDataExportResult, AppDataImportResult } from './app-data'
-import type { AppSettings } from './settings'
+import type { AppSettings, GitHubProxyRouteId, GitHubProxyTestResult } from './settings'
 import type { FavoriteInput, FavoriteItem } from './favorite'
 import type {
   LivePlaylist,
@@ -119,6 +119,7 @@ export interface AppApi {
   settings: {
     get: () => Promise<AppSettings>
     update: (input: Partial<AppSettings>) => Promise<AppSettings>
+    testGitHubProxy: (routeId: GitHubProxyRouteId, customPrefix?: string) => Promise<GitHubProxyTestResult>
     initializeAppData: () => Promise<AppSettings>
     exportAppData: (clientData: AppDataClientPayload) => Promise<AppDataExportResult>
     importAppData: () => Promise<AppDataImportResult>

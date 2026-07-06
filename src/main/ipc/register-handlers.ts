@@ -267,6 +267,11 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('settings:update', (_event, input: Parameters<AppApi['settings']['update']>[0]) =>
     settingsService.update(input),
   )
+  ipcMain.handle(
+    'settings:test-github-proxy',
+    (_event, routeId: Parameters<AppApi['settings']['testGitHubProxy']>[0], customPrefix?: string) =>
+      settingsService.testGitHubProxy(routeId, customPrefix),
+  )
   ipcMain.handle('settings:initialize-app-data', async () => {
     resetAppDatabase(db)
     await mainWindow?.webContents.session.clearStorageData()
@@ -398,7 +403,7 @@ export function registerIpcHandlers(): void {
     }
   })
   ipcMain.handle('updates:get-current-version', () => packageJson.version)
-  ipcMain.handle('updates:check', () => checkLatestRelease(packageJson.version))
+  ipcMain.handle('updates:check', () => checkLatestRelease(packageJson.version, settingsService.get()))
   ipcMain.handle('window:is-maximized', () => mainWindow?.isMaximized() ?? false)
   ipcMain.handle('window:toggle-maximize', () => {
     if (!mainWindow) {
@@ -413,7 +418,7 @@ export function registerIpcHandlers(): void {
     mainWindow.maximize()
     return true
   })
-  ipcMain.handle('shell:open-external', (_event, url: string) => openExternalUrl(url))
+  ipcMain.handle('shell:open-external', (_event, url: string) => openExternalUrl(url, settingsService.get()))
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

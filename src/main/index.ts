@@ -8,6 +8,8 @@ import { registerIpcHandlers, setMainWindow } from './ipc/register-handlers'
 import { isAllowedExternalUrl, openExternalUrl } from './services/external-link'
 import { checkLatestRelease } from './services/update-checker'
 import { APP_DISPLAY_NAME, APP_ID, USER_DATA_DIR_NAME } from '@shared/constants'
+import { createDatabase } from './db/client'
+import { SettingsRepository } from './repositories/settings.repository'
 
 const APP_VERSION = packageJson.version
 let aboutWindow: BrowserWindow | null = null
@@ -106,7 +108,8 @@ function showMessageBox(options: MessageBoxOptions): Promise<MessageBoxReturnVal
 
 async function runUpdateCheck(interactive: boolean): Promise<void> {
   try {
-    const result = await checkLatestRelease(APP_VERSION)
+    const settings = new SettingsRepository(createDatabase()).get()
+    const result = await checkLatestRelease(APP_VERSION, settings)
 
     if (!result.updateAvailable) {
       if (interactive) {
@@ -132,7 +135,7 @@ async function runUpdateCheck(interactive: boolean): Promise<void> {
     })
 
     if (response.response === 0) {
-      await openExternalUrl(result.downloadUrl ?? result.releaseUrl)
+      await openExternalUrl(result.downloadUrl ?? result.releaseUrl, settings)
     }
   } catch (error) {
     if (!interactive) return

@@ -1,4 +1,5 @@
 export * from './app-brand'
+export * from './github-proxy'
 export * from './live'
 export * from './player'
 export * from './release-routes'
