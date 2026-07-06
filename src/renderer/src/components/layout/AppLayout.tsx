@@ -167,9 +167,9 @@ function Logo({ collapsed }: { collapsed: boolean }): React.JSX.Element {
       title="返回首页"
       to="/"
     >
-      <img alt="VfanTV" className="size-14 shrink-0" draggable={false} src={logoMarkUrl} />
+      <img alt="Vfan TV" className="size-14 shrink-0" draggable={false} src={logoMarkUrl} />
       <div className={cn('min-w-0 transition-opacity duration-150', collapsed && 'hidden')}>
-        <div className="text-sidebar-primary text-xl font-semibold tracking-wide">VfanTV</div>
+        <div className="text-sidebar-primary text-xl font-semibold tracking-wide">Vfan TV</div>
         <div className="text-sidebar-foreground text-sm">影视聚合平台</div>
       </div>
     </NavLink>

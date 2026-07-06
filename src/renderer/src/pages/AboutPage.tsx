@@ -21,7 +21,7 @@ import { checkForUpdates, getCurrentVersion, isApiAvailable } from '@renderer/se
 import { openExternalUrl } from '@renderer/lib/open-external'
 import { cn } from '@renderer/lib/utils'
 
-const REPOSITORY_URL = 'https://github.com/vfanlee/VfanTV'
+const REPOSITORY_URL = 'https://github.com/vfanlee/vfan-tv'
 const AUTHOR_URL = 'https://github.com/vfanlee'
 const FEEDBACK_URL = `${REPOSITORY_URL}/issues/new`
 const DOWNLOAD_SPEED_TEST_TIMEOUT_MS = 6000
@@ -130,10 +130,10 @@ export function AboutPage(): React.JSX.Element {
         <Card className="p-7">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-center gap-4">
-              <img alt="VfanTV" className="size-16 shrink-0" draggable={false} src={logoMarkUrl} />
+              <img alt="Vfan TV" className="size-16 shrink-0" draggable={false} src={logoMarkUrl} />
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <h1 className="text-2xl font-semibold tracking-tight">VfanTV</h1>
+                  <h1 className="text-2xl font-semibold tracking-tight">Vfan TV</h1>
                   <Badge>GPL-3.0</Badge>
                 </div>
                 <p className="text-muted-foreground mt-1.5 text-sm leading-6">

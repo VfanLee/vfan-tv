@@ -26,7 +26,7 @@ export interface AppDataLiveSource {
 }
 
 export interface AppDataBackup {
-  app: 'VfanTV'
+  app: 'vfan-tv'
   schemaVersion: 1
   exportedAt: number
   subscription: AppDataSubscription

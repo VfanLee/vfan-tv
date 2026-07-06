@@ -107,4 +107,4 @@ jobs:
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release delete "$RELEASE_TAG" --yes --repo "$GITHUB_REPOSITORY"
           fi
-          gh release create "$RELEASE_TAG" release-assets/* --verify-tag --generate-notes --title "VfanTV $RELEASE_TAG" --repo "$GITHUB_REPOSITORY"
+          gh release create "$RELEASE_TAG" release-assets/* --verify-tag --generate-notes --title "Vfan TV $RELEASE_TAG" --repo "$GITHUB_REPOSITORY"

@@ -2,10 +2,10 @@ import { DOMParser } from '@xmldom/xmldom'
 import { applyReleaseRoutePrefix, RELEASE_ROUTE_PREFIXES } from '@shared/constants'
 import type { UpdateCheckResult } from '@shared/types'
 
-const REPOSITORY_URL = 'https://github.com/VfanLee/VfanTV'
+const REPOSITORY_URL = 'https://github.com/vfanlee/vfan-tv'
 const RELEASES_FEED_PATH = `${REPOSITORY_URL}/releases.atom`
 const LATEST_RELEASE_PATH = `${REPOSITORY_URL}/releases/latest`
-const REQUEST_HEADERS = { 'User-Agent': 'VfanTV-Update-Checker' }
+const REQUEST_HEADERS = { 'User-Agent': 'vfan-tv-update-checker' }
 const REQUEST_TIMEOUT_MS = 10_000
 
 interface LatestRelease {
@@ -73,7 +73,7 @@ function parseReleaseFeed(xml: string): LatestRelease {
   }
 
   return {
-    name: getTextContent(entry.getElementsByTagName('title')[0]) || `VfanTV ${tag}`,
+    name: getTextContent(entry.getElementsByTagName('title')[0]) || `Vfan TV ${tag}`,
     notes: getReleaseNotes(entry.getElementsByTagName('content')[0]),
     tag,
     url: `${REPOSITORY_URL}/releases/tag/${tag}`,
@@ -110,7 +110,7 @@ async function fetchLatestReleaseFromRedirect(routePrefix: string): Promise<Late
   }
 
   return {
-    name: `VfanTV ${tag}`,
+    name: `Vfan TV ${tag}`,
     notes: '请前往 GitHub Release 页面查看更新说明。',
     tag,
     url: `${REPOSITORY_URL}/releases/tag/${tag}`,
@@ -142,11 +142,11 @@ async function fetchLatestRelease(): Promise<LatestRelease> {
 
 function getAssetNames(version: string, platform: NodeJS.Platform, arch: string): string[] {
   if (platform === 'win32') {
-    return [`VfanTV-v${version}-${arch}-setup.exe`]
+    return [`vfan-tv-v${version}-${arch}-setup.exe`]
   }
 
   if (platform === 'darwin') {
-    return [`VfanTV-v${version}-${arch}.dmg`]
+    return [`vfan-tv-v${version}-${arch}.dmg`]
   }
 
   return []

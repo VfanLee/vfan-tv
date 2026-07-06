@@ -146,7 +146,7 @@ export function BasicPlayer({
 
     destroyHls(hlsRef)
     container.innerHTML = ''
-    container.setAttribute('aria-label', title ?? 'VfanTV 播放器')
+    container.setAttribute('aria-label', title ?? 'Vfan TV 播放器')
     const displayPlaybackUrl = formatPlaybackUrlRef.current(src)
     const debugLog = new PlaybackDebugRecorder()
 
@@ -658,7 +658,7 @@ function buildDebugInfoText(params: DebugInfoParams): string {
   const hls = (art as ArtplayerWithHls).hls
   const video = art.video
   const sections: string[] = [
-    '=== VfanTV 调试信息 ===',
+    '=== Vfan TV 调试信息 ===',
     `时间: ${new Date().toISOString()}`,
     `应用版本: ${cachedAppVersion || '-'}`,
     `页面: ${window.location.hash || window.location.pathname}`,

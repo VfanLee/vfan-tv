@@ -1,5 +1,5 @@
-appId: com.vfanlee.vfantv
-productName: VfanTV
+appId: com.vfanlee.vfan-tv
+productName: Vfan TV
 icon: build/icon.png
 directories:
   buildResources: build
@@ -14,7 +14,7 @@ asarUnpack:
   - resources/**
 win:
   icon: build/icon.ico
-  executableName: VfanTV
+  executableName: Vfan TV
   target:
     - target: nsis
       arch:
@@ -31,16 +31,16 @@ nsis:
   allowElevation: true
   allowToChangeInstallationDirectory: true
   include: build/installer.nsh
-  artifactName: VfanTV-v${version}-${arch}-setup.${ext}
+  artifactName: vfan-tv-v${version}-${arch}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: true
   runAfterFinish: true
 portable:
-  artifactName: VfanTV-v${version}-${arch}-portable.${ext}
+  artifactName: vfan-tv-v${version}-${arch}-portable.${ext}
 mac:
   icon: build/icon.icns
-  artifactName: VfanTV-v${version}-${arch}.${ext}
+  artifactName: vfan-tv-v${version}-${arch}.${ext}
   target:
     - target: dmg
       arch:
@@ -53,5 +53,5 @@ mac:
     - NSDownloadsFolderUsageDescription: Application requests access to the user's Downloads folder.
   notarize: false
 dmg:
-  artifactName: VfanTV-v${version}-${arch}.${ext}
+  artifactName: vfan-tv-v${version}-${arch}.${ext}
 npmRebuild: true

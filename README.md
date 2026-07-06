@@ -1,12 +1,12 @@
 <div align="center">
-  <img src="resources/icon.png" alt="VfanTV Logo" width="120" />
+  <img src="resources/icon.png" alt="Vfan TV Logo" width="120" />
 
-# VfanTV
+# Vfan TV
 
-> **VfanTV** 是一款免费开源、开箱即用、跨平台的桌面端影视聚合播放器。  
+> **Vfan TV** 是一款免费开源、开箱即用、跨平台的桌面端影视聚合播放器。  
 > 基于 **TypeScript** + **Electron** + **React** + **Tailwind CSS** 构建，支持多源搜索、在线播放、收藏与播放记录。
 
-[![Release](https://img.shields.io/github/v/release/vfanlee/VfanTV?display_name=tag&style=flat-square)](https://github.com/vfanlee/VfanTV/releases/latest)
+[![Release](https://img.shields.io/github/v/release/vfanlee/vfan-tv?display_name=tag&style=flat-square)](https://github.com/vfanlee/vfan-tv/releases/latest)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue?style=flat-square)](LICENSE)
 
 </div>
@@ -28,7 +28,7 @@
 
 ## 📥 下载
 
-前往 [**Releases**](https://github.com/vfanlee/VfanTV/releases/latest) 下载对应平台的安装包：
+前往 [**Releases**](https://github.com/vfanlee/vfan-tv/releases/latest) 下载对应平台的安装包：
 
 | 平台       | 架构        | 说明           |
 | ---------- | ----------- | -------------- |
@@ -139,7 +139,7 @@
 1. 在终端执行以下命令移除隔离属性：
 
    ```bash
-   xattr -rd com.apple.quarantine /Applications/VfanTV.app/
+   xattr -rd com.apple.quarantine "/Applications/Vfan TV.app/"
    ```
 
 2. 重新打开应用。

@@ -283,7 +283,7 @@ export function registerIpcHandlers(): void {
       const payload = appDataClientPayloadSchema.parse(clientData)
       const settings = settingsService.get()
       const backup: AppDataBackup = {
-        app: 'VfanTV',
+        app: 'vfan-tv',
         schemaVersion: 1,
         exportedAt: Date.now(),
         subscription: {

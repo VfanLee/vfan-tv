@@ -2,13 +2,13 @@
   "name": "vfan-tv",
   "version": "0.4.1",
   "description": "一款免费开源、开箱即用、跨平台的桌面端影视聚合播放器。",
-  "homepage": "https://github.com/vfanlee/VfanTV#readme",
+  "homepage": "https://github.com/vfanlee/vfan-tv#readme",
   "bugs": {
-    "url": "https://github.com/vfanlee/VfanTV/issues"
+    "url": "https://github.com/vfanlee/vfan-tv/issues"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/vfanlee/VfanTV.git"
+    "url": "git+https://github.com/vfanlee/vfan-tv.git"
   },
   "license": "GPL-3.0",
   "author": "VfanLee",

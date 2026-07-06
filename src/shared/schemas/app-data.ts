@@ -78,7 +78,7 @@ export const appDataFavoriteSchema = z
 
 export const appDataBackupSchema = z
   .object({
-    app: z.literal('VfanTV'),
+    app: z.literal('vfan-tv'),
     schemaVersion: z.literal(1),
     exportedAt: z.number().int().nonnegative(),
     subscription: z

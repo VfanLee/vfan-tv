@@ -1,5 +1,5 @@
 ; Must match USER_DATA_DIR_NAME in src/shared/constants/app-brand.ts
-!define USER_DATA_DIR "vfantv"
+!define USER_DATA_DIR "vfan-tv"
 
 !ifdef BUILD_UNINSTALLER
 
