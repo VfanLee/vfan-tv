@@ -23,7 +23,7 @@ import type {
 import type { RecentPlayInput, RecentPlayItem } from './recent'
 import type { SearchEvent } from './search'
 import type { MediaProbeInput, MediaProbeResult, RecommendationItem } from './vod'
-import type { UpdateCheckResult } from './update'
+import type { UpdateCheckResult, UpdateEvent } from './update'
 
 export interface HomeData {
   recentPlays: RecentPlayItem[]
@@ -127,6 +127,9 @@ export interface AppApi {
   updates: {
     getCurrentVersion: () => Promise<string>
     check: () => Promise<UpdateCheckResult>
+    download: () => Promise<void>
+    install: () => Promise<void>
+    onUpdateEvent: (listener: (event: UpdateEvent) => void) => () => void
   }
   window: {
     isMaximized: () => Promise<boolean>

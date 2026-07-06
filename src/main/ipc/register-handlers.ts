@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog, ipcMain } from 'electron'
+import { BrowserWindow, app, dialog, ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
 import { readFile, writeFile } from 'fs/promises'
 import { appDataBackupSchema, appDataClientPayloadSchema, sourceSubscriptionSchema } from '@shared/schemas'
@@ -28,7 +28,7 @@ import { SettingsService } from '../services/settings.service'
 import { SourceService } from '../services/source.service'
 import { decodeBase58String } from '../services/base58'
 import { VodSearchService } from '../services/vod-search.service'
-import { checkLatestRelease } from '../services/update-checker'
+import { UpdateService } from '../services/update.service'
 
 let mainWindow: BrowserWindow | null = null
 
@@ -56,7 +56,11 @@ export function registerIpcHandlers(): void {
   const emitSearchEvent = (event: SearchEvent): void => {
     mainWindow?.webContents.send('vod:search-event', event)
   }
+  const emitUpdateEvent: ConstructorParameters<typeof UpdateService>[1] = (event) => {
+    mainWindow?.webContents.send('updates:event', event)
+  }
   const vodSearchService = new VodSearchService(sourceService, httpClient, searchTaskManager, emitSearchEvent)
+  const updateService = new UpdateService(settingsService, emitUpdateEvent)
 
   ipcMain.handle('sources:list', () => sourceService.list())
   ipcMain.handle('sources:create', (_event, input: Parameters<AppApi['sources']['create']>[0]) =>
@@ -402,8 +406,10 @@ export function registerIpcHandlers(): void {
       searchHistory: backup.searchHistory,
     }
   })
-  ipcMain.handle('updates:get-current-version', () => packageJson.version)
-  ipcMain.handle('updates:check', () => checkLatestRelease(packageJson.version, settingsService.get()))
+  ipcMain.handle('updates:get-current-version', () => app.getVersion() || packageJson.version)
+  ipcMain.handle('updates:check', () => updateService.check())
+  ipcMain.handle('updates:download', () => updateService.download())
+  ipcMain.handle('updates:install', () => updateService.install())
   ipcMain.handle('window:is-maximized', () => mainWindow?.isMaximized() ?? false)
   ipcMain.handle('window:toggle-maximize', () => {
     if (!mainWindow) {

@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
-import type { AppApi, SearchEvent } from '@shared/types'
+import type { AppApi, SearchEvent, UpdateEvent } from '@shared/types'
 
 const api: AppApi = {
   sources: {
@@ -71,6 +71,13 @@ const api: AppApi = {
   updates: {
     getCurrentVersion: () => ipcRenderer.invoke('updates:get-current-version'),
     check: () => ipcRenderer.invoke('updates:check'),
+    download: () => ipcRenderer.invoke('updates:download'),
+    install: () => ipcRenderer.invoke('updates:install'),
+    onUpdateEvent: (listener) => {
+      const handler = (_event: Electron.IpcRendererEvent, payload: UpdateEvent): void => listener(payload)
+      ipcRenderer.on('updates:event', handler)
+      return () => ipcRenderer.removeListener('updates:event', handler)
+    },
   },
   window: {
     isMaximized: () => ipcRenderer.invoke('window:is-maximized'),

@@ -3,7 +3,6 @@ import type { MenuItemConstructorOptions, MessageBoxOptions, MessageBoxReturnVal
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import packageJson from '../../package.json'
 import { registerIpcHandlers, setMainWindow } from './ipc/register-handlers'
 import { isAllowedExternalUrl, openExternalUrl } from './services/external-link'
 import { checkLatestRelease } from './services/update-checker'
@@ -11,7 +10,6 @@ import { APP_DISPLAY_NAME, APP_ID, USER_DATA_DIR_NAME } from '@shared/constants'
 import { createDatabase } from './db/client'
 import { SettingsRepository } from './repositories/settings.repository'
 
-const APP_VERSION = packageJson.version
 let aboutWindow: BrowserWindow | null = null
 let updateCheckPromise: Promise<void> | null = null
 let hasRunStartupUpdateCheck = false
@@ -62,7 +60,7 @@ function showAboutWindow(): void {
     <main>
       <img src="${iconDataUrl}" alt="${APP_DISPLAY_NAME}" />
       <h1>${APP_DISPLAY_NAME}</h1>
-      <p class="version">v${APP_VERSION}</p>
+      <p class="version">v${app.getVersion()}</p>
       <p class="description">免费开源、开箱即用、跨平台的桌面端影视聚合播放器。</p>
       <p class="copyright">Copyright © 2026 VfanLee</p>
     </main>
@@ -109,7 +107,8 @@ function showMessageBox(options: MessageBoxOptions): Promise<MessageBoxReturnVal
 async function runUpdateCheck(interactive: boolean): Promise<void> {
   try {
     const settings = new SettingsRepository(createDatabase()).get()
-    const result = await checkLatestRelease(APP_VERSION, settings)
+    const currentVersion = app.getVersion()
+    const result = await checkLatestRelease(currentVersion, settings)
 
     if (!result.updateAvailable) {
       if (interactive) {
@@ -117,7 +116,7 @@ async function runUpdateCheck(interactive: boolean): Promise<void> {
           type: 'info',
           title: '检查更新',
           message: '当前已是最新版本',
-          detail: `当前版本：v${APP_VERSION}`,
+          detail: `当前版本：v${currentVersion}`,
           buttons: ['好'],
         })
       }
@@ -135,7 +134,7 @@ async function runUpdateCheck(interactive: boolean): Promise<void> {
     })
 
     if (response.response === 0) {
-      await openExternalUrl(result.downloadUrl ?? result.releaseUrl, settings)
+      await openExternalUrl(result.manualDownloadUrl ?? result.downloadUrl ?? result.releaseUrl, settings)
     }
   } catch (error) {
     if (!interactive) return
@@ -209,7 +208,7 @@ function createApplicationMenu(): void {
       : ([{ role: 'close', label: '关闭窗口' }] satisfies MenuItemConstructorOptions[])),
   ]
   const helpMenu: MenuItemConstructorOptions[] = [
-    { label: `${APP_DISPLAY_NAME} v${APP_VERSION}`, enabled: false },
+    { label: `${APP_DISPLAY_NAME} v${app.getVersion()}`, enabled: false },
     { type: 'separator' },
     { label: '检查更新…', click: () => checkForUpdates(true) },
   ]

@@ -197,15 +197,22 @@ export async function checkLatestRelease(
   const release = await fetchLatestRelease(settings)
   const latestVersion = release.tag.replace(/^v/, '')
   const downloadAsset = await resolveDownloadAsset(release.tag, latestVersion, platform, arch, settings)
+  const updateAvailable = isNewerVersion(latestVersion, currentVersion)
 
   return {
+    arch,
+    canAutoUpdate: false,
     currentVersion,
     downloadName: downloadAsset?.name,
     downloadUrl: downloadAsset?.url,
     latestVersion,
+    manualDownloadName: downloadAsset?.name,
+    manualDownloadUrl: downloadAsset?.url,
+    platform,
     releaseName: release.name,
     releaseNotes: release.notes,
     releaseUrl: release.url,
-    updateAvailable: isNewerVersion(latestVersion, currentVersion),
+    status: updateAvailable ? 'available' : 'not-available',
+    updateAvailable,
   }
 }

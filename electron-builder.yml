@@ -1,6 +1,10 @@
 appId: com.vfanlee.vfan-tv
 productName: Vfan TV
 icon: build/icon.png
+publish:
+  provider: github
+  owner: vfanlee
+  repo: vfan-tv
 directories:
   buildResources: build
 files:
@@ -20,10 +24,6 @@ win:
       arch:
         - x64
         - arm64
-    - target: portable
-      arch:
-        - x64
-        - arm64
 nsis:
   oneClick: false
   perMachine: false
@@ -36,8 +36,6 @@ nsis:
   uninstallDisplayName: ${productName}
   createDesktopShortcut: true
   runAfterFinish: true
-portable:
-  artifactName: vfan-tv-v${version}-${arch}-portable.${ext}
 mac:
   icon: build/icon.icns
   artifactName: vfan-tv-v${version}-${arch}.${ext}

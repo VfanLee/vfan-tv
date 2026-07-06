@@ -1,3 +1,3 @@
 provider: generic
-url: https://example.com/auto-updates
+url: https://github.com/vfanlee/vfan-tv/releases/latest/download/
 updaterCacheDirName: vfan-tv-updater
