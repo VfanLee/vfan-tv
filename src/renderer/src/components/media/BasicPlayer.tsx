@@ -30,6 +30,7 @@ export interface BasicPlayerProps {
   hasPreviousEpisode?: boolean
   isTheaterMode?: boolean
   loop?: boolean
+  persistPlaybackSettings?: boolean
   navigationLabels?: PlayerNavigationLabels
   formatPlaybackUrl?: (src: string) => string
   onNextEpisode?: () => void
@@ -108,6 +109,8 @@ export function BasicPlayer({
   enableAutoNext = true,
   initialTime = 0,
   isTheaterMode = false,
+  loop,
+  persistPlaybackSettings = true,
   formatPlaybackUrl = normalizePlaybackUrlForDisplay,
   onEnded,
   onProgress,
@@ -123,7 +126,9 @@ export function BasicPlayer({
   const formatPlaybackUrlRef = useRef(formatPlaybackUrl)
   const initialTimeRef = useRef(initialTime)
   const resumeTimeRef = useRef(0)
-  const [adFilterEnabled, setAdFilterEnabled] = useState(() => readAdFilterEnabled())
+  const [adFilterEnabled, setAdFilterEnabled] = useState(() =>
+    persistPlaybackSettings ? readAdFilterEnabled() : false,
+  )
 
   const isLive = variant === 'live'
   const isHls = isHlsSource(src, sourceType)
@@ -158,8 +163,8 @@ export function BasicPlayer({
 
     let hlsControlUpdate: (() => void) | undefined
     let audioMenuItem: HTMLElement | undefined
-    let loopEnabled = readLoopEnabled()
-    let autoNextEnabled = enableAutoNext && readAutoNextEnabled()
+    let loopEnabled = loop ?? (persistPlaybackSettings ? readLoopEnabled() : false)
+    let autoNextEnabled = enableAutoNext && (persistPlaybackSettings ? readAutoNextEnabled() : true)
 
     const openSettingPanel = function (this: Artplayer, contextmenu: { show: boolean }): void {
       this.setting.show = true
@@ -214,7 +219,9 @@ export function BasicPlayer({
                   loopEnabled = nextEnabled
                   item.tooltip = nextEnabled ? '开启' : '关闭'
                   art.video.loop = nextEnabled
-                  window.localStorage.setItem(PLAYER_LOOP_STORAGE_KEY, String(nextEnabled))
+                  if (persistPlaybackSettings) {
+                    window.localStorage.setItem(PLAYER_LOOP_STORAGE_KEY, String(nextEnabled))
+                  }
                   return nextEnabled
                 },
               },
@@ -230,7 +237,9 @@ export function BasicPlayer({
                         const nextEnabled = !item.switch
                         autoNextEnabled = nextEnabled
                         item.tooltip = nextEnabled ? '开启' : '关闭'
-                        window.localStorage.setItem(PLAYER_AUTO_NEXT_STORAGE_KEY, String(nextEnabled))
+                        if (persistPlaybackSettings) {
+                          window.localStorage.setItem(PLAYER_AUTO_NEXT_STORAGE_KEY, String(nextEnabled))
+                        }
                         return nextEnabled
                       },
                     },
@@ -249,7 +258,9 @@ export function BasicPlayer({
                 onSwitch(item) {
                   const nextEnabled = !item.switch
                   item.tooltip = nextEnabled ? '开启' : '关闭'
-                  window.localStorage.setItem(HLS_AD_FILTER_STORAGE_KEY, String(nextEnabled))
+                  if (persistPlaybackSettings) {
+                    window.localStorage.setItem(HLS_AD_FILTER_STORAGE_KEY, String(nextEnabled))
+                  }
                   resumeTimeRef.current = art.currentTime
                   setAdFilterEnabled(nextEnabled)
                   return nextEnabled
@@ -504,7 +515,20 @@ export function BasicPlayer({
       }
       container.innerHTML = ''
     }
-  }, [adFilterEnabled, audioTrackUrl, autoPlay, canUseAdFilter, enableAutoNext, isHls, isLive, sourceType, src, title])
+  }, [
+    adFilterEnabled,
+    audioTrackUrl,
+    autoPlay,
+    canUseAdFilter,
+    enableAutoNext,
+    isHls,
+    isLive,
+    loop,
+    persistPlaybackSettings,
+    sourceType,
+    src,
+    title,
+  ])
 
   if (!src) {
     return (
@@ -1241,10 +1265,10 @@ function formatInfoTime(seconds: number): string {
 function readAdFilterEnabled(): boolean {
   const stored = window.localStorage.getItem(HLS_AD_FILTER_STORAGE_KEY)
   if (stored === null) {
-    return true
+    return false
   }
 
-  return stored !== 'false'
+  return stored === 'true'
 }
 
 function readLoopEnabled(): boolean {
@@ -1252,7 +1276,12 @@ function readLoopEnabled(): boolean {
 }
 
 function readAutoNextEnabled(): boolean {
-  return window.localStorage.getItem(PLAYER_AUTO_NEXT_STORAGE_KEY) === 'true'
+  const stored = window.localStorage.getItem(PLAYER_AUTO_NEXT_STORAGE_KEY)
+  if (stored === null) {
+    return true
+  }
+
+  return stored !== 'false'
 }
 
 function normalizePlaybackUrlForDisplay(src: string): string {

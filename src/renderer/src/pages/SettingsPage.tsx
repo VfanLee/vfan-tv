@@ -1,7 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Check, Download, Gauge, GripVertical, Pencil, Plus, RefreshCw, Rss, Save, Trash2, Upload } from 'lucide-react'
+import { Check, Download, Gauge, GripVertical, Pencil, Plus, RefreshCw, Rss, Trash2, Upload } from 'lucide-react'
 import { toast } from 'sonner'
-import { CUSTOM_GITHUB_PROXY_ROUTE_ID, GITHUB_PROXY_ROUTES, SEARCH_HISTORY_STORAGE_KEY } from '@shared/constants'
+import {
+  CUSTOM_GITHUB_PROXY_ROUTE_ID,
+  DEFAULT_GITHUB_PROXY_ROUTE_ID,
+  GITHUB_PROXY_ROUTES,
+  SEARCH_HISTORY_STORAGE_KEY,
+} from '@shared/constants'
 import type {
   GitHubProxyRouteId,
   GitHubProxyTestResult,
@@ -11,9 +16,18 @@ import type {
   VodSourceInput,
 } from '@shared/types'
 import { ConfirmDialog, SettingsCard, ThemeSettings } from '@renderer/components'
+import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@renderer/components/ui/select'
 import { Switch } from '@renderer/components/ui/switch'
 import {
   clearLiveSources,
@@ -91,8 +105,7 @@ export function SettingsPage(): React.JSX.Element {
   const [isReordering, setIsReordering] = useState(false)
   const [isReorderingLiveSources, setIsReorderingLiveSources] = useState(false)
   const [subscriptionUrl, setSubscriptionUrl] = useState('')
-  const [githubProxyRoute, setGithubProxyRoute] = useState<GitHubProxyRouteId>('direct')
-  const [githubProxyCustomPrefix, setGithubProxyCustomPrefix] = useState('')
+  const [githubProxyRoute, setGithubProxyRoute] = useState<GitHubProxyRouteId>(DEFAULT_GITHUB_PROXY_ROUTE_ID)
   const [isSavingGitHubProxy, setIsSavingGitHubProxy] = useState(false)
   const [speedResults, setSpeedResults] = useState<Record<GitHubProxyRouteId, GitHubProxySpeedState>>(() =>
     createIdleGitHubProxySpeedResults(),
@@ -137,8 +150,7 @@ export function SettingsPage(): React.JSX.Element {
         applySources(nextSources)
         applyLiveSources(nextLiveSources)
         setSubscriptionUrl(settings?.subscriptionUrl ?? '')
-        setGithubProxyRoute(settings?.githubProxyRoute ?? 'direct')
-        setGithubProxyCustomPrefix(settings?.githubProxyCustomPrefix ?? '')
+        setGithubProxyRoute(resolveVisibleGitHubProxyRoute(settings?.githubProxyRoute))
       },
     )
 
@@ -169,22 +181,19 @@ export function SettingsPage(): React.JSX.Element {
     }
   }
 
-  const saveGitHubProxy = async (): Promise<void> => {
+  const saveGitHubProxy = async (nextRoute = githubProxyRoute): Promise<void> => {
     if (!apiAvailable) return
 
-    if (githubProxyRoute === CUSTOM_GITHUB_PROXY_ROUTE_ID && !githubProxyCustomPrefix.trim()) {
-      toast.error('请输入自定义代理地址')
-      return
-    }
-
+    const routeToSave = resolveVisibleGitHubProxyRoute(nextRoute)
+    setGithubProxyRoute(routeToSave)
     setIsSavingGitHubProxy(true)
+
     try {
       const settings = await updateSettings({
-        githubProxyCustomPrefix,
-        githubProxyRoute,
+        githubProxyCustomPrefix: '',
+        githubProxyRoute: routeToSave,
       })
-      setGithubProxyRoute(settings.githubProxyRoute)
-      setGithubProxyCustomPrefix(settings.githubProxyCustomPrefix)
+      setGithubProxyRoute(resolveVisibleGitHubProxyRoute(settings.githubProxyRoute))
       toast.success('GitHub 代理设置已保存')
     } catch (error) {
       toast.error('保存失败', { description: error instanceof Error ? error.message : String(error) })
@@ -197,7 +206,7 @@ export function SettingsPage(): React.JSX.Element {
     setTestingRouteId(routeId)
     setSpeedResults((current) => ({ ...current, [routeId]: { status: 'testing' } }))
 
-    const result = await testGitHubProxy(routeId, githubProxyCustomPrefix)
+    const result = await testGitHubProxy(routeId, '')
     setSpeedResults((current) => ({ ...current, [routeId]: result }))
     setTestingRouteId(undefined)
 
@@ -207,11 +216,8 @@ export function SettingsPage(): React.JSX.Element {
   const testAllGitHubProxy = async (): Promise<void> => {
     if (!apiAvailable) return
 
-    const routeIds: GitHubProxyRouteId[] = [
-      ...GITHUB_PROXY_ROUTES.map((route) => route.id),
-      CUSTOM_GITHUB_PROXY_ROUTE_ID,
-    ]
-    setTestingRouteId(CUSTOM_GITHUB_PROXY_ROUTE_ID)
+    const routeIds: GitHubProxyRouteId[] = GITHUB_PROXY_ROUTES.map((route) => route.id)
+    setTestingRouteId(DEFAULT_GITHUB_PROXY_ROUTE_ID)
     setSpeedResults(
       Object.fromEntries(routeIds.map((routeId) => [routeId, { status: 'testing' }])) as Record<
         GitHubProxyRouteId,
@@ -219,7 +225,7 @@ export function SettingsPage(): React.JSX.Element {
       >,
     )
 
-    const results = await Promise.all(routeIds.map((routeId) => testGitHubProxy(routeId, githubProxyCustomPrefix)))
+    const results = await Promise.all(routeIds.map((routeId) => testGitHubProxy(routeId, '')))
     const nextResults = results.reduce<Record<GitHubProxyRouteId, GitHubProxySpeedState>>(
       (current, result) => ({ ...current, [result.routeId]: result }),
       createIdleGitHubProxySpeedResults(),
@@ -229,7 +235,7 @@ export function SettingsPage(): React.JSX.Element {
     setSpeedResults(nextResults)
     setTestingRouteId(undefined)
     if (fastest) {
-      setGithubProxyRoute(fastest.routeId)
+      await saveGitHubProxy(fastest.routeId)
       toast.success(`最快线路：${getGitHubProxyRouteLabel(fastest.routeId)}`)
     }
   }
@@ -584,14 +590,11 @@ export function SettingsPage(): React.JSX.Element {
 
         <GitHubProxySettingsCard
           apiAvailable={apiAvailable}
-          customPrefix={githubProxyCustomPrefix}
           isSaving={isSavingGitHubProxy}
           route={githubProxyRoute}
           speedResults={speedResults}
           testingRouteId={testingRouteId}
-          onCustomPrefixChange={setGithubProxyCustomPrefix}
-          onRouteChange={setGithubProxyRoute}
-          onSave={() => void saveGitHubProxy()}
+          onRouteChange={(routeId) => void saveGitHubProxy(routeId)}
           onTestAll={() => void testAllGitHubProxy()}
           onTestSingle={(routeId) => void testSingleGitHubProxy(routeId)}
         />
@@ -886,137 +889,94 @@ function SourceTableCard({
 
 function GitHubProxySettingsCard({
   apiAvailable,
-  customPrefix,
   isSaving,
   route,
   speedResults,
   testingRouteId,
-  onCustomPrefixChange,
   onRouteChange,
-  onSave,
   onTestAll,
   onTestSingle,
 }: {
   apiAvailable: boolean
-  customPrefix: string
   isSaving: boolean
   route: GitHubProxyRouteId
   speedResults: Record<GitHubProxyRouteId, GitHubProxySpeedState>
   testingRouteId?: GitHubProxyRouteId
-  onCustomPrefixChange: (value: string) => void
   onRouteChange: (routeId: GitHubProxyRouteId) => void
-  onSave: () => void
   onTestAll: () => void
   onTestSingle: (routeId: GitHubProxyRouteId) => void
 }): React.JSX.Element {
   const isTestingAll =
-    testingRouteId === CUSTOM_GITHUB_PROXY_ROUTE_ID &&
+    testingRouteId === DEFAULT_GITHUB_PROXY_ROUTE_ID &&
     Object.values(speedResults).every((result) => result.status === 'testing')
+  const selectedRoute = GITHUB_PROXY_ROUTES.find((item) => item.id === route)
+  const selectedRouteLabel = selectedRoute?.label ?? getGitHubProxyRouteLabel(route)
 
   return (
     <SettingsCard
       description="统一控制应用内 GitHub 链接、更新检查与更新下载。"
       headerActions={
-        <Button disabled={!apiAvailable || isTestingAll} variant="outline" onClick={onTestAll}>
-          {isTestingAll ? <RefreshCw className="animate-spin" size={16} /> : <Gauge size={16} />}
-          {isTestingAll ? '测速中' : '一键测速'}
+        <Button disabled={!apiAvailable || isSaving || isTestingAll} variant="outline" onClick={onTestAll}>
+          {isTestingAll ? <RefreshCw className="animate-spin" /> : <Gauge />}
+          {isTestingAll ? '测速中' : '自动优选'}
         </Button>
       }
       title="网络 - GitHub 代理"
     >
       <div className="flex flex-col gap-4 px-5 py-5">
-        <div className="grid gap-3 lg:grid-cols-2">
-          {GITHUB_PROXY_ROUTES.map((item) => (
-            <GitHubProxyRouteOption
-              key={item.id}
-              checked={route === item.id}
-              description={item.prefix || '直接访问 github.com'}
-              disabled={!apiAvailable || isTestingAll}
-              label={item.label}
-              result={speedResults[item.id]}
-              testing={testingRouteId === item.id}
-              onSelect={() => onRouteChange(item.id)}
-              onTest={() => onTestSingle(item.id)}
-            />
-          ))}
-          <GitHubProxyRouteOption
-            checked={route === CUSTOM_GITHUB_PROXY_ROUTE_ID}
-            description={customPrefix.trim() || '手动输入代理前缀'}
-            disabled={!apiAvailable || isTestingAll}
-            label="自定义代理"
-            result={speedResults[CUSTOM_GITHUB_PROXY_ROUTE_ID]}
-            testing={testingRouteId === CUSTOM_GITHUB_PROXY_ROUTE_ID && !isTestingAll}
-            onSelect={() => onRouteChange(CUSTOM_GITHUB_PROXY_ROUTE_ID)}
-            onTest={() => onTestSingle(CUSTOM_GITHUB_PROXY_ROUTE_ID)}
+        <div className="grid items-center gap-x-6 gap-y-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+          <Select
+            disabled={!apiAvailable || isSaving || isTestingAll}
+            value={route}
+            onValueChange={(value) => onRouteChange(value as GitHubProxyRouteId)}
+          >
+            <SelectTrigger className="bg-background w-full">
+              <SelectValue placeholder="选择 GitHub 代理线路" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {GITHUB_PROXY_ROUTES.map((item) => (
+                  <SelectItem key={item.id} value={item.id}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+          <ProxySpeedAction
+            disabled={!apiAvailable || isSaving || isTestingAll}
+            result={speedResults[route]}
+            testing={testingRouteId === route}
+            onTest={() => onTestSingle(route)}
           />
         </div>
 
-        <label className="block">
-          <span className="text-foreground text-sm font-medium">自定义代理地址</span>
-          <Input
-            className="mt-2 font-mono text-xs"
-            disabled={!apiAvailable}
-            placeholder="https://example.com/"
-            type="url"
-            value={customPrefix}
-            onChange={(event) => onCustomPrefixChange(event.target.value)}
-            onFocus={() => onRouteChange(CUSTOM_GITHUB_PROXY_ROUTE_ID)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') onSave()
-            }}
-          />
-        </label>
-
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-muted-foreground text-xs leading-5">
-            代理地址会以“代理前缀 + GitHub 原始链接”的形式使用，例如 gh-proxy 兼容服务。
-          </p>
-          <Button disabled={!apiAvailable || isSaving} onClick={onSave}>
-            {isSaving ? <RefreshCw className="animate-spin" size={16} /> : <Save size={16} />}
-            {isSaving ? '保存中' : '保存设置'}
-          </Button>
-        </div>
+        <Alert className="border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+          <AlertDescription className="font-medium text-current">当前线路：{selectedRouteLabel}</AlertDescription>
+        </Alert>
       </div>
     </SettingsCard>
   )
 }
 
-function GitHubProxyRouteOption({
-  checked,
-  description,
+function ProxySpeedAction({
+  className,
   disabled,
-  label,
   result,
   testing,
-  onSelect,
   onTest,
 }: {
-  checked: boolean
-  description: string
+  className?: string
   disabled: boolean
-  label: string
   result: GitHubProxySpeedState
   testing: boolean
-  onSelect: () => void
   onTest: () => void
 }): React.JSX.Element {
   return (
-    <div className="border-border bg-background flex min-w-0 items-center gap-3 rounded-lg border px-3 py-3">
-      <button
-        aria-pressed={checked}
-        className="border-input bg-card text-foreground hover:bg-accent aria-pressed:border-primary aria-pressed:bg-primary/10 aria-pressed:text-primary focus-visible:ring-ring flex min-w-0 flex-1 flex-col rounded-lg border px-3 py-2 text-left outline-none focus-visible:ring-2"
-        disabled={disabled}
-        type="button"
-        onClick={onSelect}
-      >
-        <span className="flex w-full min-w-0 items-center gap-2">
-          <span className="truncate text-sm font-semibold">{label}</span>
-          <SpeedResultTag result={result} />
-        </span>
-        <span className="text-muted-foreground mt-1 w-full truncate text-xs">{description}</span>
-      </button>
-      <Button disabled={disabled || testing} size="sm" variant="outline" onClick={onTest}>
-        {testing ? <RefreshCw className="animate-spin" size={14} /> : <Gauge size={14} />}
+    <div className={`flex shrink-0 items-center justify-end gap-2 self-center ${className ?? ''}`}>
+      <SpeedResultTag result={result} />
+      <Button disabled={disabled || testing} variant="outline" onClick={onTest}>
+        {testing ? <RefreshCw className="animate-spin" /> : <Gauge />}
         测速
       </Button>
     </div>
@@ -1578,6 +1538,10 @@ function getFastestGitHubProxyResult(results: GitHubProxyTestResult[]): GitHubPr
   }, undefined)
 }
 
+function resolveVisibleGitHubProxyRoute(routeId: GitHubProxyRouteId | undefined): GitHubProxyRouteId {
+  if (!routeId || routeId === CUSTOM_GITHUB_PROXY_ROUTE_ID) return DEFAULT_GITHUB_PROXY_ROUTE_ID
+  return routeId
+}
 function getGitHubProxyRouteLabel(routeId: GitHubProxyRouteId): string {
   if (routeId === CUSTOM_GITHUB_PROXY_ROUTE_ID) return '自定义代理'
 
@@ -1593,11 +1557,9 @@ function formatSpeedResult(result: GitHubProxySpeedState | undefined): string {
 
 function SpeedResultTag({ result }: { result: GitHubProxySpeedState | undefined }): React.JSX.Element {
   return (
-    <span
-      className={`inline-flex h-5 shrink-0 items-center rounded-md px-1.5 text-[11px] font-semibold ${getSpeedResultTagClassName(result)}`}
-    >
+    <Badge className={getSpeedResultTagClassName(result)} variant="secondary">
       {formatSpeedResult(result)}
-    </span>
+    </Badge>
   )
 }
 
@@ -1619,7 +1581,7 @@ function getSpeedResultTagClassName(result: GitHubProxySpeedState | undefined): 
   }
 
   if (result.elapsedMs <= 800) {
-    return 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
+    return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
   }
 
   if (result.elapsedMs <= 2000) {

@@ -9,13 +9,7 @@ import {
 import type { LiveChannel, LivePlaylist, LiveSourceConfig } from '@shared/types'
 import { BasicPlayer } from '@renderer/components'
 import { cn } from '@renderer/lib/utils'
-import {
-  getMediaProxyBaseUrl,
-  isApiAvailable,
-  listLiveSources,
-  loadLivePlaylist,
-  probeLiveStream,
-} from '@renderer/services/api'
+import { getMediaProxyBaseUrl, isApiAvailable, listLiveSources, loadLivePlaylist } from '@renderer/services/api'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
 import {
@@ -42,7 +36,6 @@ export function LivePage(): React.JSX.Element {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set())
   const [keyword, setKeyword] = useState('')
   const [liveProxyBaseUrl, setLiveProxyBaseUrl] = useState('')
-  const [streamProbe, setStreamProbe] = useState<{ url: string; isLive: boolean }>()
   const [isLoadingSettings, setIsLoadingSettings] = useState(true)
   const [isLoadingPlaylist, setIsLoadingPlaylist] = useState(false)
   const [isTheaterMode, setIsTheaterMode] = useState(false)
@@ -56,9 +49,7 @@ export function LivePage(): React.JSX.Element {
     activeChannel != null && activeStreamIndex >= 0 && activeStreamIndex < activeChannel.streams.length - 1
   const activeStreamUrl = activeStream?.url ?? ''
   const activeStreamIsHls = isLikelyHlsStream(activeStreamUrl)
-  const activeStreamProbeIsLive = streamProbe?.url === activeStreamUrl ? streamProbe.isLive : undefined
-  const activeStreamIsLive =
-    activeStreamIsHls && activeStreamProbeIsLive !== undefined ? activeStreamProbeIsLive : activeStream?.isLive === true
+  const activeStreamIsLive = activeStream?.isLive === true
   const playerSrc = resolveStreamPlaybackUrl(liveProxyBaseUrl, activeStreamUrl)
   const playerTitle = activeChannel?.title
   const formatPlaybackUrl = (currentSrc: string): string => activeStreamUrl || currentSrc
@@ -67,9 +58,10 @@ export function LivePage(): React.JSX.Element {
   const streamCount = playlist?.channels.reduce((total, channel) => total + channel.streams.length, 0) ?? 0
 
   const applyPlaylist = useCallback((nextPlaylist: LivePlaylist, sourceId: string): void => {
-    const selection = resolveLiveSelection(nextPlaylist, readCachedSelection(sourceId))
+    const normalizedPlaylist = normalizeLivePlaylist(nextPlaylist)
+    const selection = resolveLiveSelection(normalizedPlaylist, readCachedSelection(sourceId))
 
-    setPlaylist(nextPlaylist)
+    setPlaylist(normalizedPlaylist)
     setActiveChannelId(selection.channelId)
     setActiveStreamId(selection.streamId)
     setExpandedGroups(new Set(selection.expandedGroups))
@@ -91,7 +83,7 @@ export function LivePage(): React.JSX.Element {
 
       setIsLoadingPlaylist(true)
       try {
-        const nextPlaylist = await loadLivePlaylist(selectedSource.url)
+        const nextPlaylist = normalizeLivePlaylist(await loadLivePlaylist(selectedSource.url))
 
         writeCachedPlaylist(selectedSource, nextPlaylist)
         applyPlaylist(nextPlaylist, selectedSource.id)
@@ -160,30 +152,6 @@ export function LivePage(): React.JSX.Element {
       expandedGroups: [...expandedGroups],
     })
   }, [activeChannelId, activeStreamId, expandedGroups, playlist, selectedSourceId])
-
-  useEffect(() => {
-    if (!activeStreamUrl || !activeStreamIsHls || !isApiAvailable()) {
-      return
-    }
-
-    let active = true
-
-    void probeLiveStream(activeStreamUrl)
-      .then((result) => {
-        if (active) {
-          setStreamProbe({ url: activeStreamUrl, isLive: result.isLive })
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setStreamProbe(undefined)
-        }
-      })
-
-    return () => {
-      active = false
-    }
-  }, [activeStreamIsHls, activeStreamUrl])
 
   useEffect(() => {
     if (!isTheaterMode) {
@@ -271,6 +239,8 @@ export function LivePage(): React.JSX.Element {
                 hasNextEpisode={hasNextStream}
                 hasPreviousEpisode={hasPreviousStream}
                 isTheaterMode={isTheaterMode}
+                loop={!activeStreamIsLive}
+                persistPlaybackSettings={false}
                 navigationLabels={{ next: '下一线路', previous: '上一线路' }}
                 sourceType={activeStreamIsHls ? 'hls' : undefined}
                 src={playerSrc}
@@ -534,7 +504,7 @@ function readCachedPlaylist(source: LiveSourceConfig): LivePlaylist | undefined 
       return undefined
     }
 
-    return normalizeCachedPlaylist(cachedPlaylist)
+    return normalizeLivePlaylist(cachedPlaylist)
   } catch {
     return undefined
   }
@@ -616,14 +586,14 @@ function resolveLiveSelection(playlist: LivePlaylist, cached?: LiveSelectionCach
   }
 }
 
-function normalizeCachedPlaylist(playlist: LivePlaylist): LivePlaylist {
+function normalizeLivePlaylist(playlist: LivePlaylist): LivePlaylist {
   return {
     ...playlist,
     channels: playlist.channels.map((channel) => ({
       ...channel,
       streams: channel.streams.map((stream) => ({
         ...stream,
-        isLive: stream.isLive === true,
+        isLive: stream.isLive === false ? false : !isVodStreamUrl(stream.url),
       })),
     })),
   }
@@ -659,6 +629,10 @@ function resolveLivePlaybackUrl(proxyBaseUrl: string, url: string | undefined): 
   } catch {
     return url
   }
+}
+
+function isVodStreamUrl(url: string): boolean {
+  return /\.(?:mp4|m4v|mkv|mov|avi|wmv|flv|webm)(?:$|[?#])/i.test(url)
 }
 
 function isLikelyHlsStream(url: string | undefined): boolean {

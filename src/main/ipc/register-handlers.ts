@@ -263,9 +263,6 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('live:load-playlist', (_event, url: Parameters<AppApi['live']['loadPlaylist']>[0]) =>
     livePlaylistService.load(url),
   )
-  ipcMain.handle('live:probe-stream', (_event, url: Parameters<AppApi['live']['probeStream']>[0]) =>
-    livePlaylistService.probeStream(url),
-  )
   ipcMain.handle('media:get-proxy-base-url', () => mediaProxyServer.getBaseUrl())
   ipcMain.handle('settings:get', () => settingsService.get())
   ipcMain.handle('settings:update', (_event, input: Parameters<AppApi['settings']['update']>[0]) =>

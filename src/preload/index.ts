@@ -55,7 +55,6 @@ const api: AppApi = {
   },
   live: {
     loadPlaylist: (url) => ipcRenderer.invoke('live:load-playlist', url),
-    probeStream: (url) => ipcRenderer.invoke('live:probe-stream', url),
   },
   media: {
     getProxyBaseUrl: () => ipcRenderer.invoke('media:get-proxy-base-url'),

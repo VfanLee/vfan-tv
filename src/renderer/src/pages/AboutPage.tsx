@@ -208,7 +208,7 @@ export function AboutPage(): React.JSX.Element {
           </div>
 
           <div className="grid gap-5 p-6 sm:grid-cols-2">
-            <VersionItem emphasis label="当前版本" value={currentVersion ? `v${currentVersion}` : '读取中'} />
+            <VersionItem label="当前版本" value={currentVersion ? `v${currentVersion}` : '读取中'} />
             <VersionItem label="最新版本" value={updateResult ? `v${updateResult.latestVersion}` : '尚未检查'} />
           </div>
 
@@ -327,21 +327,11 @@ function UpdateOptions({
   )
 }
 
-function VersionItem({
-  emphasis = false,
-  label,
-  value,
-}: {
-  emphasis?: boolean
-  label: string
-  value: string
-}): React.JSX.Element {
+function VersionItem({ label, value }: { label: string; value: string }): React.JSX.Element {
   return (
     <div>
       <div className="text-muted-foreground text-xs font-medium">{label}</div>
-      <div className={emphasis ? 'text-primary mt-1 text-xl font-semibold' : 'mt-1 text-base font-semibold'}>
-        {value}
-      </div>
+      <div className="mt-1 text-base font-semibold">{value}</div>
     </div>
   )
 }

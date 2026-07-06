@@ -1,9 +1,9 @@
-import type { LiveChannel, LiveChannelStream, LivePlaylist, LiveStreamProbeResult } from '@shared/types'
+import type { LiveChannel, LiveChannelStream, LivePlaylist } from '@shared/types'
 import type { HttpClient } from './http-client'
 
 const MAX_PLAYLIST_SIZE = 10 * 1024 * 1024
-const MAX_STREAM_PLAYLIST_SIZE = 2 * 1024 * 1024
 const DEFAULT_GROUP = '未分组'
+const VOD_STREAM_URL_PATTERN = /\.(?:mp4|m4v|mkv|mov|avi|wmv|flv|webm)(?:$|[?#])/i
 
 interface ParsedExtInf {
   title: string
@@ -11,7 +11,6 @@ interface ParsedExtInf {
   logo?: string
   tvgName?: string
   epgUrl?: string
-  isLive: boolean
 }
 
 export class LivePlaylistService {
@@ -30,36 +29,6 @@ export class LivePlaylistService {
     })
 
     return parseLivePlaylist(content, parsedUrl.toString())
-  }
-
-  async probeStream(url: string): Promise<LiveStreamProbeResult> {
-    const parsedUrl = new URL(url)
-
-    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-      return { isLive: false }
-    }
-
-    const isLive = await this.probeHlsPlaylist(parsedUrl.toString(), 0)
-    return { isLive }
-  }
-
-  private async probeHlsPlaylist(url: string, depth: number): Promise<boolean> {
-    const content = await this.httpClient.get<string>(url, {
-      responseType: 'text',
-      maxContentLength: MAX_STREAM_PLAYLIST_SIZE,
-    })
-    const lines = parseM3uLines(content)
-
-    if (!lines[0]?.startsWith('#EXTM3U')) {
-      return false
-    }
-
-    const variantUrl = depth === 0 ? findFirstVariantPlaylistUrl(lines, url) : undefined
-    if (variantUrl) {
-      return this.probeHlsPlaylist(variantUrl, depth + 1)
-    }
-
-    return !lines.some((line) => line === '#EXT-X-ENDLIST')
   }
 }
 
@@ -112,17 +81,6 @@ function parseM3uLines(content: string): string[] {
     .filter(Boolean)
 }
 
-function findFirstVariantPlaylistUrl(lines: string[], baseUrl: string): string | undefined {
-  for (let index = 0; index < lines.length; index += 1) {
-    if (lines[index].startsWith('#EXT-X-STREAM-INF')) {
-      const variantLine = lines.slice(index + 1).find((line) => !line.startsWith('#'))
-      return variantLine ? new URL(variantLine, baseUrl).toString() : undefined
-    }
-  }
-
-  return undefined
-}
-
 function parseExtInf(line: string): ParsedExtInf {
   const commaIndex = line.indexOf(',')
   const metadata = commaIndex >= 0 ? line.slice(0, commaIndex) : line
@@ -130,7 +88,6 @@ function parseExtInf(line: string): ParsedExtInf {
   const attributes = parseAttributes(metadata)
   const tvgName = attributes['tvg-name']?.trim()
   const title = displayName || tvgName || '未命名频道'
-  const duration = parseExtInfDuration(metadata)
 
   return {
     title,
@@ -138,18 +95,7 @@ function parseExtInf(line: string): ParsedExtInf {
     logo: attributes['tvg-logo']?.trim() || undefined,
     tvgName: tvgName || undefined,
     epgUrl: attributes['epg-url']?.trim() || undefined,
-    isLive: duration === undefined || duration <= 0,
   }
-}
-
-function parseExtInfDuration(metadata: string): number | undefined {
-  const match = /^#EXTINF:([-+]?\d+(?:\.\d+)?)/i.exec(metadata)
-  if (!match) {
-    return undefined
-  }
-
-  const duration = Number.parseFloat(match[1])
-  return Number.isFinite(duration) ? duration : undefined
 }
 
 function parseAttributes(input: string): Record<string, string> {
@@ -170,7 +116,7 @@ function addStream(channelMap: Map<string, LiveChannel>, info: ParsedExtInf, url
     id: createStableId(`${info.group}:${info.title}:${url}`),
     name: `线路 ${((channelMap.get(channelId)?.streams.length ?? 0) + 1).toString()}`,
     url,
-    isLive: info.isLive,
+    isLive: !isVodStreamUrl(url),
   }
   const current = channelMap.get(channelId)
 
@@ -190,6 +136,10 @@ function addStream(channelMap: Map<string, LiveChannel>, info: ParsedExtInf, url
     epgUrl: info.epgUrl,
     streams: [stream],
   })
+}
+
+function isVodStreamUrl(url: string): boolean {
+  return VOD_STREAM_URL_PATTERN.test(url)
 }
 
 function createStableId(input: string): string {

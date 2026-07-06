@@ -18,7 +18,6 @@ import type {
   LiveSourceImportPreview,
   LiveSourceImportResult,
   LiveSourceInput,
-  LiveStreamProbeResult,
 } from './live'
 import type { RecentPlayInput, RecentPlayItem } from './recent'
 import type { SearchEvent } from './search'
@@ -111,7 +110,6 @@ export interface AppApi {
   }
   live: {
     loadPlaylist: (url: string) => Promise<LivePlaylist>
-    probeStream: (url: string) => Promise<LiveStreamProbeResult>
   }
   media: {
     getProxyBaseUrl: () => Promise<string>

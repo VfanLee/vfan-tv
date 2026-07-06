@@ -63,11 +63,7 @@ export interface LiveChannelStream {
   id: string
   name: string
   url: string
-  /** M3U #EXTINF 时长缺省或小于等于 0 时视为真直播，否则按点播处理 */
-  isLive: boolean
-}
-
-export interface LiveStreamProbeResult {
+  /** 明显点播文件（如 .mp4/.mkv/.flv/.webm）按假直播处理 */
   isLive: boolean
 }
 

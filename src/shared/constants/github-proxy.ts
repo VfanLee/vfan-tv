@@ -7,9 +7,10 @@ export interface GitHubProxyRoute {
 }
 
 export const CUSTOM_GITHUB_PROXY_ROUTE_ID = 'custom'
+export const DEFAULT_GITHUB_PROXY_ROUTE_ID: GitHubProxyRouteId = 'gh-proxy'
 
 export const GITHUB_PROXY_ROUTES: readonly GitHubProxyRoute[] = [
-  { id: 'direct', label: '默认（GitHub 直连）', prefix: '' },
+  { id: 'direct', label: 'GitHub 直连', prefix: '' },
   { id: 'gh-proxy', label: 'gh-proxy', prefix: 'https://gh-proxy.org/' },
   { id: 'cloudflare-v4', label: 'Cloudflare (v4)', prefix: 'https://v4.gh-proxy.org/' },
   { id: 'cloudflare-v46', label: 'Cloudflare (v4/v6)', prefix: 'https://v6.gh-proxy.org/' },

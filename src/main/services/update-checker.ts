@@ -9,7 +9,7 @@ const REQUEST_HEADERS = { 'User-Agent': 'vfan-tv-update-checker' }
 const REQUEST_TIMEOUT_MS = 10_000
 const DEFAULT_GITHUB_PROXY_SETTINGS: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'> = {
   githubProxyCustomPrefix: '',
-  githubProxyRoute: 'direct',
+  githubProxyRoute: 'gh-proxy',
 }
 
 interface LatestRelease {
