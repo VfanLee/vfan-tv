@@ -30,10 +30,10 @@
 
 前往 [**Releases**](https://github.com/vfanlee/vfan-tv/releases/latest) 下载对应平台的安装包：
 
-| 平台       | 架构        | 说明           |
-| ---------- | ----------- | -------------- |
-| 🪟 Windows | x64 / arm64 | 安装包、便携版 |
-| 🍎 macOS   | arm64       | `.dmg` 安装包  |
+| 平台       | 架构        | 说明          |
+| ---------- | ----------- | ------------- |
+| 🪟 Windows | x64 / arm64 | 安装包        |
+| 🍎 macOS   | arm64       | `.dmg` 安装包 |
 
 ## 🧰 技术栈
 
