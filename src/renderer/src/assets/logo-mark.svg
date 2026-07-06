@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 512 512">
+<svg xmlns="http://www.w3.org/2000/svg" fill="none" width="512" height="512" viewBox="77 90 358 358">
   <defs>
     <linearGradient id="sail" x1="164" x2="363" y1="132" y2="362" gradientUnits="userSpaceOnUse">
       <stop stop-color="#5ac8fa" />
@@ -10,7 +10,6 @@
       <stop offset="1" stop-color="#5ac8fa" />
     </linearGradient>
   </defs>
-  <rect width="512" height="512" rx="116" fill="#ffffff" />
   <rect x="91" y="105" width="330" height="265" rx="76" stroke="#0a84ff" stroke-width="28" />
   <path d="M254 139v190M254 139c56 31 94 83 112 154-39 17-76 19-112 7V139Z" fill="url(#sail)" />
   <path d="M225 202c-35 32-58 73-68 123 25 9 48 8 68-2V202Z" fill="url(#smallSail)" />
