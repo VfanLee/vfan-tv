@@ -46,9 +46,7 @@ jobs:
             artifact: release-windows
             files: |
               dist/*-x64-setup.exe
-              dist/*-x64-portable.exe
               dist/*-arm64-setup.exe
-              dist/*-arm64-portable.exe
 
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
