@@ -1,5 +1,6 @@
 ; Must match USER_DATA_DIR_NAME in src/shared/constants/app-brand.ts
 !define USER_DATA_DIR "vfan-tv"
+!define PRODUCT_DATA_DIR "Vfan TV"
 
 !ifdef BUILD_UNINSTALLER
 
@@ -10,7 +11,7 @@ Var DeleteUserDataCheckbox
 Var DeleteUserDataChecked
 
 !macro customUnInit
-  StrCpy $DeleteUserDataChecked "0"
+  StrCpy $DeleteUserDataChecked "1"
 !macroend
 
 ; Replaces default uninstall welcome page with a checkbox (no MessageBox).
@@ -49,7 +50,17 @@ FunctionEnd
     ${If} $DeleteUserDataChecked == "1"
       SetShellVarContext current
       RMDir /r "$APPDATA\${USER_DATA_DIR}"
+      RMDir /r "$APPDATA\${PRODUCT_DATA_DIR}"
+      RMDir /r "$APPDATA\${USER_DATA_DIR}-updater"
+      RMDir /r "$APPDATA\${PRODUCT_DATA_DIR}-updater"
+      RMDir /r "$LOCALAPPDATA\${USER_DATA_DIR}"
+      RMDir /r "$LOCALAPPDATA\${PRODUCT_DATA_DIR}"
+      RMDir /r "$LOCALAPPDATA\${USER_DATA_DIR}-updater"
+      RMDir /r "$LOCALAPPDATA\${PRODUCT_DATA_DIR}-updater"
+      Delete "$LOCALAPPDATA\CrashDumps\${USER_DATA_DIR}.exe.*.dmp"
+      Delete "$LOCALAPPDATA\CrashDumps\${PRODUCT_DATA_DIR}.exe.*.dmp"
     ${EndIf}
+    RMDir "$INSTDIR"
   ${endIf}
 !macroend
 
