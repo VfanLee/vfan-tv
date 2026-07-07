@@ -5,11 +5,12 @@ import type { LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import type { RecentPlayItem, RecommendationItem } from '@shared/types'
 import { ConfirmDialog, MediaPoster, PosterCardSkeleton, PosterPlayOverlay } from '@renderer/components'
-import { categorySections, listRecentPlays, removeRecentPlay } from '@renderer/services/api'
+import { useRecentPlays } from '@renderer/hooks'
+import { categorySections } from '@renderer/services/api'
 import { recentPlayToVodSearchResult } from '@renderer/services/playback'
 import { useAppDataStore } from '@renderer/stores/app-data'
 import { useSearchContextStore } from '@renderer/stores/search-context'
-import { categoryIcons } from '@renderer/lib/category-icons'
+import { categoryIcons } from '@renderer/utils/category-icons'
 
 export function HomePage(): React.JSX.Element {
   const navigate = useNavigate()
@@ -17,29 +18,12 @@ export function HomePage(): React.JSX.Element {
   const homeData = useAppDataStore((state) => state.homeData)
   const isLoading = useAppDataStore((state) => !state.homeInitialized && !state.homeErrorMessage)
   const loadHome = useAppDataStore((state) => state.loadHome)
-  const [recentPlays, setRecentPlays] = useState<RecentPlayItem[]>([])
-  const [recentLoading, setRecentLoading] = useState(true)
+  const { recentPlays, isLoading: recentLoading, deleteRecentPlay } = useRecentPlays({ limit: 20 })
   const [pendingDeleteRecent, setPendingDeleteRecent] = useState<RecentPlayItem>()
 
   useEffect(() => {
     void loadHome()
   }, [loadHome])
-
-  useEffect(() => {
-    let active = true
-
-    void listRecentPlays(20)
-      .then((items) => {
-        if (active) setRecentPlays(items)
-      })
-      .finally(() => {
-        if (active) setRecentLoading(false)
-      })
-
-    return () => {
-      active = false
-    }
-  }, [])
 
   const recommendationsByCategory = useMemo(() => {
     return categorySections.reduce(
@@ -53,8 +37,7 @@ export function HomePage(): React.JSX.Element {
 
   const handleDeleteRecent = async (item: RecentPlayItem): Promise<void> => {
     try {
-      await removeRecentPlay(item.title)
-      setRecentPlays((current) => current.filter((recent) => recent.title !== item.title))
+      await deleteRecentPlay(item)
       toast.success('已删除播放记录')
     } catch (error) {
       toast.error('删除失败', {

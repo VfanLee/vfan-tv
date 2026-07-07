@@ -4,7 +4,7 @@ import { ArrowLeft, ArrowUpDown, CheckCircle2, Heart, ListVideo, Loader2, Radio,
 import type { FavoriteInput, PlayLine, RecentPlayInput, VodSearchResult } from '@shared/types'
 import { parseVodPlayUrl } from '@shared/utils/vod-play-url'
 import { BasicPlayer, MediaPoster } from '@renderer/components'
-import { cn } from '@renderer/lib/utils'
+import { cn } from '@renderer/utils/cn'
 import {
   addFavorite,
   cancelVodSearch,

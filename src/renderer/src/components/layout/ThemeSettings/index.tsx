@@ -1,8 +1,8 @@
 import { Check, Monitor, Moon, Sun } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
-import { cn } from '@renderer/lib/utils'
+import { cn } from '@renderer/utils/cn'
 import { useThemeStore, type ThemeMode } from '@renderer/stores/theme'
-import { SettingsCard } from './SettingsCard'
+import { SettingsCard } from '../SettingsCard'
 
 const themeItems: Array<{ mode: ThemeMode; label: string; description: string; icon: LucideIcon }> = [
   { mode: 'light', label: '明亮', description: '始终使用浅色界面', icon: Sun },

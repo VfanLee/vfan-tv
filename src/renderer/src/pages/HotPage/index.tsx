@@ -3,9 +3,9 @@ import { useNavigate, useParams, useSearchParams } from 'react-router'
 import type { HotRecommendationType, RecommendationItem } from '@shared/types'
 import { MediaPoster, PosterCardSkeleton } from '@renderer/components'
 import { categorySections, getHotCacheKey, getHotCategorySection } from '@renderer/services/api'
-import { cn } from '@renderer/lib/utils'
+import { cn } from '@renderer/utils/cn'
 import { useAppDataStore } from '@renderer/stores/app-data'
-import { categoryIcons } from '@renderer/lib/category-icons'
+import { categoryIcons } from '@renderer/utils/category-icons'
 
 export function HotPage(): React.JSX.Element {
   const navigate = useNavigate()

@@ -8,7 +8,7 @@ import {
 } from '@shared/constants'
 import type { LiveChannel, LivePlaylist, LiveSourceConfig } from '@shared/types'
 import { BasicPlayer } from '@renderer/components'
-import { cn } from '@renderer/lib/utils'
+import { cn } from '@renderer/utils/cn'
 import { getMediaProxyBaseUrl, isApiAvailable, listLiveSources, loadLivePlaylist } from '@renderer/services/api'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'

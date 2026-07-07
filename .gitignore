@@ -30,9 +30,6 @@ lerna-debug.log*
 *.sqlite
 *.sqlite-*
 
-# Local agent instructions
-AGENTS.md
-
 # OS / editor noise
 .DS_Store
 Thumbs.db

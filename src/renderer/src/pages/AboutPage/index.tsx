@@ -24,8 +24,8 @@ import {
   isApiAvailable,
   onUpdateEvent,
 } from '@renderer/services/api'
-import { openExternalUrl } from '@renderer/lib/open-external'
-import { cn } from '@renderer/lib/utils'
+import { openExternalUrl } from '@renderer/utils/open-external'
+import { cn } from '@renderer/utils/cn'
 
 const REPOSITORY_URL = 'https://github.com/vfanlee/vfan-tv'
 const AUTHOR_URL = 'https://github.com/vfanlee'

@@ -1,44 +1,22 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { Clock3, Search, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { RecentPlayItem } from '@shared/types'
 import { ConfirmDialog, MediaPoster, PosterPlayOverlay } from '@renderer/components'
-import { listRecentPlays, removeRecentPlay } from '@renderer/services/api'
+import { useRecentPlays } from '@renderer/hooks'
 import { recentPlayToVodSearchResult } from '@renderer/services/playback'
 import { useSearchContextStore } from '@renderer/stores/search-context'
 
 export function RecentPage(): React.JSX.Element {
   const navigate = useNavigate()
   const setContext = useSearchContextStore((state) => state.setContext)
-  const [recentPlays, setRecentPlays] = useState<RecentPlayItem[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const { recentPlays, isLoading, deleteRecentPlay } = useRecentPlays()
   const [pendingDeleteItem, setPendingDeleteItem] = useState<RecentPlayItem>()
-
-  useEffect(() => {
-    let active = true
-
-    void listRecentPlays()
-      .then((items) => {
-        if (active) {
-          setRecentPlays(items)
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setIsLoading(false)
-        }
-      })
-
-    return () => {
-      active = false
-    }
-  }, [])
 
   const handleDelete = async (item: RecentPlayItem): Promise<void> => {
     try {
-      await removeRecentPlay(item.title)
-      setRecentPlays((current) => current.filter((recentItem) => recentItem.title !== item.title))
+      await deleteRecentPlay(item)
       toast.success('已删除播放记录')
     } catch (error) {
       toast.error('删除失败', {

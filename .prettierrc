@@ -1,8 +1,9 @@
 {
   "plugins": ["prettier-plugin-tailwindcss", "prettier-plugin-packagejson"],
-  "htmlWhitespaceSensitivity": "ignore",
   "printWidth": 120,
-  "quoteProps": "consistent",
   "semi": false,
-  "singleQuote": true
+  "singleQuote": true,
+  "quoteProps": "consistent",
+  "trailingComma": "all",
+  "htmlWhitespaceSensitivity": "ignore"
 }

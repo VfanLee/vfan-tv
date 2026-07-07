@@ -4,7 +4,7 @@ import { AlertCircle, CheckCircle2, ChevronRight, Clock3, Loader2, MinusCircle, 
 import { SEARCH_HISTORY_STORAGE_KEY, SEARCH_VIEW_MODE_STORAGE_KEY } from '@shared/constants'
 import type { SearchEvent, SearchSourceStatus, VodSearchResult } from '@shared/types'
 import { MediaPoster } from '@renderer/components'
-import { cn } from '@renderer/lib/utils'
+import { cn } from '@renderer/utils/cn'
 import { cancelVodSearch, isApiAvailable, listSources, onVodSearchEvent, searchVod } from '@renderer/services/api'
 import { useSearchContextStore } from '@renderer/stores/search-context'
 

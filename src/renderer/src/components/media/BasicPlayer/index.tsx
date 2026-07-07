@@ -5,9 +5,9 @@ import artplayerPluginAudioTrack from 'artplayer-plugin-audio-track'
 import artplayerPluginHlsControl from 'artplayer-plugin-hls-control'
 import Hls, { type ErrorData } from 'hls.js'
 import { HLS_AD_FILTER_STORAGE_KEY, PLAYER_AUTO_NEXT_STORAGE_KEY, PLAYER_LOOP_STORAGE_KEY } from '@shared/constants'
-import { cn } from '@renderer/lib/utils'
-import { createFilteredHlsLoader } from '@renderer/lib/hls-playlist-filter'
-import { artplayerSettingIcons, artplayerSwitchIcons } from '@renderer/lib/artplayer-icons'
+import { cn } from '@renderer/utils/cn'
+import { createFilteredHlsLoader } from '@renderer/utils/hls-playlist-filter'
+import { artplayerSettingIcons, artplayerSwitchIcons } from '@renderer/utils/artplayer-icons'
 
 export type PlayerVariant = 'vod' | 'live'
 
