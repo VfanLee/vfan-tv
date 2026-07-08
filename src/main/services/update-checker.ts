@@ -3,6 +3,7 @@ import { resolveGitHubUrl } from '@shared/constants'
 import type { AppSettings, UpdateCheckResult } from '@shared/types'
 
 const REPOSITORY_URL = 'https://github.com/vfanlee/vfan-tv'
+const LATEST_RELEASE_API_PATH = 'https://api.github.com/repos/vfanlee/vfan-tv/releases/latest'
 const RELEASES_FEED_PATH = `${REPOSITORY_URL}/releases.atom`
 const LATEST_RELEASE_PATH = `${REPOSITORY_URL}/releases/latest`
 const REQUEST_HEADERS = { 'User-Agent': 'vfan-tv-update-checker' }
@@ -13,6 +14,7 @@ const DEFAULT_GITHUB_PROXY_SETTINGS: Pick<AppSettings, 'githubProxyCustomPrefix'
 }
 
 interface LatestRelease {
+  assets?: DownloadAsset[]
   name: string
   notes: string
   tag: string
@@ -22,6 +24,19 @@ interface LatestRelease {
 interface DownloadAsset {
   name: string
   url: string
+}
+
+interface GitHubReleaseAssetPayload {
+  browser_download_url?: unknown
+  name?: unknown
+}
+
+interface GitHubReleasePayload {
+  assets?: unknown
+  body?: unknown
+  html_url?: unknown
+  name?: unknown
+  tag_name?: unknown
 }
 
 function parseVersion(version: string): [number, number, number] {
@@ -56,6 +71,59 @@ function getReleaseNotes(content: Element | undefined): string {
 
   const document = new DOMParser().parseFromString(html, 'text/html')
   return document.documentElement.textContent?.trim() || '此版本暂无更新说明。'
+}
+
+function normalizeReleaseText(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function parseReleaseAssets(assets: unknown): DownloadAsset[] {
+  if (!Array.isArray(assets)) return []
+
+  return assets.flatMap((asset: GitHubReleaseAssetPayload) => {
+    const name = normalizeReleaseText(asset.name)
+    const url = normalizeReleaseText(asset.browser_download_url)
+
+    return name && url ? [{ name, url }] : []
+  })
+}
+
+function parseLatestReleasePayload(payload: GitHubReleasePayload): LatestRelease {
+  const tag = normalizeReleaseText(payload.tag_name)
+
+  if (!tag) {
+    throw new Error('无法识别 GitHub Release API 中的版本号')
+  }
+
+  const releaseUrl = normalizeReleaseText(payload.html_url) || `${REPOSITORY_URL}/releases/tag/${tag}`
+  const notes = normalizeReleaseText(payload.body)
+
+  return {
+    assets: parseReleaseAssets(payload.assets),
+    name: normalizeReleaseText(payload.name) || `Vfan TV ${tag}`,
+    notes: notes || '此版本暂无更新说明。',
+    tag,
+    url: releaseUrl,
+  }
+}
+
+async function fetchLatestReleaseFromApi(
+  settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'>,
+): Promise<LatestRelease> {
+  const response = await fetch(resolveGitHubUrl(LATEST_RELEASE_API_PATH, settings), {
+    headers: {
+      ...REQUEST_HEADERS,
+      'Accept': 'application/vnd.github+json',
+      'X-GitHub-Api-Version': '2022-11-28',
+    },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  })
+
+  if (!response.ok) {
+    throw new Error(`GitHub Release API 请求失败（HTTP ${response.status}）`)
+  }
+
+  return parseLatestReleasePayload((await response.json()) as GitHubReleasePayload)
 }
 
 function parseReleaseFeed(xml: string): LatestRelease {
@@ -129,9 +197,13 @@ async function fetchLatestReleaseViaRoute(
   settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'>,
 ): Promise<LatestRelease> {
   try {
-    return await fetchLatestReleaseFromFeed(settings)
+    return await fetchLatestReleaseFromApi(settings)
   } catch {
-    return fetchLatestReleaseFromRedirect(settings)
+    try {
+      return await fetchLatestReleaseFromFeed(settings)
+    } catch {
+      return fetchLatestReleaseFromRedirect(settings)
+    }
   }
 }
 
@@ -156,13 +228,18 @@ function getAssetNames(version: string, platform: NodeJS.Platform, arch: string)
 async function assetExists(url: string): Promise<boolean> {
   try {
     const response = await fetch(url, {
-      headers: REQUEST_HEADERS,
-      method: 'HEAD',
+      headers: {
+        ...REQUEST_HEADERS,
+        Range: 'bytes=0-0',
+      },
+      method: 'GET',
       redirect: 'manual',
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     })
 
-    return response.ok || response.status === 302
+    await response.body?.cancel()
+
+    return response.ok || (response.status >= 300 && response.status < 400)
   } catch {
     return false
   }
@@ -174,10 +251,16 @@ async function resolveDownloadAsset(
   platform: NodeJS.Platform,
   arch: string,
   settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'>,
+  releaseAssets: DownloadAsset[] = [],
 ): Promise<DownloadAsset | undefined> {
   const assetNames = getAssetNames(version, platform, arch)
 
   for (const name of assetNames) {
+    const releaseAsset = releaseAssets.find((asset) => asset.name === name)
+    if (releaseAsset) {
+      return releaseAsset
+    }
+
     const canonicalUrl = `${REPOSITORY_URL}/releases/download/${tag}/${name}`
     const exists = await assetExists(resolveGitHubUrl(canonicalUrl, settings))
     if (exists) {
@@ -196,7 +279,7 @@ export async function checkLatestRelease(
 ): Promise<UpdateCheckResult> {
   const release = await fetchLatestRelease(settings)
   const latestVersion = release.tag.replace(/^v/, '')
-  const downloadAsset = await resolveDownloadAsset(release.tag, latestVersion, platform, arch, settings)
+  const downloadAsset = await resolveDownloadAsset(release.tag, latestVersion, platform, arch, settings, release.assets)
   const updateAvailable = isNewerVersion(latestVersion, currentVersion)
 
   return {

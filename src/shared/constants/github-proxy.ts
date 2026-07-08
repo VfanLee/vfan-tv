@@ -17,7 +17,7 @@ export const GITHUB_PROXY_ROUTES: readonly GitHubProxyRoute[] = [
   { id: 'fastly-v4', label: 'Fastly (v4)', prefix: 'https://cdn.gh-proxy.org/' },
 ] as const
 
-export const GITHUB_PROXY_TEST_URL = 'https://github.com/vfanlee/vfan-tv'
+export const GITHUB_PROXY_TEST_URL = 'https://github.com/vfanlee/vfan-tv/archive/refs/heads/main.zip'
 
 export function normalizeGitHubProxyPrefix(prefix: string): string {
   const trimmed = prefix.trim()
@@ -52,7 +52,12 @@ export function resolveGitHubUrl(
 export function isGitHubUrl(url: string): boolean {
   try {
     const hostname = new URL(url).hostname.toLowerCase()
-    return hostname === 'github.com' || hostname.endsWith('.github.com') || hostname === 'raw.githubusercontent.com'
+    return (
+      hostname === 'api.github.com' ||
+      hostname === 'github.com' ||
+      hostname.endsWith('.github.com') ||
+      hostname === 'raw.githubusercontent.com'
+    )
   } catch {
     return false
   }

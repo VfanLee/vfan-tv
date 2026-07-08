@@ -588,7 +588,7 @@ export function SettingsPage(): React.JSX.Element {
       <div className="grid gap-5">
         <ThemeSettings />
 
-        <GitHubProxySettingsCard
+        <NetworkSettingsCard
           apiAvailable={apiAvailable}
           isSaving={isSavingGitHubProxy}
           route={githubProxyRoute}
@@ -887,7 +887,7 @@ function SourceTableCard({
   )
 }
 
-function GitHubProxySettingsCard({
+function NetworkSettingsCard({
   apiAvailable,
   isSaving,
   route,
@@ -913,47 +913,51 @@ function GitHubProxySettingsCard({
   const selectedRouteLabel = selectedRoute?.label ?? getGitHubProxyRouteLabel(route)
 
   return (
-    <SettingsCard
-      description="统一控制应用内 GitHub 链接、更新检查与更新下载。"
-      headerActions={
-        <Button disabled={!apiAvailable || isSaving || isTestingAll} variant="outline" onClick={onTestAll}>
-          {isTestingAll ? <RefreshCw className="animate-spin" /> : <Gauge />}
-          {isTestingAll ? '测速中' : '自动优选'}
-        </Button>
-      }
-      title="网络 - GitHub 代理"
-    >
-      <div className="flex flex-col gap-4 px-5 py-5">
-        <div className="grid items-center gap-x-6 gap-y-3 lg:grid-cols-[minmax(0,1fr)_auto]">
-          <Select
-            disabled={!apiAvailable || isSaving || isTestingAll}
-            value={route}
-            onValueChange={(value) => onRouteChange(value as GitHubProxyRouteId)}
-          >
-            <SelectTrigger className="bg-background w-full">
-              <SelectValue placeholder="选择 GitHub 代理线路" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectGroup>
-                {GITHUB_PROXY_ROUTES.map((item) => (
-                  <SelectItem key={item.id} value={item.id}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectGroup>
-            </SelectContent>
-          </Select>
-          <ProxySpeedAction
-            disabled={!apiAvailable || isSaving || isTestingAll}
-            result={speedResults[route]}
-            testing={testingRouteId === route}
-            onTest={() => onTestSingle(route)}
-          />
-        </div>
+    <SettingsCard description="管理应用内网络访问、代理与连接探测。" title="网络">
+      <div className="flex flex-col gap-5 px-5 py-5">
+        <section className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 className="text-foreground text-sm font-semibold">GitHub 代理</h3>
+              <p className="text-muted-foreground mt-1 text-sm">用于 GitHub 链接、更新检查与更新下载。</p>
+            </div>
+            <Button disabled={!apiAvailable || isSaving || isTestingAll} variant="outline" onClick={onTestAll}>
+              {isTestingAll ? <RefreshCw className="animate-spin" /> : <Gauge />}
+              {isTestingAll ? '测速中' : '自动优选'}
+            </Button>
+          </div>
 
-        <Alert className="border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-          <AlertDescription className="font-medium text-current">当前线路：{selectedRouteLabel}</AlertDescription>
-        </Alert>
+          <div className="grid items-center gap-x-6 gap-y-3 lg:grid-cols-[minmax(0,1fr)_auto]">
+            <Select
+              disabled={!apiAvailable || isSaving || isTestingAll}
+              value={route}
+              onValueChange={(value) => onRouteChange(value as GitHubProxyRouteId)}
+            >
+              <SelectTrigger className="bg-background w-full">
+                <SelectValue placeholder="选择 GitHub 代理线路" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  {GITHUB_PROXY_ROUTES.map((item) => (
+                    <SelectItem key={item.id} value={item.id}>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
+            <ProxySpeedAction
+              disabled={!apiAvailable || isSaving || isTestingAll}
+              result={speedResults[route]}
+              testing={testingRouteId === route}
+              onTest={() => onTestSingle(route)}
+            />
+          </div>
+
+          <Alert className="border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
+            <AlertDescription className="font-medium text-current">当前线路：{selectedRouteLabel}</AlertDescription>
+          </Alert>
+        </section>
       </div>
     </SettingsCard>
   )
