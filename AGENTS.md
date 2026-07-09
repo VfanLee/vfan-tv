@@ -8,7 +8,7 @@
 
 - Node.js `>=24 <25`、pnpm `11.7.0`
 - TypeScript `^5.9.3`
-- Electron `^39.2.6`、electron-vite `^5.0.0`、electron-builder `^26.15.3`
+- Electron `^43.1.0`、electron-vite `^5.0.0`、electron-builder `^26.15.3`
 - React `^19.2.1`、React Router `^7.17.0`、Zustand `^5.0.14`
 - Tailwind CSS `^4.3.0`、shadcn `^4.12.0`、radix-ui `^1.6.0`
 - SQLite：better-sqlite3 `^12.10.0`、Drizzle ORM `^0.45.2`、drizzle-kit `^0.31.10`

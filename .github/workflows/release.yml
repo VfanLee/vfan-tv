@@ -41,17 +41,27 @@ jobs:
         include:
           - platform: macOS arm64
             os: macos-14
-            args: --mac
-            artifact: release-macos
+            script: build:mac:arm64
+            artifact: release-macos-arm64
             files: |
               dist/*-arm64.dmg
-          - platform: Windows x64/arm64
+              dist/*.dmg.blockmap
+              dist/latest-mac.yml
+          - platform: Windows x64
             os: windows-2022
-            args: --win
-            artifact: release-windows
+            script: build:win:x64
+            artifact: release-windows-x64
             files: |
               dist/*-x64-setup.exe
+              dist/*-x64-setup.exe.blockmap
+              dist/latest.yml
+          - platform: Windows arm64
+            os: windows-2022
+            script: build:win:arm64
+            artifact: release-windows-arm64
+            files: |
               dist/*-arm64-setup.exe
+              dist/*-arm64-setup.exe.blockmap
 
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
@@ -74,13 +84,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build application
-        run: pnpm run build:app
+      - name: Build Electron app
+        run: pnpm run ${{ matrix.script }}
 
-      - name: Build/release Electron app
-        run: pnpm exec electron-builder ${{ matrix.args }} --publish never
-
-      - name: Upload installers
+      - name: Upload installers and update metadata
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.artifact }}

@@ -278,7 +278,7 @@ export function SettingsPage(): React.JSX.Element {
     try {
       const result = await exportSourcesToFile()
       if (result.cancelled) return
-      toast.success('导出完成', { description: `已导出 ${result.count} 个数据源` })
+      toast.success('导出完成', { description: `已导出 ${result.count} 个点播源` })
     } catch (error) {
       toast.error('导出失败', { description: error instanceof Error ? error.message : String(error) })
     }
@@ -303,7 +303,7 @@ export function SettingsPage(): React.JSX.Element {
     try {
       await clearSources()
       applySources([])
-      toast.success('已清空全部数据源')
+      toast.success('已清空全部点播源')
     } catch (error) {
       toast.error('清空失败', { description: error instanceof Error ? error.message : String(error) })
     } finally {
@@ -388,7 +388,7 @@ export function SettingsPage(): React.JSX.Element {
 
     try {
       await deleteSource(source.id)
-      toast.success('已删除数据源')
+      toast.success('已删除点播源')
       await refreshSources()
     } catch (error) {
       toast.error('删除失败', { description: error instanceof Error ? error.message : String(error) })
@@ -485,9 +485,9 @@ export function SettingsPage(): React.JSX.Element {
     setIsBatchUpdating(false)
 
     if (failedCount > 0) {
-      toast.error('部分状态更新失败', { description: `${failedCount} 个数据源未能更新，请稍后重试。` })
+      toast.error('部分状态更新失败', { description: `${failedCount} 个点播源未能更新，请稍后重试。` })
     } else {
-      toast.success(`已${enabled ? '开启' : '关闭'} ${selectedSources.length} 个数据源`)
+      toast.success(`已${enabled ? '开启' : '关闭'} ${selectedSources.length} 个点播源`)
     }
   }
 
@@ -599,7 +599,7 @@ export function SettingsPage(): React.JSX.Element {
           onTestSingle={(routeId) => void testSingleGitHubProxy(routeId)}
         />
 
-        <SettingsCard description="同步订阅源后会更新影视源、直播源。" title="订阅源管理">
+        <SettingsCard description="同步订阅源后会更新点播源、直播源。" title="订阅源管理">
           <div className="flex flex-col gap-3 px-5 py-5 sm:flex-row sm:items-end">
             <label className="min-w-0 flex-1">
               <span className="text-foreground mb-2 block text-sm font-medium">订阅地址</span>
@@ -818,17 +818,17 @@ function SourceTableCard({
 }): React.JSX.Element {
   return (
     <SettingsCard
-      description="管理应用的影视源。"
+      description="管理应用的点播源。"
       headerActions={
         <div className="flex flex-wrap gap-2">
           <Badge>{sources.length} 个源</Badge>
           <Badge className="border-primary bg-accent text-primary">{enabledCount} 个启用</Badge>
         </div>
       }
-      title="影视源"
+      title="点播源"
     >
       <SourceToolbar
-        addText="添加数据源"
+        addText="添加点播源"
         apiAvailable={apiAvailable}
         clearText={isClearing ? '清空中' : '清空'}
         hasItems={sources.length > 0}
@@ -1182,7 +1182,7 @@ function TableHeader({
   return (
     <div className="border-border bg-muted text-muted-foreground sticky top-0 z-10 grid grid-cols-[32px_40px_112px_80px_1.1fr_2fr_132px] items-center border-b px-5 py-3 font-medium">
       <div aria-hidden="true" />
-      <SelectionCheckbox checked={allSelected} label={allSelected ? '取消全选' : '全选数据源'} onChange={onToggleAll} />
+      <SelectionCheckbox checked={allSelected} label={allSelected ? '取消全选' : '全选点播源'} onChange={onToggleAll} />
       <div>状态</div>
       <div>来源</div>
       <div>名称</div>
@@ -1315,7 +1315,7 @@ function SourceDialog({
       : emptySourceInput,
   )
   const [isSaving, setIsSaving] = useState(false)
-  const title = dialog.mode === 'create' ? '添加数据源' : '编辑数据源'
+  const title = dialog.mode === 'create' ? '添加点播源' : '编辑点播源'
 
   const save = async (): Promise<void> => {
     if (!isApiAvailable()) return
@@ -1329,7 +1329,7 @@ function SourceDialog({
         await updateSource(dialog.source.id, form)
       }
 
-      toast.success(dialog.mode === 'create' ? '数据源已添加' : '数据源已更新')
+      toast.success(dialog.mode === 'create' ? '点播源已添加' : '点播源已更新')
       await onSaved()
     } catch (error) {
       toast.error('保存失败', { description: error instanceof Error ? error.message : String(error) })
@@ -1605,17 +1605,17 @@ function rowClassName(draggedId: string | undefined, dragOverId: string | undefi
 }
 
 function getConfirmTitle(confirmState: ConfirmState): string {
-  if (confirmState.type === 'clearSources') return '清空数据源'
+  if (confirmState.type === 'clearSources') return '清空点播源'
   if (confirmState.type === 'clearLiveSources') return '清空直播源'
   if (confirmState.type === 'initializeAppData') return '初始化应用数据'
   if (confirmState.type === 'importAppData') return '导入应用数据'
-  if (confirmState.type === 'deleteSource') return '删除数据源'
+  if (confirmState.type === 'deleteSource') return '删除点播源'
   return '删除直播源'
 }
 
 function getConfirmDescription(confirmState: ConfirmState, sourceCount: number, liveSourceCount: number): string {
   if (confirmState.type === 'clearSources') {
-    return `确定清空全部 ${sourceCount} 个数据源吗？此操作不可恢复。`
+    return `确定清空全部 ${sourceCount} 个点播源吗？此操作不可恢复。`
   }
 
   if (confirmState.type === 'clearLiveSources') {
@@ -1631,7 +1631,7 @@ function getConfirmDescription(confirmState: ConfirmState, sourceCount: number, 
   }
 
   if (confirmState.type === 'deleteSource') {
-    return `确定删除数据源「${confirmState.source.name}」吗？`
+    return `确定删除点播源「${confirmState.source.name}」吗？`
   }
 
   return `确定删除直播源「${confirmState.source.name}」吗？`

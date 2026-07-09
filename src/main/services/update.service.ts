@@ -5,6 +5,7 @@ import { resolveGitHubUrl } from '@shared/constants'
 import type { UpdateCheckResult, UpdateEvent } from '@shared/types'
 import type { SettingsService } from './settings.service'
 import { checkLatestRelease, isNewerVersion } from './update-checker'
+import packageJson from '../../../package.json'
 
 const REPOSITORY_URL = 'https://github.com/vfanlee/vfan-tv'
 const RELEASE_DOWNLOAD_BASE_URL = `${REPOSITORY_URL}/releases/latest/download/`
@@ -13,6 +14,7 @@ type UpdateEventEmitter = (event: UpdateEvent) => void
 
 export class UpdateService {
   private lastResult?: UpdateCheckResult
+  private suppressUpdaterErrorEvent = false
   private updater?: NsisUpdater
 
   constructor(
@@ -21,52 +23,49 @@ export class UpdateService {
   ) {}
 
   getCurrentVersion(): string {
-    return app.getVersion()
+    return getCurrentVersion()
   }
 
   async check(): Promise<UpdateCheckResult> {
     this.emitEvent({ status: 'checking' })
 
-    if (!this.canUseAutoUpdater()) {
-      const result = await this.checkManualRelease()
+    let manualResult: UpdateCheckResult | undefined
+    let manualError: unknown
+
+    try {
+      manualResult = await this.checkManualRelease()
+    } catch (error) {
+      manualError = error
+    }
+
+    if (manualResult) {
+      const result = await this.enrichWithAutoUpdateInfo(manualResult)
       this.lastResult = result
       this.emitEvent({ result, status: result.updateAvailable ? 'available' : 'not-available' })
       return result
     }
 
+    if (!this.canUseAutoUpdater()) {
+      const message = getErrorMessage(manualError)
+      this.emitEvent({ message, status: 'error' })
+      throw manualError
+    }
+
     try {
-      const updateCheckResult = await this.configureUpdater().checkForUpdates()
+      const updateCheckResult = await this.checkForUpdatesSilently()
       const updateInfo = updateCheckResult?.updateInfo
       const updateAvailable =
         updateCheckResult?.isUpdateAvailable ??
         (updateInfo ? isNewerVersion(updateInfo.version, this.getCurrentVersion()) : false)
-
-      const manualResult = updateAvailable ? await this.checkManualRelease().catch(() => undefined) : undefined
-      const result = this.createResultFromUpdateInfo(updateInfo, updateAvailable, manualResult)
+      const result = this.createResultFromUpdateInfo(updateInfo, updateAvailable)
 
       this.lastResult = result
       this.emitEvent({ result, status: updateAvailable ? 'available' : 'not-available' })
       return result
     } catch (error) {
       const message = getErrorMessage(error)
-      const fallback = await this.checkManualRelease().catch(() => undefined)
-
-      if (!fallback) {
-        this.emitEvent({ message, status: 'error' })
-        throw error
-      }
-
-      const result: UpdateCheckResult = {
-        ...fallback,
-        autoUpdateError: message,
-        canAutoUpdate: false,
-        status: fallback.updateAvailable ? 'available' : 'not-available',
-      }
-
-      this.lastResult = result
-      this.emitEvent({ result, status: result.updateAvailable ? 'available' : 'not-available' })
-      this.emitEvent({ message, result, status: 'error' })
-      return result
+      this.emitEvent({ message, status: 'error' })
+      throw error
     }
   }
 
@@ -109,7 +108,10 @@ export class UpdateService {
     updater.on('checking-for-update', () => this.emitEvent({ status: 'checking' }))
     updater.on('download-progress', (progress) => this.emitProgress(progress))
     updater.on('update-downloaded', (event) => this.handleUpdateDownloaded(event))
-    updater.on('error', (error) => this.emitEvent({ message: getErrorMessage(error), status: 'error' }))
+    updater.on('error', (error) => {
+      if (this.suppressUpdaterErrorEvent) return
+      this.emitEvent({ message: getErrorMessage(error), status: 'error' })
+    })
 
     this.updater = updater
     return updater
@@ -136,6 +138,47 @@ export class UpdateService {
     this.emitEvent({ result: downloadedResult, status: 'downloaded' })
   }
 
+  private async enrichWithAutoUpdateInfo(manualResult: UpdateCheckResult): Promise<UpdateCheckResult> {
+    if (!this.canUseAutoUpdater() || !manualResult.updateAvailable) {
+      return {
+        ...manualResult,
+        canAutoUpdate: false,
+      }
+    }
+
+    try {
+      const updateCheckResult = await this.checkForUpdatesSilently()
+      const updateInfo = updateCheckResult?.updateInfo
+      const updateAvailable =
+        updateCheckResult?.isUpdateAvailable ??
+        (updateInfo ? isNewerVersion(updateInfo.version, this.getCurrentVersion()) : false)
+
+      if (!updateAvailable) {
+        return {
+          ...manualResult,
+          autoUpdateError: '自动更新元数据未标记此版本可自动安装，请手动下载。',
+          canAutoUpdate: false,
+        }
+      }
+
+      return this.createResultFromUpdateInfo(updateInfo, true, manualResult)
+    } catch (error) {
+      return {
+        ...manualResult,
+        autoUpdateError: getErrorMessage(error),
+        canAutoUpdate: false,
+      }
+    }
+  }
+
+  private async checkForUpdatesSilently(): ReturnType<NsisUpdater['checkForUpdates']> {
+    this.suppressUpdaterErrorEvent = true
+    try {
+      return await this.configureUpdater().checkForUpdates()
+    } finally {
+      this.suppressUpdaterErrorEvent = false
+    }
+  }
   private createResultFromUpdateInfo(
     updateInfo: UpdateInfo | undefined,
     updateAvailable: boolean,
@@ -189,4 +232,8 @@ function normalizeText(value: unknown): string | undefined {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function getCurrentVersion(): string {
+  return packageJson.version || app.getVersion()
 }

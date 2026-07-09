@@ -9,6 +9,7 @@ import { checkLatestRelease } from './services/update-checker'
 import { APP_DISPLAY_NAME, APP_ID, USER_DATA_DIR_NAME } from '@shared/constants'
 import { createDatabase } from './db/client'
 import { SettingsRepository } from './repositories/settings.repository'
+import packageJson from '../../package.json'
 
 let aboutWindow: BrowserWindow | null = null
 let updateCheckPromise: Promise<void> | null = null
@@ -19,6 +20,10 @@ configureAppIdentityAndPaths()
 app.on('will-finish-launching', () => {
   configureAppIdentityAndPaths()
 })
+
+function getCurrentVersion(): string {
+  return packageJson.version || app.getVersion()
+}
 
 function configureAppIdentityAndPaths(): void {
   app.setName(APP_DISPLAY_NAME)
@@ -64,7 +69,7 @@ function showAboutWindow(): void {
     <main>
       <img src="${iconDataUrl}" alt="${APP_DISPLAY_NAME}" />
       <h1>${APP_DISPLAY_NAME}</h1>
-      <p class="version">v${app.getVersion()}</p>
+      <p class="version">v${getCurrentVersion()}</p>
       <p class="description">免费开源、开箱即用、跨平台的桌面端影视聚合播放器。</p>
       <p class="copyright">Copyright © 2026 VfanLee</p>
     </main>
@@ -111,7 +116,7 @@ function showMessageBox(options: MessageBoxOptions): Promise<MessageBoxReturnVal
 async function runUpdateCheck(interactive: boolean): Promise<void> {
   try {
     const settings = new SettingsRepository(createDatabase()).get()
-    const currentVersion = app.getVersion()
+    const currentVersion = getCurrentVersion()
     const result = await checkLatestRelease(currentVersion, settings)
 
     if (!result.updateAvailable) {
@@ -212,7 +217,7 @@ function createApplicationMenu(): void {
       : ([{ role: 'close', label: '关闭窗口' }] satisfies MenuItemConstructorOptions[])),
   ]
   const helpMenu: MenuItemConstructorOptions[] = [
-    { label: `${APP_DISPLAY_NAME} v${app.getVersion()}`, enabled: false },
+    { label: `${APP_DISPLAY_NAME} v${getCurrentVersion()}`, enabled: false },
     { type: 'separator' },
     { label: '检查更新…', click: () => checkForUpdates(true) },
   ]

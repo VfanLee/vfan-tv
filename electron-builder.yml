@@ -20,10 +20,7 @@ win:
   icon: build/icon.ico
   executableName: Vfan TV
   target:
-    - target: nsis
-      arch:
-        - x64
-        - arm64
+    - nsis
 nsis:
   oneClick: false
   perMachine: false
@@ -40,9 +37,7 @@ mac:
   icon: build/icon.icns
   artifactName: vfan-tv-v${version}-${arch}.${ext}
   target:
-    - target: dmg
-      arch:
-        - arm64
+    - dmg
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
     - NSCameraUsageDescription: Application requests access to the device's camera.

@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { IpcRendererEvent } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type { AppApi, SearchEvent, UpdateEvent } from '@shared/types'
 
@@ -48,7 +49,7 @@ const api: AppApi = {
     cancelSearch: (searchId) => ipcRenderer.invoke('vod:cancel-search', searchId),
     probeMedia: (input) => ipcRenderer.invoke('vod:probe-media', input),
     onSearchEvent: (listener) => {
-      const handler = (_event: Electron.IpcRendererEvent, payload: SearchEvent): void => listener(payload)
+      const handler = (_event: IpcRendererEvent, payload: SearchEvent): void => listener(payload)
       ipcRenderer.on('vod:search-event', handler)
       return () => ipcRenderer.removeListener('vod:search-event', handler)
     },
@@ -73,7 +74,7 @@ const api: AppApi = {
     download: () => ipcRenderer.invoke('updates:download'),
     install: () => ipcRenderer.invoke('updates:install'),
     onUpdateEvent: (listener) => {
-      const handler = (_event: Electron.IpcRendererEvent, payload: UpdateEvent): void => listener(payload)
+      const handler = (_event: IpcRendererEvent, payload: UpdateEvent): void => listener(payload)
       ipcRenderer.on('updates:event', handler)
       return () => ipcRenderer.removeListener('updates:event', handler)
     },
@@ -90,7 +91,9 @@ const api: AppApi = {
 // Use `contextBridge` APIs to expose Electron APIs to
 // renderer only if context isolation is enabled, otherwise
 // just add to the DOM global.
-if (process.contextIsolated) {
+const electronProcess = process as NodeJS.Process & { contextIsolated?: boolean }
+
+if (electronProcess.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('api', api)

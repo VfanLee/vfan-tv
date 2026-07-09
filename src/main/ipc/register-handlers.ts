@@ -403,7 +403,7 @@ export function registerIpcHandlers(): void {
       searchHistory: backup.searchHistory,
     }
   })
-  ipcMain.handle('updates:get-current-version', () => app.getVersion() || packageJson.version)
+  ipcMain.handle('updates:get-current-version', () => packageJson.version || app.getVersion())
   ipcMain.handle('updates:check', () => updateService.check())
   ipcMain.handle('updates:download', () => updateService.download())
   ipcMain.handle('updates:install', () => updateService.install())
