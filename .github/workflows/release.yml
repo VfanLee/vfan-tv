@@ -20,6 +20,11 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+
       - name: Match tag to package version
         env:
           RELEASE_TAG: ${{ github.ref_name }}
@@ -63,7 +68,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 22
+          node-version-file: .node-version
           cache: pnpm
 
       - name: Install dependencies

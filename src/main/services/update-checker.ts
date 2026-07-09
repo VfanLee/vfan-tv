@@ -1,5 +1,5 @@
 import { DOMParser } from '@xmldom/xmldom'
-import { resolveGitHubUrl } from '@shared/constants'
+import { GITHUB_PROXY_ROUTES, resolveGitHubUrl } from '@shared/constants'
 import type { AppSettings, UpdateCheckResult } from '@shared/types'
 
 const REPOSITORY_URL = 'https://github.com/vfanlee/vfan-tv'
@@ -8,6 +8,7 @@ const RELEASES_FEED_PATH = `${REPOSITORY_URL}/releases.atom`
 const LATEST_RELEASE_PATH = `${REPOSITORY_URL}/releases/latest`
 const REQUEST_HEADERS = { 'User-Agent': 'vfan-tv-update-checker' }
 const REQUEST_TIMEOUT_MS = 10_000
+const GITHUB_RELEASE_UNAVAILABLE_MESSAGE = '无法连接 GitHub Release。请在设置中切换 GitHub 代理线路，或稍后重试。'
 const DEFAULT_GITHUB_PROXY_SETTINGS: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'> = {
   githubProxyCustomPrefix: '',
   githubProxyRoute: 'gh-proxy',
@@ -24,6 +25,11 @@ interface LatestRelease {
 interface DownloadAsset {
   name: string
   url: string
+}
+
+interface ReleaseFetchAttempt {
+  label: string
+  settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'>
 }
 
 interface GitHubReleaseAssetPayload {
@@ -198,11 +204,15 @@ async function fetchLatestReleaseViaRoute(
 ): Promise<LatestRelease> {
   try {
     return await fetchLatestReleaseFromApi(settings)
-  } catch {
+  } catch (apiError) {
     try {
       return await fetchLatestReleaseFromFeed(settings)
-    } catch {
-      return fetchLatestReleaseFromRedirect(settings)
+    } catch (feedError) {
+      try {
+        return await fetchLatestReleaseFromRedirect(settings)
+      } catch (redirectError) {
+        throw new Error(formatReleaseFetchErrors([apiError, feedError, redirectError]))
+      }
     }
   }
 }
@@ -210,7 +220,46 @@ async function fetchLatestReleaseViaRoute(
 async function fetchLatestRelease(
   settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'>,
 ): Promise<LatestRelease> {
-  return fetchLatestReleaseViaRoute(settings)
+  const errors: string[] = []
+
+  for (const attempt of getReleaseFetchAttempts(settings)) {
+    try {
+      return await fetchLatestReleaseViaRoute(attempt.settings)
+    } catch (error) {
+      errors.push(`${attempt.label}: ${getErrorMessage(error)}`)
+    }
+  }
+
+  console.warn(`[updates] ${GITHUB_RELEASE_UNAVAILABLE_MESSAGE}\n${errors.join('\n')}`)
+  throw new Error(GITHUB_RELEASE_UNAVAILABLE_MESSAGE)
+}
+
+function getReleaseFetchAttempts(
+  settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'>,
+): ReleaseFetchAttempt[] {
+  const attempts: ReleaseFetchAttempt[] = [{ label: '当前线路', settings }]
+  const seen = new Set([getReleaseFetchAttemptKey(settings)])
+
+  for (const route of GITHUB_PROXY_ROUTES) {
+    const routeSettings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'> = {
+      githubProxyCustomPrefix: '',
+      githubProxyRoute: route.id,
+    }
+    const key = getReleaseFetchAttemptKey(routeSettings)
+
+    if (seen.has(key)) continue
+
+    seen.add(key)
+    attempts.push({ label: route.label, settings: routeSettings })
+  }
+
+  return attempts
+}
+
+function getReleaseFetchAttemptKey(
+  settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'>,
+): string {
+  return `${settings.githubProxyRoute}:${settings.githubProxyCustomPrefix.trim()}`
 }
 
 function getAssetNames(version: string, platform: NodeJS.Platform, arch: string): string[] {
@@ -223,6 +272,14 @@ function getAssetNames(version: string, platform: NodeJS.Platform, arch: string)
   }
 
   return []
+}
+
+function formatReleaseFetchErrors(errors: unknown[]): string {
+  return errors.map((error) => getErrorMessage(error)).join('\n')
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 async function assetExists(url: string): Promise<boolean> {

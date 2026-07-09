@@ -6,7 +6,7 @@
 
 ## 技术栈
 
-- Node.js `>=22 <23`、pnpm `11.7.0`
+- Node.js `>=24 <25`、pnpm `11.7.0`
 - TypeScript `^5.9.3`
 - Electron `^39.2.6`、electron-vite `^5.0.0`、electron-builder `^26.15.3`
 - React `^19.2.1`、React Router `^7.17.0`、Zustand `^5.0.14`

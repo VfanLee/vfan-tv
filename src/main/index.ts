@@ -14,13 +14,17 @@ let aboutWindow: BrowserWindow | null = null
 let updateCheckPromise: Promise<void> | null = null
 let hasRunStartupUpdateCheck = false
 
-app.setName(APP_DISPLAY_NAME)
-process.title = APP_DISPLAY_NAME
+configureAppIdentityAndPaths()
 
 app.on('will-finish-launching', () => {
+  configureAppIdentityAndPaths()
+})
+
+function configureAppIdentityAndPaths(): void {
   app.setName(APP_DISPLAY_NAME)
   process.title = APP_DISPLAY_NAME
-})
+  app.setPath('userData', join(app.getPath('appData'), USER_DATA_DIR_NAME))
+}
 
 function showAboutWindow(): void {
   if (aboutWindow) {
@@ -309,9 +313,7 @@ function isSameAppOrigin(window: BrowserWindow, url: string): boolean {
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
   // Set app user model id for windows
-  app.setName(APP_DISPLAY_NAME)
-  process.title = APP_DISPLAY_NAME
-  app.setPath('userData', join(app.getPath('appData'), USER_DATA_DIR_NAME))
+  configureAppIdentityAndPaths()
   app.dock?.setIcon(icon)
   electronApp.setAppUserModelId(APP_ID)
   createApplicationMenu()

@@ -186,6 +186,7 @@ export function BasicPlayer({
       container, // 播放器挂载的 DOM 容器
       url: src, // 当前实际播放地址
       type: getArtplayerType(src, sourceType), // 自定义媒体类型交给 customType 处理
+      lang: 'zh-cn', // 使用 ArtPlayer 内置简体中文文案
       autoplay: autoPlay, // 是否自动播放
       loop: loopEnabled, // 是否循环播放
       isLive, // 是否启用直播模式（真直播无进度条、无倍速）

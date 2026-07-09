@@ -71,7 +71,7 @@ export function AboutPage(): React.JSX.Element {
 
         if (showToast) {
           toast.error('检查更新失败', {
-            description: error instanceof Error ? error.message : String(error),
+            description: getDisplayErrorMessage(error),
           })
         }
       } finally {
@@ -91,7 +91,7 @@ export function AboutPage(): React.JSX.Element {
     } catch (error) {
       setIsDownloading(false)
       toast.error('下载更新失败', {
-        description: error instanceof Error ? error.message : String(error),
+        description: getDisplayErrorMessage(error),
       })
     }
   }, [])
@@ -101,7 +101,7 @@ export function AboutPage(): React.JSX.Element {
       await installUpdate()
     } catch (error) {
       toast.error('安装更新失败', {
-        description: error instanceof Error ? error.message : String(error),
+        description: getDisplayErrorMessage(error),
       })
     }
   }, [])
@@ -251,6 +251,11 @@ export function AboutPage(): React.JSX.Element {
       </div>
     </div>
   )
+}
+
+function getDisplayErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  return message.replace(/^Error invoking remote method '[^']+': Error: /, '').trim()
 }
 
 function UpdateOptions({
