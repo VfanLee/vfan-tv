@@ -590,27 +590,19 @@ export function BasicPlayer({
     title,
   ])
 
-  if (!src) {
-    return (
-      <div className={cn('relative w-full overflow-hidden bg-black', isTheaterMode && 'h-full', className)}>
-        <div aria-hidden="true" className="pointer-events-none w-full pt-14 pb-16">
-          <div className={cn('w-full', isTheaterMode ? 'h-full' : 'aspect-video')} />
-        </div>
+  return (
+    <div className={cn('relative w-full overflow-hidden bg-black', isTheaterMode && 'h-full', className)}>
+      <div ref={containerRef} aria-hidden={!src ? true : undefined} className="h-full w-full" />
+      {!src ? (
         <div
           className={cn(
-            'absolute inset-x-0 flex items-center justify-center text-sm text-white/55',
+            'pointer-events-none absolute inset-x-0 flex items-center justify-center text-sm text-white/55',
             isTheaterMode ? 'inset-y-0' : 'top-14 bottom-16',
           )}
         >
           请选择一个可播放剧集
         </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className={cn('relative w-full overflow-hidden bg-black', isTheaterMode && 'h-full', className)}>
-      <div ref={containerRef} className="h-full w-full" />
+      ) : null}
     </div>
   )
 }

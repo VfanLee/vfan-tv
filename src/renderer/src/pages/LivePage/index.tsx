@@ -21,6 +21,9 @@ import {
   SelectValue,
 } from '@renderer/components/ui/select'
 
+const LIVE_CONTEXT_KEYWORDS = ['直播', '卫视', '央视', '央卫视']
+const VOD_CONTEXT_KEYWORDS = ['点播', '录播', '回放']
+
 interface LiveSelectionCache {
   channelId: string
   streamId: string
@@ -594,7 +597,7 @@ function normalizeLivePlaylist(playlist: LivePlaylist): LivePlaylist {
       ...channel,
       streams: channel.streams.map((stream) => ({
         ...stream,
-        isLive: stream.isLive === false ? false : !isVodStreamUrl(stream.url),
+        isLive: inferStreamIsLive(channel.group, channel.title, stream.url),
       })),
     })),
   }
@@ -632,8 +635,25 @@ function resolveLivePlaybackUrl(proxyBaseUrl: string, url: string | undefined): 
   }
 }
 
+function inferStreamIsLive(group: string, title: string, url: string): boolean {
+  const context = `${group} ${title}`
+  if (VOD_CONTEXT_KEYWORDS.some((keyword) => context.includes(keyword))) {
+    return false
+  }
+
+  if (isVodStreamUrl(url)) {
+    return false
+  }
+
+  if (LIVE_CONTEXT_KEYWORDS.some((keyword) => context.includes(keyword))) {
+    return true
+  }
+
+  return true
+}
+
 function isVodStreamUrl(url: string): boolean {
-  return /\.(?:mp4|m4v|mkv|mov|avi|wmv|flv|webm)(?:$|[?#])/i.test(url)
+  return /\.(?:mp4|m4v|mkv|mov|avi|wmv|webm)(?:$|[?#])/i.test(url)
 }
 
 function isLikelyHlsStream(url: string | undefined): boolean {
@@ -643,9 +663,7 @@ function isLikelyHlsStream(url: string | undefined): boolean {
 
   try {
     const parsedUrl = new URL(url)
-    return (
-      /\.m3u8(?:$|[?#])/i.test(parsedUrl.pathname) || /(?:^|[/?&=])(?:m3u8|hls|iptv|tvod|php)(?:$|[/?&=])/i.test(url)
-    )
+    return /\.m3u8(?:$|[?#])/i.test(parsedUrl.pathname) || /(?:^|[/?&=])(?:m3u8|hls|iptv|tvod)(?:$|[/?&=])/i.test(url)
   } catch {
     return /\.m3u8(?:$|[?#])/i.test(url)
   }
@@ -658,8 +676,12 @@ function isLikelyFlvStream(url: string | undefined): boolean {
 
   try {
     const parsedUrl = new URL(url)
-    return /\.flv(?:$|[?#])/i.test(parsedUrl.pathname)
+    return /\.flv(?:$|[?#])/i.test(parsedUrl.pathname) || isKnownFlvProxyUrl(parsedUrl)
   } catch {
-    return /\.flv(?:$|[?#])/i.test(url)
+    return /\.flv(?:$|[?#])/i.test(url) || /(?:^|\.)yg\.ygbox\.de5\.net\/huya\.php\?/i.test(url)
   }
+}
+
+function isKnownFlvProxyUrl(url: URL): boolean {
+  return url.hostname === 'yg.ygbox.de5.net' && url.pathname === '/huya.php' && url.searchParams.has('id')
 }
