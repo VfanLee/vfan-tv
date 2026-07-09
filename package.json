@@ -48,6 +48,7 @@
     "class-variance-authority": "^0.7.1",
     "drizzle-orm": "^0.45.2",
     "electron-updater": "^6.8.9",
+    "mpegts.js": "^1.8.0",
     "radix-ui": "^1.6.0",
     "zod": "^4.4.3"
   },

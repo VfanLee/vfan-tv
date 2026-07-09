@@ -4,6 +4,7 @@ import artplayerPluginAmbilight from 'artplayer-plugin-ambilight'
 import artplayerPluginAudioTrack from 'artplayer-plugin-audio-track'
 import artplayerPluginHlsControl from 'artplayer-plugin-hls-control'
 import Hls, { type ErrorData } from 'hls.js'
+import mpegts from 'mpegts.js'
 import { HLS_AD_FILTER_STORAGE_KEY, PLAYER_AUTO_NEXT_STORAGE_KEY, PLAYER_LOOP_STORAGE_KEY } from '@shared/constants'
 import { cn } from '@renderer/utils/cn'
 import { createAdAwareHlsLoader, type HlsAdSkipRange } from '@renderer/utils/hls-playlist-filter'
@@ -23,7 +24,7 @@ export interface BasicPlayerProps {
   audioTrackUrl?: string
   className?: string
   src?: string
-  sourceType?: 'hls'
+  sourceType?: 'hls' | 'flv'
   title?: string
   initialTime?: number
   hasNextEpisode?: boolean
@@ -47,6 +48,7 @@ interface BasicPlayerCallbacks {
 }
 
 type ArtplayerWithHls = Artplayer & { hls?: Hls }
+type MpegtsPlayer = ReturnType<typeof mpegts.createPlayer>
 
 let cachedAppVersion = ''
 
@@ -84,6 +86,7 @@ interface DebugInfoParams {
   rawSrc: string
   displayUrl: string
   isHls: boolean
+  isFlv: boolean
   isLive: boolean
   title?: string
   sourceType?: string
@@ -122,6 +125,7 @@ export function BasicPlayer({
   const containerRef = useRef<HTMLDivElement | null>(null)
   const artRef = useRef<Artplayer | null>(null)
   const hlsRef = useRef<Hls | null>(null)
+  const mpegtsRef = useRef<MpegtsPlayer | null>(null)
   const callbacksRef = useRef<BasicPlayerCallbacks>({})
   const formatPlaybackUrlRef = useRef(formatPlaybackUrl)
   const initialTimeRef = useRef(initialTime)
@@ -134,6 +138,7 @@ export function BasicPlayer({
 
   const isLive = variant === 'live'
   const isHls = isHlsSource(src, sourceType)
+  const isFlv = isFlvSource(src, sourceType)
   const canUseAdFilter = enableAdFilter && isHls && !isLive
 
   useEffect(() => {
@@ -152,6 +157,7 @@ export function BasicPlayer({
     }
 
     destroyHls(hlsRef)
+    destroyMpegts(mpegtsRef)
     adSkipRangesRef.current = []
     lastAdSkipRef.current = undefined
     container.innerHTML = ''
@@ -179,7 +185,7 @@ export function BasicPlayer({
     const art = new Artplayer({
       container, // 播放器挂载的 DOM 容器
       url: src, // 当前实际播放地址
-      type: isHls ? 'm3u8' : '', // 播放源类型，HLS 源交给 customType.m3u8 处理
+      type: getArtplayerType(src, sourceType), // 自定义媒体类型交给 customType 处理
       autoplay: autoPlay, // 是否自动播放
       loop: loopEnabled, // 是否循环播放
       isLive, // 是否启用直播模式（真直播无进度条、无倍速）
@@ -350,6 +356,7 @@ export function BasicPlayer({
                 loop: loopEnabled,
                 initialTime: initialTimeRef.current,
                 adFilterEnabled: canUseAdFilter && adFilterEnabled,
+                isFlv,
                 audioTrackUrl,
                 debugLog,
                 autoNextEnabled,
@@ -380,6 +387,7 @@ export function BasicPlayer({
         // 自定义媒体类型处理器
         m3u8(video, url, artInstance) {
           destroyHls(hlsRef)
+          destroyMpegts(mpegtsRef)
 
           if (Hls.isSupported()) {
             const hls = new Hls(
@@ -432,6 +440,40 @@ export function BasicPlayer({
 
           debugLog.push('HLS', '当前环境不支持 HLS 播放')
           artInstance.notice.show = '当前环境不支持 HLS 播放'
+        },
+        flv(video, url, artInstance) {
+          destroyHls(hlsRef)
+          destroyMpegts(mpegtsRef)
+
+          if (!mpegts.isSupported()) {
+            debugLog.push('FLV', '当前环境不支持 FLV 播放')
+            artInstance.notice.show = '当前环境不支持 FLV 播放'
+            return
+          }
+
+          const flvPlayer = mpegts.createPlayer(
+            {
+              type: 'flv',
+              url,
+              isLive,
+            },
+            {
+              enableWorker: true,
+              enableStashBuffer: !isLive,
+              stashInitialSize: isLive ? 128 * 1024 : 384 * 1024,
+              liveBufferLatencyChasing: isLive,
+            },
+          )
+          mpegtsRef.current = flvPlayer
+          flvPlayer.on(mpegts.Events.ERROR, (errorType: string, errorDetail: string, errorInfo: unknown) => {
+            debugLog.push('FLV', `${errorType} · ${errorDetail} · ${formatUnknownErrorInfo(errorInfo)}`)
+            artInstance.notice.show = `FLV 播放失败：${errorDetail || errorType}`
+          })
+          flvPlayer.on(mpegts.Events.MEDIA_INFO, () => {
+            debugLog.push('FLV', '媒体信息已解析')
+          })
+          flvPlayer.attachMediaElement(video)
+          flvPlayer.load()
         },
       },
     } satisfies Option)
@@ -524,6 +566,7 @@ export function BasicPlayer({
 
     return () => {
       destroyHls(hlsRef)
+      destroyMpegts(mpegtsRef)
       art.destroy(false)
       if (artRef.current === art) {
         artRef.current = null
@@ -537,6 +580,7 @@ export function BasicPlayer({
     canUseAdFilter,
     enableAutoNext,
     isHls,
+    isFlv,
     isLive,
     loop,
     persistPlaybackSettings,
@@ -576,6 +620,26 @@ function isHlsSource(src: string | undefined, sourceType: BasicPlayerProps['sour
   }
 
   return sourceType === 'hls' || /\.m3u8(?:$|[?#])/i.test(src)
+}
+
+function isFlvSource(src: string | undefined, sourceType: BasicPlayerProps['sourceType']): boolean {
+  if (!src) {
+    return false
+  }
+
+  return sourceType === 'flv' || /\.flv(?:$|[?#])/i.test(src)
+}
+
+function getArtplayerType(src: string | undefined, sourceType: BasicPlayerProps['sourceType']): string {
+  if (isHlsSource(src, sourceType)) {
+    return 'm3u8'
+  }
+
+  if (isFlvSource(src, sourceType)) {
+    return 'flv'
+  }
+
+  return ''
 }
 
 function removeDefaultContextMenuItems(art: Artplayer): void {
@@ -683,6 +747,7 @@ function buildDebugInfoText(params: DebugInfoParams): string {
     rawSrc,
     displayUrl,
     isHls,
+    isFlv,
     isLive,
     title,
     sourceType,
@@ -706,12 +771,14 @@ function buildDebugInfoText(params: DebugInfoParams): string {
     '--- 环境 ---',
     `User-Agent: ${navigator.userAgent}`,
     `HLS 引擎: ${getHlsEngineText(isHls, hls, video)}`,
+    `FLV 引擎: ${getFlvEngineText(isFlv)}`,
     `Artplayer: ${Artplayer.version}`,
     `HLS.js: ${Hls.version}`,
+    `mpegts.js: ${mpegts.version}`,
     '',
     '--- 播放配置 ---',
     `模式: ${isLive ? '直播' : '点播'}`,
-    `源类型: ${sourceType || (isHls ? 'hls' : 'auto')}`,
+    `源类型: ${sourceType || (isHls ? 'hls' : isFlv ? 'flv' : 'auto')}`,
     `原始地址: ${rawSrc}`,
     `实际地址: ${displayUrl}`,
     ...(rawSrc !== displayUrl ? ['地址转换: 是（可能与代理/格式化有关）'] : []),
@@ -763,6 +830,14 @@ function getHlsEngineText(isHls: boolean, hls: Hls | undefined, video: HTMLVideo
   return '不支持'
 }
 
+function getFlvEngineText(isFlv: boolean): string {
+  if (!isFlv) {
+    return '未使用'
+  }
+
+  return mpegts.isSupported() ? 'mpegts.js' : '不支持'
+}
+
 function getPlaybackStateText(art: Artplayer): string {
   const video = art.video
   const flags = [
@@ -795,6 +870,26 @@ function formatMediaElementError(video: HTMLVideoElement): string | undefined {
   const codeLabel = codes[error.code] ?? `CODE_${error.code}`
   const message = error.message?.trim()
   return message ? `${codeLabel} · ${message}` : codeLabel
+}
+
+function formatUnknownErrorInfo(errorInfo: unknown): string {
+  if (!errorInfo) {
+    return '-'
+  }
+
+  if (errorInfo instanceof Error) {
+    return errorInfo.message
+  }
+
+  if (typeof errorInfo === 'string') {
+    return errorInfo
+  }
+
+  try {
+    return JSON.stringify(errorInfo)
+  } catch {
+    return String(errorInfo)
+  }
 }
 
 function formatTimeRanges(ranges: TimeRanges): string {
@@ -1379,4 +1474,20 @@ function createHlsConfig(
 function destroyHls(hlsRef: MutableRefObject<Hls | null>): void {
   hlsRef.current?.destroy()
   hlsRef.current = null
+}
+
+function destroyMpegts(mpegtsRef: MutableRefObject<MpegtsPlayer | null>): void {
+  if (!mpegtsRef.current) {
+    return
+  }
+
+  try {
+    mpegtsRef.current.unload()
+    mpegtsRef.current.detachMediaElement()
+  } catch {
+    // Ignore teardown errors from partially initialized FLV players.
+  }
+
+  mpegtsRef.current.destroy()
+  mpegtsRef.current = null
 }

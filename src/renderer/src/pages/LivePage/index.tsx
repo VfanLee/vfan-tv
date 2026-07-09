@@ -49,6 +49,7 @@ export function LivePage(): React.JSX.Element {
     activeChannel != null && activeStreamIndex >= 0 && activeStreamIndex < activeChannel.streams.length - 1
   const activeStreamUrl = activeStream?.url ?? ''
   const activeStreamIsHls = isLikelyHlsStream(activeStreamUrl)
+  const activeStreamIsFlv = isLikelyFlvStream(activeStreamUrl)
   const activeStreamIsLive = activeStream?.isLive === true
   const playerSrc = resolveStreamPlaybackUrl(liveProxyBaseUrl, activeStreamUrl)
   const playerTitle = activeChannel?.title
@@ -242,7 +243,7 @@ export function LivePage(): React.JSX.Element {
                 loop={!activeStreamIsLive}
                 persistPlaybackSettings={false}
                 navigationLabels={{ next: '下一线路', previous: '上一线路' }}
-                sourceType={activeStreamIsHls ? 'hls' : undefined}
+                sourceType={activeStreamIsHls ? 'hls' : activeStreamIsFlv ? 'flv' : undefined}
                 src={playerSrc}
                 title={playerTitle}
                 variant={activeStreamIsLive ? 'live' : 'vod'}
@@ -647,5 +648,18 @@ function isLikelyHlsStream(url: string | undefined): boolean {
     )
   } catch {
     return /\.m3u8(?:$|[?#])/i.test(url)
+  }
+}
+
+function isLikelyFlvStream(url: string | undefined): boolean {
+  if (!url) {
+    return false
+  }
+
+  try {
+    const parsedUrl = new URL(url)
+    return /\.flv(?:$|[?#])/i.test(parsedUrl.pathname)
+  } catch {
+    return /\.flv(?:$|[?#])/i.test(url)
   }
 }
