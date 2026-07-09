@@ -6,7 +6,7 @@ import artplayerPluginHlsControl from 'artplayer-plugin-hls-control'
 import Hls, { type ErrorData } from 'hls.js'
 import { HLS_AD_FILTER_STORAGE_KEY, PLAYER_AUTO_NEXT_STORAGE_KEY, PLAYER_LOOP_STORAGE_KEY } from '@shared/constants'
 import { cn } from '@renderer/utils/cn'
-import { createFilteredHlsLoader } from '@renderer/utils/hls-playlist-filter'
+import { createAdAwareHlsLoader, type HlsAdSkipRange } from '@renderer/utils/hls-playlist-filter'
 import { artplayerSettingIcons, artplayerSwitchIcons } from '@renderer/utils/artplayer-icons'
 
 export type PlayerVariant = 'vod' | 'live'
@@ -126,6 +126,8 @@ export function BasicPlayer({
   const formatPlaybackUrlRef = useRef(formatPlaybackUrl)
   const initialTimeRef = useRef(initialTime)
   const resumeTimeRef = useRef(0)
+  const adSkipRangesRef = useRef<HlsAdSkipRange[]>([])
+  const lastAdSkipRef = useRef<{ key: string; at: number } | undefined>(undefined)
   const [adFilterEnabled, setAdFilterEnabled] = useState(() =>
     persistPlaybackSettings ? readAdFilterEnabled() : false,
   )
@@ -150,6 +152,8 @@ export function BasicPlayer({
     }
 
     destroyHls(hlsRef)
+    adSkipRangesRef.current = []
+    lastAdSkipRef.current = undefined
     container.innerHTML = ''
     container.setAttribute('aria-label', title ?? 'Vfan TV 播放器')
     const displayPlaybackUrl = formatPlaybackUrlRef.current(src)
@@ -378,7 +382,14 @@ export function BasicPlayer({
           destroyHls(hlsRef)
 
           if (Hls.isSupported()) {
-            const hls = new Hls(createHlsConfig(isLive, canUseAdFilter && adFilterEnabled))
+            const hls = new Hls(
+              createHlsConfig(isLive, canUseAdFilter && adFilterEnabled, (ranges) => {
+                adSkipRangesRef.current = ranges
+                if (ranges.length > 0) {
+                  debugLog.push('AD', `识别到 ${ranges.length} 个广告区间`)
+                }
+              }),
+            )
             hlsRef.current = hls
             artInstance.hls = hls
             hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -482,6 +493,10 @@ export function BasicPlayer({
     art.on('video:loadedmetadata', applyStartTime)
     art.on('video:canplay', applyStartTime)
     art.on('video:timeupdate', () => {
+      if (canUseAdFilter && adFilterEnabled) {
+        skipCurrentAdRange(art, adSkipRangesRef.current, lastAdSkipRef, debugLog)
+      }
+
       callbacksRef.current.onProgress?.({
         currentTime: Math.floor(art.currentTime),
         duration: Number.isFinite(art.duration) ? Math.floor(art.duration) : 0,
@@ -704,7 +719,7 @@ function buildDebugInfoText(params: DebugInfoParams): string {
     `循环播放: ${loop ? '开启' : '关闭'}`,
     `自动续播: ${autoNextEnabled ? '开启' : '关闭'}`,
     `续播时间点: ${initialTime > 0 ? `${initialTime}s` : '无'}`,
-    ...(isHls && !isLive ? [`去广告过滤: ${adFilterEnabled ? '开启' : '关闭'}`] : []),
+    ...(isHls && !isLive ? [`去广告跳过: ${adFilterEnabled ? '开启' : '关闭'}`] : []),
     `外部音轨: ${audioTrackUrl ? audioTrackUrl : '无'}`,
     '',
     '--- 当前状态 ---',
@@ -1262,6 +1277,44 @@ function formatInfoTime(seconds: number): string {
   return hours > 0 ? `${pad(hours)}:${pad(minutes)}:${pad(secs)}` : `${pad(minutes)}:${pad(secs)}`
 }
 
+function skipCurrentAdRange(
+  art: Artplayer,
+  ranges: HlsAdSkipRange[],
+  lastSkipRef: MutableRefObject<{ key: string; at: number } | undefined>,
+  debugLog: PlaybackDebugRecorder,
+): void {
+  if (!ranges.length || art.video.seeking) {
+    return
+  }
+
+  const currentTime = art.currentTime
+  if (!Number.isFinite(currentTime)) {
+    return
+  }
+
+  const range = ranges.find((item) => currentTime >= item.start && currentTime < item.end - 0.5)
+  if (!range) {
+    return
+  }
+
+  const key = `${range.start.toFixed(2)}-${range.end.toFixed(2)}`
+  const now = performance.now()
+  if (lastSkipRef.current?.key === key && now - lastSkipRef.current.at < 1200) {
+    return
+  }
+
+  const duration = art.duration
+  const targetTime = Number.isFinite(duration) && duration > 0 ? Math.min(range.end + 0.3, duration - 0.1) : range.end
+  if (!Number.isFinite(targetTime) || targetTime <= currentTime) {
+    return
+  }
+
+  lastSkipRef.current = { key, at: now }
+  art.currentTime = targetTime
+  art.notice.show = `已跳过广告 ${formatInfoTime(range.start)}-${formatInfoTime(range.end)}`
+  debugLog.push('AD', `跳过 ${formatDebugTime(range.start)}-${formatDebugTime(range.end)} · ${range.reason}`)
+}
+
 function readAdFilterEnabled(): boolean {
   const stored = window.localStorage.getItem(HLS_AD_FILTER_STORAGE_KEY)
   if (stored === null) {
@@ -1294,7 +1347,11 @@ function normalizePlaybackUrlForDisplay(src: string): string {
   }
 }
 
-function createHlsConfig(isLive: boolean, adFilterEnabled: boolean): ConstructorParameters<typeof Hls>[0] {
+function createHlsConfig(
+  isLive: boolean,
+  adFilterEnabled: boolean,
+  onAdSkipRanges: (ranges: HlsAdSkipRange[]) => void,
+): ConstructorParameters<typeof Hls>[0] {
   return {
     startLevel: -1,
     manifestLoadingMaxRetry: 6,
@@ -1315,7 +1372,7 @@ function createHlsConfig(isLive: boolean, adFilterEnabled: boolean): Constructor
           backBufferLength: 30,
         }
       : {}),
-    ...(adFilterEnabled && !isLive ? { loader: createFilteredHlsLoader(Hls) } : undefined),
+    ...(adFilterEnabled && !isLive ? { loader: createAdAwareHlsLoader(Hls, onAdSkipRanges) } : undefined),
   }
 }
 
