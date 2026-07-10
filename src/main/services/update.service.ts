@@ -54,9 +54,7 @@ export class UpdateService {
     try {
       const updateCheckResult = await this.checkForUpdatesSilently()
       const updateInfo = updateCheckResult?.updateInfo
-      const updateAvailable =
-        updateCheckResult?.isUpdateAvailable ??
-        (updateInfo ? isNewerVersion(updateInfo.version, this.getCurrentVersion()) : false)
+      const updateAvailable = isUpdateInfoNewer(updateInfo, this.getCurrentVersion())
       const result = this.createResultFromUpdateInfo(updateInfo, updateAvailable)
 
       this.lastResult = result
@@ -149,9 +147,7 @@ export class UpdateService {
     try {
       const updateCheckResult = await this.checkForUpdatesSilently()
       const updateInfo = updateCheckResult?.updateInfo
-      const updateAvailable =
-        updateCheckResult?.isUpdateAvailable ??
-        (updateInfo ? isNewerVersion(updateInfo.version, this.getCurrentVersion()) : false)
+      const updateAvailable = isUpdateInfoNewer(updateInfo, this.getCurrentVersion())
 
       if (!updateAvailable) {
         return {
@@ -228,6 +224,10 @@ function normalizeReleaseNotes(releaseNotes: UpdateInfo['releaseNotes']): string
 
 function normalizeText(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function isUpdateInfoNewer(updateInfo: UpdateInfo | undefined, currentVersion: string): boolean {
+  return updateInfo ? isNewerVersion(updateInfo.version, currentVersion) : false
 }
 
 function getErrorMessage(error: unknown): string {

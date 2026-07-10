@@ -47,4 +47,6 @@ mac:
   notarize: false
 dmg:
   artifactName: vfan-tv-v${version}-${arch}.${ext}
-npmRebuild: true
+npmRebuild: false
+electronDownload:
+  mirror: https://npmmirror.com/mirrors/electron/

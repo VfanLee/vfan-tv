@@ -1,6 +1,17 @@
+overrides:
+  app-builder-lib: 26.0.12
+  dmg-builder: 26.0.12
+  electron-publish: 26.0.11
+
+autoInstallPeers: false
+
+onlyBuiltDependencies:
+  - better-sqlite3
+  - electron
+  - esbuild
+
 allowBuilds:
   better-sqlite3: true
   electron: true
-  electron-winstaller: true
   esbuild: true
 blockExoticSubdeps: false
