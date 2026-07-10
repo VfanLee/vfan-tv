@@ -56,7 +56,7 @@ jobs:
               dist/*-x64-setup.exe.blockmap
               dist/latest.yml
           - platform: Windows arm64
-            os: windows-2022
+            os: windows-11-arm
             script: build:win:arm64
             artifact: release-windows-arm64
             files: |
