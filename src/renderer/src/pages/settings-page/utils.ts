@@ -45,8 +45,8 @@ export function getFastestGitHubProxyResult(results: GitHubProxyTestResult[]): G
 }
 
 export function resolveVisibleGitHubProxyRoute(routeId: GitHubProxyRouteId | undefined): GitHubProxyRouteId {
-  if (!routeId || routeId === CUSTOM_GITHUB_PROXY_ROUTE_ID) return DEFAULT_GITHUB_PROXY_ROUTE_ID
-  return routeId
+  if (routeId && GITHUB_PROXY_ROUTES.some((route) => route.id === routeId)) return routeId
+  return DEFAULT_GITHUB_PROXY_ROUTE_ID
 }
 
 export function getGitHubProxyRouteLabel(routeId: GitHubProxyRouteId): string {

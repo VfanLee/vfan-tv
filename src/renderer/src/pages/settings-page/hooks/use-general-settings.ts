@@ -84,7 +84,7 @@ export function useGeneralSettings({
     try {
       const settings = await updateSettings({ githubProxyCustomPrefix: '', githubProxyRoute: routeToSave })
       setGithubProxyRoute(resolveVisibleGitHubProxyRoute(settings.githubProxyRoute))
-      toast.success('GitHub 代理设置已保存')
+      toast.success('GitHub 加速设置已保存')
     } catch (error) {
       toast.error('保存失败', { description: error instanceof Error ? error.message : String(error) })
     } finally {

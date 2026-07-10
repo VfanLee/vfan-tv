@@ -1,7 +1,8 @@
-import { Download, Gauge, RefreshCw, Rss, Trash2, Upload } from 'lucide-react'
+import { Download, Gauge, Info, RefreshCw, Rss, Trash2, Upload } from 'lucide-react'
 import { DEFAULT_GITHUB_PROXY_ROUTE_ID, GITHUB_PROXY_ROUTES } from '@shared/constants'
 import type { GitHubProxyRouteId } from '@shared/types'
 import { SettingsCard } from '@renderer/components'
+import { Tooltip as TooltipPrimitive } from 'radix-ui'
 import { Alert, AlertDescription } from '@renderer/components/ui/alert'
 import { Badge } from '@renderer/components/ui/badge'
 import { Button } from '@renderer/components/ui/button'
@@ -16,7 +17,7 @@ import {
 } from '@renderer/components/ui/select'
 import { cn } from '@renderer/utils/cn'
 import type { GitHubProxySpeedState } from '../types'
-import { formatSpeedResult, getGitHubProxyRouteLabel, getSpeedResultTagClassName } from '../utils'
+import { formatSpeedResult, getSpeedResultTagClassName } from '../utils'
 
 export function NetworkSettingsCard({
   apiAvailable,
@@ -41,7 +42,7 @@ export function NetworkSettingsCard({
     testingRouteId === DEFAULT_GITHUB_PROXY_ROUTE_ID &&
     Object.values(speedResults).every((result) => result.status === 'testing')
   const selectedRoute = GITHUB_PROXY_ROUTES.find((item) => item.id === route)
-  const selectedRouteLabel = selectedRoute?.label ?? getGitHubProxyRouteLabel(route)
+  const selectedRoutePrefix = selectedRoute?.prefix ? new URL(selectedRoute.prefix).hostname : '直连'
 
   return (
     <SettingsCard description="管理应用内网络访问、代理与连接探测。" title="网络">
@@ -49,8 +50,42 @@ export function NetworkSettingsCard({
         <section className="flex flex-col gap-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h3 className="text-foreground text-sm font-semibold">GitHub 代理</h3>
-              <p className="text-muted-foreground mt-1 text-sm">用于 GitHub 链接、更新检查与更新下载。</p>
+              <div className="flex items-center gap-1.5">
+                <h3 className="text-foreground text-sm font-semibold">GitHub 加速</h3>
+                <TooltipPrimitive.Provider>
+                  <TooltipPrimitive.Root>
+                    <TooltipPrimitive.Trigger asChild>
+                      <button
+                        aria-label="查看 GitHub 加速支持的资源"
+                        className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 rounded-sm transition-colors outline-none focus-visible:ring-2"
+                        type="button"
+                      >
+                        <Info aria-hidden className="size-3.5" />
+                      </button>
+                    </TooltipPrimitive.Trigger>
+                    <TooltipPrimitive.Portal>
+                      <TooltipPrimitive.Content
+                        className="bg-popover text-popover-foreground ring-foreground/10 z-50 max-w-80 rounded-md px-3 py-2.5 shadow-md ring-1"
+                        side="top"
+                        sideOffset={6}
+                      >
+                        <p className="text-sm font-medium">支持的 GitHub 资源</p>
+                        <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-xs leading-5">
+                          <li>Releases 附件下载 (release assets)</li>
+                          <li>Raw 文件内容访问</li>
+                          <li>仓库打包下载 (archive)</li>
+                          <li>Git Clone 操作 (部分支持)</li>
+                          <li>Gist 原始文件</li>
+                          <li>项目文件直接下载</li>
+                          <li>Git api 接口支持</li>
+                        </ul>
+                        <TooltipPrimitive.Arrow className="fill-popover" />
+                      </TooltipPrimitive.Content>
+                    </TooltipPrimitive.Portal>
+                  </TooltipPrimitive.Root>
+                </TooltipPrimitive.Provider>
+              </div>
+              <p className="text-muted-foreground mt-1 text-sm">用于 GitHub 更新检查与安装包下载。</p>
             </div>
             <Button disabled={!apiAvailable || isSaving || isTestingAll} variant="outline" onClick={onTestAll}>
               {isTestingAll ? (
@@ -69,7 +104,7 @@ export function NetworkSettingsCard({
               onValueChange={(value) => onRouteChange(value as GitHubProxyRouteId)}
             >
               <SelectTrigger className="bg-background w-full">
-                <SelectValue placeholder="选择 GitHub 代理线路" />
+                <SelectValue placeholder="选择 GitHub 加速线路" />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
@@ -90,7 +125,7 @@ export function NetworkSettingsCard({
           </div>
 
           <Alert className="border-emerald-500/20 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300">
-            <AlertDescription className="font-medium text-current">当前线路：{selectedRouteLabel}</AlertDescription>
+            <AlertDescription className="font-medium text-current">当前线路：{selectedRoutePrefix}</AlertDescription>
           </Alert>
         </section>
       </div>

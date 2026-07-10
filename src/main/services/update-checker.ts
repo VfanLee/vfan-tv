@@ -8,7 +8,7 @@ const RELEASES_FEED_PATH = `${REPOSITORY_URL}/releases.atom`
 const LATEST_RELEASE_PATH = `${REPOSITORY_URL}/releases/latest`
 const REQUEST_HEADERS = { 'User-Agent': 'vfan-tv-update-checker' }
 const REQUEST_TIMEOUT_MS = 10_000
-const GITHUB_RELEASE_UNAVAILABLE_MESSAGE = '无法连接 GitHub Release。请在设置中切换 GitHub 代理线路，或稍后重试。'
+const GITHUB_RELEASE_UNAVAILABLE_MESSAGE = '无法连接 GitHub Release。请在设置中切换 GitHub 加速线路，或稍后重试。'
 const DEFAULT_GITHUB_PROXY_SETTINGS: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'> = {
   githubProxyCustomPrefix: '',
   githubProxyRoute: 'gh-proxy',

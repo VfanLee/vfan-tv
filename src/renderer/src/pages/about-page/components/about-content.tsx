@@ -51,7 +51,7 @@ export function UpdateOptions({
         <p className="text-muted-foreground text-xs leading-5">
           {result.canAutoUpdate
             ? 'Windows 安装版可自动下载并重启安装，也可以手动下载安装包。'
-            : '当前平台使用手动下载，链接会套用「设置 / 网络 - GitHub 代理」。'}
+            : '当前平台使用手动下载，安装包下载会套用「设置 / 网络 - GitHub 加速」。'}
         </p>
         <div className="flex shrink-0 flex-wrap gap-2">
           {result.canAutoUpdate && !isDownloaded ? (
