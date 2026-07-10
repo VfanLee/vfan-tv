@@ -47,7 +47,7 @@ interface PlayerLocationState {
   preferredLineIndex?: number
 }
 
-export function PlayerPage(): React.JSX.Element {
+export function VodPage(): React.JSX.Element {
   const navigate = useNavigate()
   const location = useLocation()
   const { sourceId, vodId } = useParams()
@@ -150,7 +150,7 @@ export function PlayerPage(): React.JSX.Element {
   const isCurrentFavorite = Boolean(current) && favoriteResourceKey === resourceKey && isFavorite
   const metaText = current
     ? [current.year, current.area, current.category].filter(Boolean).join(' · ')
-    : '刷新或直接进入播放页时，后续会通过 sourceId + vodId 恢复详情。'
+    : '刷新或直接进入点播页时，后续会通过 sourceId + vodId 恢复详情。'
 
   const refreshSources = useCallback(
     async (shouldProbe = false): Promise<void> => {
@@ -291,7 +291,7 @@ export function PlayerPage(): React.JSX.Element {
       Math.max(0, (targetLine?.episodes.length ?? 1) - 1),
     )
 
-    navigate(`/player/${item.sourceId}/${item.vodId}`, {
+    navigate(`/vod/${item.sourceId}/${item.vodId}`, {
       replace: true,
       state: {
         initialTime: playbackProgressRef.current.currentTime,
@@ -313,7 +313,7 @@ export function PlayerPage(): React.JSX.Element {
     }
 
     setSelection(nextSelection)
-    navigate(`/player/${sourceId}/${vodId}`, {
+    navigate(`/vod/${sourceId}/${vodId}`, {
       replace: true,
       state: {
         preferredEpisodeIndex: episodeIndex,
@@ -485,156 +485,165 @@ export function PlayerPage(): React.JSX.Element {
       className={cn(
         isTheaterMode
           ? 'fixed inset-0 z-50 flex flex-col bg-black'
-          : 'bg-background text-foreground h-screen overflow-y-auto px-8 pb-6',
+          : 'bg-background text-foreground min-h-screen overflow-y-auto px-8 pb-6',
       )}
     >
-      <div
-        className={cn(isTheaterMode ? 'min-h-0 flex-1' : 'grid h-screen gap-6 py-5 xl:grid-cols-[minmax(0,1fr)_380px]')}
-      >
-        <main
-          className={cn(
-            'min-h-0 min-w-0',
-            isTheaterMode ? 'flex h-full items-center justify-center' : 'flex flex-col gap-5',
-          )}
-        >
-          {!isTheaterMode ? (
-            <header className="flex h-10 shrink-0 items-center justify-between gap-6">
-              <button
-                className="text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring inline-flex h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-semibold transition-colors outline-none focus-visible:ring-2"
-                type="button"
-                onClick={() => navigate(-1)}
-              >
-                <ArrowLeft size={17} />
-                返回
-              </button>
-              <NowPlayingTitle title={playerTitle} />
-            </header>
-          ) : null}
+      {isTheaterMode ? (
+        <div className="min-h-0 flex-1">
+          <main className="flex h-full min-h-0 min-w-0 items-center justify-center">
+            <section className="aspect-video w-full max-w-[calc(100vh*16/9)] overflow-hidden bg-black">
+              <BasicPlayer
+                autoPlay
+                hasNextEpisode={hasNextEpisode}
+                hasPreviousEpisode={hasPreviousEpisode}
+                initialTime={initialTime}
+                isTheaterMode={isTheaterMode}
+                src={playerSrc}
+                title={playerTitle}
+                onEnded={hasNextEpisode ? () => selectEpisode(nextEpisodeIndex) : undefined}
+                onNextEpisode={() => selectEpisode(nextEpisodeIndex)}
+                onPreviousEpisode={() => selectEpisode(previousEpisodeIndex)}
+                onProgress={(progress) => void saveRecentProgress(progress)}
+                onToggleTheaterMode={() => setIsTheaterMode((current) => !current)}
+              />
+            </section>
+          </main>
+        </div>
+      ) : (
+        <>
+          <section className="h-screen py-5">
+            <div className="flex h-full flex-col gap-6">
+              <header className="flex h-10 shrink-0 items-center justify-between gap-6">
+                <button
+                  className="text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring inline-flex h-10 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-semibold transition-colors outline-none focus-visible:ring-2"
+                  type="button"
+                  onClick={() => navigate(-1)}
+                >
+                  <ArrowLeft size={17} />
+                  返回
+                </button>
+                <NowPlayingTitle title={playerTitle} />
+              </header>
 
-          <section
-            className={cn(
-              'overflow-hidden bg-black',
-              isTheaterMode ? 'aspect-video w-full max-w-[calc(100vh*16/9)]' : 'min-h-0 flex-1 rounded-xl',
-            )}
-          >
-            <BasicPlayer
-              autoPlay
-              className={!isTheaterMode ? 'h-full' : undefined}
-              hasNextEpisode={hasNextEpisode}
-              hasPreviousEpisode={hasPreviousEpisode}
-              initialTime={initialTime}
-              isTheaterMode={isTheaterMode}
-              src={playerSrc}
-              title={playerTitle}
-              onEnded={hasNextEpisode ? () => selectEpisode(nextEpisodeIndex) : undefined}
-              onNextEpisode={() => selectEpisode(nextEpisodeIndex)}
-              onPreviousEpisode={() => selectEpisode(previousEpisodeIndex)}
-              onProgress={(progress) => void saveRecentProgress(progress)}
-              onToggleTheaterMode={() => setIsTheaterMode((current) => !current)}
-            />
-          </section>
-        </main>
+              <div className="grid min-h-0 flex-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+                <main className="min-h-0 min-w-0">
+                  <section className="h-full min-h-0 overflow-hidden rounded-xl bg-black">
+                    <BasicPlayer
+                      autoPlay
+                      className="h-full"
+                      hasNextEpisode={hasNextEpisode}
+                      hasPreviousEpisode={hasPreviousEpisode}
+                      initialTime={initialTime}
+                      isTheaterMode={isTheaterMode}
+                      src={playerSrc}
+                      title={playerTitle}
+                      onEnded={hasNextEpisode ? () => selectEpisode(nextEpisodeIndex) : undefined}
+                      onNextEpisode={() => selectEpisode(nextEpisodeIndex)}
+                      onPreviousEpisode={() => selectEpisode(previousEpisodeIndex)}
+                      onProgress={(progress) => void saveRecentProgress(progress)}
+                      onToggleTheaterMode={() => setIsTheaterMode((current) => !current)}
+                    />
+                  </section>
+                </main>
 
-        {!isTheaterMode ? (
-          <div className="relative min-h-0">
-            <aside className="border-border bg-card absolute inset-0 flex min-h-0 flex-col rounded-xl border p-4 shadow-sm">
-              <div className="bg-muted grid grid-cols-2 rounded-xl p-1">
-                <PanelTab
-                  active={activeTab === 'episodes'}
-                  icon={ListVideo}
-                  label="选集"
-                  onClick={() => setActiveTab('episodes')}
-                />
-                <PanelTab active={activeTab === 'sources'} icon={Radio} label="换源" onClick={openSourcesTab} />
+                <aside className="border-border bg-card flex min-h-0 flex-col rounded-xl border p-4 shadow-sm">
+                  <div className="bg-muted grid grid-cols-2 rounded-xl p-1">
+                    <PanelTab
+                      active={activeTab === 'episodes'}
+                      icon={ListVideo}
+                      label="选集"
+                      onClick={() => setActiveTab('episodes')}
+                    />
+                    <PanelTab active={activeTab === 'sources'} icon={Radio} label="换源" onClick={openSourcesTab} />
+                  </div>
+
+                  <div className="min-h-0 flex-1 overflow-hidden">
+                    {activeTab === 'episodes' ? (
+                      <EpisodesPanel
+                        activeLine={activeLine}
+                        activeSelection={activeSelection}
+                        isDescending={isEpisodeDescending}
+                        lines={lines}
+                        onSelectEpisode={selectEpisode}
+                        onToggleOrder={() => setIsEpisodeDescending((current) => !current)}
+                      />
+                    ) : (
+                      <SourcesPanel
+                        isRefreshing={isRefreshingSources}
+                        keyword={keyword}
+                        probeStates={sourceProbeStates}
+                        refreshState={refreshState}
+                        rows={sourceRows}
+                        onProbe={() => probeSources()}
+                        onRefresh={() => void refreshSources()}
+                        onSelect={selectSource}
+                      />
+                    )}
+                  </div>
+                </aside>
               </div>
-
-              <div className="min-h-0 flex-1 overflow-hidden">
-                {activeTab === 'episodes' ? (
-                  <EpisodesPanel
-                    activeLine={activeLine}
-                    activeSelection={activeSelection}
-                    isDescending={isEpisodeDescending}
-                    lines={lines}
-                    onSelectEpisode={selectEpisode}
-                    onToggleOrder={() => setIsEpisodeDescending((current) => !current)}
-                  />
-                ) : (
-                  <SourcesPanel
-                    isRefreshing={isRefreshingSources}
-                    keyword={keyword}
-                    probeStates={sourceProbeStates}
-                    refreshState={refreshState}
-                    rows={sourceRows}
-                    onProbe={() => probeSources()}
-                    onRefresh={() => void refreshSources()}
-                    onSelect={selectSource}
-                  />
-                )}
-              </div>
-            </aside>
-          </div>
-        ) : null}
-      </div>
-
-      {!isTheaterMode ? (
-        <section className="border-border bg-card mt-5 flow-root rounded-xl border p-5 shadow-sm">
-          <MediaPoster
-            baseUrl={current?.sourceUrl}
-            className="float-left mr-6 mb-4 aspect-[2/3] w-[clamp(11rem,18vw,14rem)]"
-            overlay={
-              doubanScore ? (
-                <span className="absolute top-2 right-2 rounded-lg bg-black/75 px-2 py-1 text-xs font-semibold text-amber-300 shadow-sm backdrop-blur">
-                  豆瓣 {doubanScore}
-                </span>
-              ) : undefined
-            }
-            poster={current?.poster}
-            title={current?.title ?? '影片海报'}
-          />
-
-          <div className="border-border flex min-w-0 flex-wrap items-start justify-between gap-4 border-b pb-5">
-            <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <h1 className="max-w-full truncate text-3xl font-semibold tracking-tight">
-                  {current?.title ?? '资源上下文待恢复'}
-                </h1>
-                {vodStatus ? (
-                  <span className="shrink-0 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
-                    {vodStatus}
-                  </span>
-                ) : null}
-                {remarks ? (
-                  <span className="border-primary/25 bg-primary/10 text-primary shrink-0 rounded-lg border px-2 py-1 text-xs font-semibold">
-                    {remarks}
-                  </span>
-                ) : null}
-              </div>
-              {subtitle ? <p className="text-muted-foreground mt-2 text-sm font-medium">{subtitle}</p> : null}
-              <p className="text-muted-foreground mt-2 text-sm font-medium">{metaText}</p>
             </div>
-            <button
-              className={cn(
-                'focus-visible:ring-ring inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border px-4 text-sm font-semibold transition-colors outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60',
-                isCurrentFavorite
-                  ? 'border-primary bg-accent text-primary'
-                  : 'border-border bg-card text-muted-foreground hover:border-input hover:text-foreground',
-              )}
-              disabled={!current || isFavoriteLoading}
-              type="button"
-              onClick={() => void toggleFavorite()}
-            >
-              <Heart fill={isCurrentFavorite ? 'currentColor' : 'none'} size={17} />
-              {isCurrentFavorite ? '已收藏' : '收藏'}
-            </button>
-          </div>
+          </section>
 
-          {detailItems.length > 0 ? <VodDetailPanel items={detailItems} /> : null}
+          <section className="border-border bg-card mt-5 flow-root rounded-xl border p-5 shadow-sm">
+            <MediaPoster
+              baseUrl={current?.sourceUrl}
+              className="float-left mr-6 mb-4 aspect-[2/3] w-[clamp(11rem,18vw,14rem)]"
+              overlay={
+                doubanScore ? (
+                  <span className="absolute top-2 right-2 rounded-lg bg-black/75 px-2 py-1 text-xs font-semibold text-amber-300 shadow-sm backdrop-blur">
+                    豆瓣 {doubanScore}
+                  </span>
+                ) : undefined
+              }
+              poster={current?.poster}
+              title={current?.title ?? '影片海报'}
+            />
 
-          {current?.description ? (
-            <p className="text-muted-foreground mt-5 line-clamp-3 text-sm leading-7">{current.description}</p>
-          ) : null}
-        </section>
-      ) : null}
+            <div className="border-border flex min-w-0 flex-wrap items-start justify-between gap-4 border-b pb-5">
+              <div className="min-w-0 flex-1">
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                  <h1 className="max-w-full truncate text-3xl font-semibold tracking-tight">
+                    {current?.title ?? '资源上下文待恢复'}
+                  </h1>
+                  {vodStatus ? (
+                    <span className="shrink-0 rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-300">
+                      {vodStatus}
+                    </span>
+                  ) : null}
+                  {remarks ? (
+                    <span className="border-primary/25 bg-primary/10 text-primary shrink-0 rounded-lg border px-2 py-1 text-xs font-semibold">
+                      {remarks}
+                    </span>
+                  ) : null}
+                </div>
+                {subtitle ? <p className="text-muted-foreground mt-2 text-sm font-medium">{subtitle}</p> : null}
+                <p className="text-muted-foreground mt-2 text-sm font-medium">{metaText}</p>
+              </div>
+              <button
+                className={cn(
+                  'focus-visible:ring-ring inline-flex h-10 shrink-0 items-center gap-2 rounded-xl border px-4 text-sm font-semibold transition-colors outline-none focus-visible:ring-2 disabled:cursor-not-allowed disabled:opacity-60',
+                  isCurrentFavorite
+                    ? 'border-primary bg-accent text-primary'
+                    : 'border-border bg-card text-muted-foreground hover:border-input hover:text-foreground',
+                )}
+                disabled={!current || isFavoriteLoading}
+                type="button"
+                onClick={() => void toggleFavorite()}
+              >
+                <Heart fill={isCurrentFavorite ? 'currentColor' : 'none'} size={17} />
+                {isCurrentFavorite ? '已收藏' : '收藏'}
+              </button>
+            </div>
+
+            {detailItems.length > 0 ? <VodDetailPanel items={detailItems} /> : null}
+
+            {current?.description ? (
+              <p className="text-muted-foreground mt-5 line-clamp-3 text-sm leading-7">{current.description}</p>
+            ) : null}
+          </section>
+        </>
+      )}
     </div>
   )
 }

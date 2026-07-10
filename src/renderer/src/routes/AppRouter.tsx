@@ -6,7 +6,7 @@ import {
   FavoritesPage,
   HotPage,
   LivePage,
-  PlayerPage,
+  VodPage,
   RecentPage,
   SearchPage,
   SettingsPage,
@@ -29,7 +29,7 @@ const router = createHashRouter([
 
       { path: 'search', element: <SearchPage />, handle: { showGlobalSearch: true } },
       { path: 'live', element: <LivePage />, handle: { hideTopBar: true } },
-      { path: 'player/:sourceId/:vodId', element: <PlayerPage />, handle: { hideTopBar: true } },
+      { path: 'vod/:sourceId/:vodId', element: <VodPage />, handle: { hideTopBar: true } },
     ],
   },
 ])

@@ -61,7 +61,7 @@ export function HomePage(): React.JSX.Element {
                   item={item}
                   onClick={() => {
                     setContext(item.title, [recentPlayToVodSearchResult(item)])
-                    navigate(`/player/${item.sourceId}/${item.vodId}`, {
+                    navigate(`/vod/${item.sourceId}/${item.vodId}`, {
                       state: {
                         episodeUrl: item.episodeUrl,
                         initialTime: item.currentTime,

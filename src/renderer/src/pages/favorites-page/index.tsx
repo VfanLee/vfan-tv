@@ -64,7 +64,7 @@ export function FavoritesPage(): React.JSX.Element {
                 item={item}
                 onClick={() => {
                   setContext(item.title, [favoriteToVodSearchResult(item)])
-                  navigate(`/player/${item.sourceId}/${item.vodId}`)
+                  navigate(`/vod/${item.sourceId}/${item.vodId}`)
                 }}
                 onDelete={() => setPendingDeleteItem(item)}
               />

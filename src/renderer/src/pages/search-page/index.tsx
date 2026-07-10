@@ -155,7 +155,7 @@ export function SearchPage(): React.JSX.Element {
     }
 
     setContext(keyword.trim(), group.items)
-    navigate(`/player/${firstItem.sourceId}/${firstItem.vodId}`)
+    navigate(`/vod/${firstItem.sourceId}/${firstItem.vodId}`)
   }
 
   const openSourcePlayer = (item: VodSearchResult): void => {
@@ -163,7 +163,7 @@ export function SearchPage(): React.JSX.Element {
       keyword.trim(),
       allItems.filter((candidate) => normalizeTitle(candidate.title) === normalizeTitle(item.title)),
     )
-    navigate(`/player/${item.sourceId}/${item.vodId}`)
+    navigate(`/vod/${item.sourceId}/${item.vodId}`)
   }
 
   return (
