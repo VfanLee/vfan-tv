@@ -6,6 +6,7 @@ import artplayerPluginHlsControl from 'artplayer-plugin-hls-control'
 import Hls, { type ErrorData } from 'hls.js'
 import mpegts from 'mpegts.js'
 import { HLS_AD_FILTER_STORAGE_KEY, PLAYER_AUTO_NEXT_STORAGE_KEY, PLAYER_LOOP_STORAGE_KEY } from '@shared/constants'
+import type { MediaStreamType } from '@shared/types'
 import { cn } from '@renderer/utils/cn'
 import { createAdAwareHlsLoader, type HlsAdSkipRange } from '@renderer/utils/hls-playlist-filter'
 import { artplayerSettingIcons, artplayerSwitchIcons } from '@renderer/utils/artplayer-icons'
@@ -24,7 +25,7 @@ export interface BasicPlayerProps {
   audioTrackUrl?: string
   className?: string
   src?: string
-  sourceType?: 'hls' | 'flv'
+  sourceType?: MediaStreamType
   title?: string
   initialTime?: number
   hasNextEpisode?: boolean
@@ -87,6 +88,7 @@ interface DebugInfoParams {
   displayUrl: string
   isHls: boolean
   isFlv: boolean
+  isMpegts: boolean
   isLive: boolean
   title?: string
   sourceType?: string
@@ -139,6 +141,7 @@ export function BasicPlayer({
   const isLive = variant === 'live'
   const isHls = isHlsSource(src, sourceType)
   const isFlv = isFlvSource(src, sourceType)
+  const isMpegts = isMpegtsSource(src, sourceType)
   const canUseAdFilter = enableAdFilter && isHls && !isLive
 
   useEffect(() => {
@@ -358,6 +361,7 @@ export function BasicPlayer({
                 initialTime: initialTimeRef.current,
                 adFilterEnabled: canUseAdFilter && adFilterEnabled,
                 isFlv,
+                isMpegts,
                 audioTrackUrl,
                 debugLog,
                 autoNextEnabled,
@@ -443,38 +447,10 @@ export function BasicPlayer({
           artInstance.notice.show = '当前环境不支持 HLS 播放'
         },
         flv(video, url, artInstance) {
-          destroyHls(hlsRef)
-          destroyMpegts(mpegtsRef)
-
-          if (!mpegts.isSupported()) {
-            debugLog.push('FLV', '当前环境不支持 FLV 播放')
-            artInstance.notice.show = '当前环境不支持 FLV 播放'
-            return
-          }
-
-          const flvPlayer = mpegts.createPlayer(
-            {
-              type: 'flv',
-              url,
-              isLive,
-            },
-            {
-              enableWorker: true,
-              enableStashBuffer: !isLive,
-              stashInitialSize: isLive ? 128 * 1024 : 384 * 1024,
-              liveBufferLatencyChasing: isLive,
-            },
-          )
-          mpegtsRef.current = flvPlayer
-          flvPlayer.on(mpegts.Events.ERROR, (errorType: string, errorDetail: string, errorInfo: unknown) => {
-            debugLog.push('FLV', `${errorType} · ${errorDetail} · ${formatUnknownErrorInfo(errorInfo)}`)
-            artInstance.notice.show = `FLV 播放失败：${errorDetail || errorType}`
-          })
-          flvPlayer.on(mpegts.Events.MEDIA_INFO, () => {
-            debugLog.push('FLV', '媒体信息已解析')
-          })
-          flvPlayer.attachMediaElement(video)
-          flvPlayer.load()
+          createMpegtsPlayback(video, url, artInstance, 'flv', isLive, mpegtsRef, hlsRef, debugLog)
+        },
+        mpegts(video, url, artInstance) {
+          createMpegtsPlayback(video, url, artInstance, 'mpegts', isLive, mpegtsRef, hlsRef, debugLog)
         },
       },
     } satisfies Option)
@@ -485,7 +461,7 @@ export function BasicPlayer({
       removeLiveSettingItems(art)
     }
     injectPlayerChromeStyles(art)
-    localizeInfoPanel(art, displayPlaybackUrl, isHls, isLive)
+    localizeInfoPanel(art, displayPlaybackUrl, getStreamType(isHls, isFlv, isMpegts), isLive, mpegtsRef)
     const refreshHlsQualityUi = (): void => {
       const hls = (art as ArtplayerWithHls).hls
       if (!hls?.levels.length) {
@@ -582,6 +558,7 @@ export function BasicPlayer({
     enableAutoNext,
     isHls,
     isFlv,
+    isMpegts,
     isLive,
     loop,
     persistPlaybackSettings,
@@ -623,6 +600,21 @@ function isFlvSource(src: string | undefined, sourceType: BasicPlayerProps['sour
   return sourceType === 'flv' || /\.flv(?:$|[?#])/i.test(src)
 }
 
+function isMpegtsSource(src: string | undefined, sourceType: BasicPlayerProps['sourceType']): boolean {
+  if (!src) {
+    return false
+  }
+
+  return sourceType === 'mpegts' || /\.(?:ts|m2ts)(?:$|[?#])/i.test(src)
+}
+
+function getStreamType(isHls: boolean, isFlv: boolean, isMpegts: boolean): MediaStreamType {
+  if (isHls) return 'hls'
+  if (isFlv) return 'flv'
+  if (isMpegts) return 'mpegts'
+  return 'native'
+}
+
 function getArtplayerType(src: string | undefined, sourceType: BasicPlayerProps['sourceType']): string {
   if (isHlsSource(src, sourceType)) {
     return 'm3u8'
@@ -632,7 +624,50 @@ function getArtplayerType(src: string | undefined, sourceType: BasicPlayerProps[
     return 'flv'
   }
 
+  if (isMpegtsSource(src, sourceType)) {
+    return 'mpegts'
+  }
+
   return ''
+}
+
+function createMpegtsPlayback(
+  video: HTMLVideoElement,
+  url: string,
+  art: Artplayer,
+  type: 'flv' | 'mpegts',
+  isLive: boolean,
+  mpegtsRef: MutableRefObject<MpegtsPlayer | null>,
+  hlsRef: MutableRefObject<Hls | null>,
+  debugLog: PlaybackDebugRecorder,
+): void {
+  destroyHls(hlsRef)
+  destroyMpegts(mpegtsRef)
+
+  const label = type === 'flv' ? 'FLV' : 'MPEG-TS'
+  if (!mpegts.isSupported()) {
+    debugLog.push(label, '当前环境不支持播放')
+    art.notice.show = `当前环境不支持 ${label} 播放`
+    return
+  }
+
+  const player = mpegts.createPlayer(
+    { type, url, isLive },
+    {
+      enableWorker: true,
+      enableStashBuffer: !isLive,
+      stashInitialSize: isLive ? 128 * 1024 : 384 * 1024,
+      liveBufferLatencyChasing: isLive,
+    },
+  )
+  mpegtsRef.current = player
+  player.on(mpegts.Events.ERROR, (errorType: string, errorDetail: string, errorInfo: unknown) => {
+    debugLog.push(label, `${errorType} · ${errorDetail} · ${formatUnknownErrorInfo(errorInfo)}`)
+    art.notice.show = `${label} 播放失败：${errorDetail || errorType}`
+  })
+  player.on(mpegts.Events.MEDIA_INFO, () => debugLog.push(label, '媒体信息已解析'))
+  player.attachMediaElement(video)
+  player.load()
 }
 
 function removeDefaultContextMenuItems(art: Artplayer): void {
@@ -741,6 +776,7 @@ function buildDebugInfoText(params: DebugInfoParams): string {
     displayUrl,
     isHls,
     isFlv,
+    isMpegts,
     isLive,
     title,
     sourceType,
@@ -765,13 +801,14 @@ function buildDebugInfoText(params: DebugInfoParams): string {
     `User-Agent: ${navigator.userAgent}`,
     `HLS 引擎: ${getHlsEngineText(isHls, hls, video)}`,
     `FLV 引擎: ${getFlvEngineText(isFlv)}`,
+    `MPEG-TS 引擎: ${getMpegtsEngineText(isMpegts)}`,
     `Artplayer: ${Artplayer.version}`,
     `HLS.js: ${Hls.version}`,
     `mpegts.js: ${mpegts.version}`,
     '',
     '--- 播放配置 ---',
     `模式: ${isLive ? '直播' : '点播'}`,
-    `源类型: ${sourceType || (isHls ? 'hls' : isFlv ? 'flv' : 'auto')}`,
+    `源类型: ${sourceType || (isHls ? 'hls' : isFlv ? 'flv' : isMpegts ? 'mpegts' : 'native')}`,
     `原始地址: ${rawSrc}`,
     `实际地址: ${displayUrl}`,
     ...(rawSrc !== displayUrl ? ['地址转换: 是（可能与代理/格式化有关）'] : []),
@@ -825,6 +862,14 @@ function getHlsEngineText(isHls: boolean, hls: Hls | undefined, video: HTMLVideo
 
 function getFlvEngineText(isFlv: boolean): string {
   if (!isFlv) {
+    return '未使用'
+  }
+
+  return mpegts.isSupported() ? 'mpegts.js' : '不支持'
+}
+
+function getMpegtsEngineText(isMpegts: boolean): string {
+  if (!isMpegts) {
     return '未使用'
   }
 
@@ -1027,15 +1072,6 @@ function getQualityText(art: Artplayer, isHls: boolean): string {
   return height > 0 ? `${height}P` : '-'
 }
 
-function getDownloadSpeedText(art: Artplayer, isHls: boolean): string {
-  if (!isHls) {
-    return '-'
-  }
-
-  const estimate = (art as ArtplayerWithHls).hls?.bandwidthEstimate
-  return formatBandwidthEstimate(estimate)
-}
-
 function formatBandwidthEstimate(bitsPerSecond: number | undefined): string {
   if (!bitsPerSecond || !Number.isFinite(bitsPerSecond) || bitsPerSecond <= 0) {
     return '检测中'
@@ -1063,7 +1099,13 @@ function reloadPlayback(art: Artplayer): void {
     })
 }
 
-function localizeInfoPanel(art: Artplayer, playbackUrl: string, isHls: boolean, isLive: boolean): void {
+function localizeInfoPanel(
+  art: Artplayer,
+  playbackUrl: string,
+  streamType: MediaStreamType,
+  isLive: boolean,
+  mpegtsRef: MutableRefObject<MpegtsPlayer | null>,
+): void {
   const { $info, $infoClose, $infoPanel } = art.template
   injectStatsStyles(art)
   $info.classList.add('vfan-stats-overlay')
@@ -1072,38 +1114,57 @@ function localizeInfoPanel(art: Artplayer, playbackUrl: string, isHls: boolean, 
   $infoPanel.innerHTML = `
     <div class="vfan-stats-heading">统计信息</div>
     <div class="vfan-stats-grid">
+      <div class="vfan-stats-heading">通用信息</div>
       <div class="vfan-stats-row"><span class="vfan-stats-label">播放器</span><span class="vfan-stats-value" data-vfan-info="player"></span></div>
-      <div class="vfan-stats-row"><span class="vfan-stats-label">媒体类型</span><span class="vfan-stats-value" data-vfan-info="mime"></span></div>
+      <div class="vfan-stats-row"><span class="vfan-stats-label">流类型</span><span class="vfan-stats-value" data-vfan-info="stream-type"></span></div>
+      <div class="vfan-stats-row"><span class="vfan-stats-label">媒体信息</span><span class="vfan-stats-value" data-vfan-info="mime"></span></div>
       <div class="vfan-stats-row"><span class="vfan-stats-label">当前 / 最优</span><span class="vfan-stats-value" data-vfan-info="resolution"></span></div>
-      <div class="vfan-stats-row"><span class="vfan-stats-label">清晰度</span><span class="vfan-stats-value" data-vfan-info="quality"></span></div>
       <div class="vfan-stats-row"><span class="vfan-stats-label">视口 / 帧</span><span class="vfan-stats-value" data-vfan-info="viewport"></span></div>
       <div class="vfan-stats-row"><span class="vfan-stats-label">音量</span><span class="vfan-stats-value" data-vfan-info="volume"></span></div>
       <div class="vfan-stats-row"><span class="vfan-stats-label">播放进度</span><span class="vfan-stats-value" data-vfan-info="progress"></span></div>
-      <div class="vfan-stats-row vfan-stats-row-meter"><span class="vfan-stats-label">连接速度</span><span class="vfan-stats-value"><span data-vfan-info="download-speed"></span><span class="vfan-stats-meter" data-vfan-info="download-meter"><span></span></span></span></div>
       <div class="vfan-stats-row vfan-stats-row-meter"><span class="vfan-stats-label">缓冲健康</span><span class="vfan-stats-value"><span data-vfan-info="buffer-health"></span><span class="vfan-stats-meter" data-vfan-info="buffer-meter"><span></span></span></span></div>
       <div class="vfan-stats-row"><span class="vfan-stats-label">丢帧</span><span class="vfan-stats-value" data-vfan-info="dropped-frames"></span></div>
       <div class="vfan-stats-row vfan-stats-row-url"><span class="vfan-stats-label">视频地址</span><span class="vfan-stats-value" data-vfan-info="url" title="${escapeHtmlAttribute(playbackUrl)}"></span></div>
+      ${getProtocolStatsMarkup(streamType)}
     </div>
   `
 
   const refresh = (): void => {
+    const isHls = streamType === 'hls'
     const hls = (art as ArtplayerWithHls).hls
+    const mpegtsPlayer = mpegtsRef.current
     const bufferHealth = getBufferHealth(art)
-    const downloadSpeed = isHls ? (art as ArtplayerWithHls).hls?.bandwidthEstimate : undefined
+    const downloadSpeed = isHls ? hls?.bandwidthEstimate : undefined
 
-    setInfoText($infoPanel, 'player', getPlayerEngineText(isHls))
-    setInfoText($infoPanel, 'mime', getMimeTypeText(art, isHls, hls))
+    setInfoText($infoPanel, 'stream-type', getStreamTypeText(streamType))
+    setInfoText($infoPanel, 'player', getPlayerEngineText(streamType))
+    setInfoText($infoPanel, 'mime', getMimeTypeText(art, streamType, hls, mpegtsPlayer))
     setInfoText($infoPanel, 'resolution', getResolutionStatsText(art, isHls, hls))
-    setInfoText($infoPanel, 'quality', getQualityText(art, isHls))
     setInfoText($infoPanel, 'viewport', getViewportStatsText(art))
     setInfoText($infoPanel, 'volume', `${Math.round(art.volume * 100)}%`)
     setInfoText($infoPanel, 'progress', getProgressStatsText(art, isLive))
-    setInfoText($infoPanel, 'download-speed', getDownloadSpeedText(art, isHls))
-    setInfoMeter($infoPanel, 'download-meter', getBitrateMeterPercent(downloadSpeed))
     setInfoText($infoPanel, 'buffer-health', bufferHealth.text)
     setInfoMeter($infoPanel, 'buffer-meter', getBufferMeterPercent(bufferHealth.seconds, art.duration, isLive))
     setInfoText($infoPanel, 'dropped-frames', getDroppedFramesText(art.video))
     setInfoText($infoPanel, 'url', shortenText(playbackUrl, 56))
+    if (isHls) {
+      setInfoText($infoPanel, 'quality', getQualityText(art, true))
+      setInfoText($infoPanel, 'download-speed', formatBandwidthEstimate(downloadSpeed))
+      setInfoMeter($infoPanel, 'download-meter', getBitrateMeterPercent(downloadSpeed))
+      setInfoText($infoPanel, 'track-count', `${hls?.levels.length ?? 0} 档 · ${hls?.audioTracks.length ?? 0} 音轨`)
+    }
+    if (streamType === 'flv' || streamType === 'mpegts') {
+      const stats = getMpegtsStatistics(mpegtsPlayer)
+      const mediaInfo = mpegtsPlayer?.mediaInfo
+      setInfoText($infoPanel, 'download-speed', formatMpegtsSpeed(stats?.speed))
+      setInfoMeter($infoPanel, 'download-meter', getMpegtsSpeedMeterPercent(stats?.speed))
+      setInfoText($infoPanel, 'loader', typeof stats?.loaderType === 'string' ? stats.loaderType : '-')
+      setInfoText($infoPanel, 'segments', formatMpegtsSegments(stats))
+      setInfoText($infoPanel, 'codec', formatMpegtsMediaInfo(mediaInfo))
+    }
+    if (streamType === 'native') {
+      setInfoText($infoPanel, 'buffered-ranges', formatTimeRanges(art.video.buffered))
+    }
   }
 
   refresh()
@@ -1129,25 +1190,41 @@ function injectStatsStyles(art: Artplayer): void {
       box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
     }
     .vfan-stats-panel {
-      padding: 14px 16px 16px;
+      padding: 16px 18px 18px;
       color: rgba(255, 255, 255, 0.92);
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 12px;
+      font-size: 13px;
       line-height: 1.45;
     }
     .vfan-stats-heading {
-      margin-bottom: 12px;
-      font-size: 13px;
-      font-weight: 600;
-      letter-spacing: 0.02em;
+      margin: 0 0 14px;
+      color: rgba(255, 255, 255, 0.96);
+      font-size: 18px;
+      font-weight: 650;
+      letter-spacing: 0.01em;
     }
     .vfan-stats-grid {
       display: grid;
       gap: 8px;
     }
+    .vfan-stats-grid .vfan-stats-heading {
+      margin: 12px 0 1px;
+      color: rgba(255, 255, 255, 0.72);
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+    }
+    .vfan-stats-grid .vfan-stats-heading:first-child {
+      margin-top: 0;
+    }
+    .vfan-stats-grid .vfan-stats-section-heading {
+      margin-top: 10px;
+      padding-top: 14px;
+      border-top: 1px solid rgba(255, 255, 255, 0.1);
+    }
     .vfan-stats-row {
       display: grid;
-      grid-template-columns: 92px minmax(0, 1fr);
+      grid-template-columns: 98px minmax(0, 1fr);
       gap: 12px;
       align-items: start;
     }
@@ -1155,7 +1232,7 @@ function injectStatsStyles(art: Artplayer): void {
       align-items: start;
     }
     .vfan-stats-label {
-      color: rgba(255, 255, 255, 0.58);
+      color: rgba(255, 255, 255, 0.62);
       text-align: right;
       white-space: nowrap;
     }
@@ -1169,7 +1246,7 @@ function injectStatsStyles(art: Artplayer): void {
     }
     .vfan-stats-meter {
       display: block;
-      height: 4px;
+      height: 5px;
       overflow: hidden;
       border-radius: 999px;
       background: rgba(255, 255, 255, 0.12);
@@ -1192,12 +1269,47 @@ function injectStatsStyles(art: Artplayer): void {
   art.template.$player.appendChild(style)
 }
 
-function getPlayerEngineText(isHls: boolean): string {
-  return `Artplayer ${Artplayer.version}${isHls ? ' · HLS.js' : ''}`
+function getProtocolStatsMarkup(streamType: MediaStreamType): string {
+  if (streamType === 'hls') {
+    return `
+      <div class="vfan-stats-heading vfan-stats-section-heading">HLS 详情</div>
+      <div class="vfan-stats-row"><span class="vfan-stats-label">清晰度</span><span class="vfan-stats-value" data-vfan-info="quality"></span></div>
+      <div class="vfan-stats-row"><span class="vfan-stats-label">档位 / 音轨</span><span class="vfan-stats-value" data-vfan-info="track-count"></span></div>
+      <div class="vfan-stats-row vfan-stats-row-meter"><span class="vfan-stats-label">带宽预估</span><span class="vfan-stats-value"><span data-vfan-info="download-speed"></span><span class="vfan-stats-meter" data-vfan-info="download-meter"><span></span></span></span></div>
+    `
+  }
+  if (streamType === 'flv' || streamType === 'mpegts') {
+    return `
+      <div class="vfan-stats-heading vfan-stats-section-heading">${streamType === 'flv' ? 'FLV' : 'MPEG-TS'} 详情</div>
+      <div class="vfan-stats-row vfan-stats-row-meter"><span class="vfan-stats-label">传输速度</span><span class="vfan-stats-value"><span data-vfan-info="download-speed"></span><span class="vfan-stats-meter" data-vfan-info="download-meter"><span></span></span></span></div>
+      <div class="vfan-stats-row"><span class="vfan-stats-label">加载器</span><span class="vfan-stats-value" data-vfan-info="loader"></span></div>
+      <div class="vfan-stats-row"><span class="vfan-stats-label">分段进度</span><span class="vfan-stats-value" data-vfan-info="segments"></span></div>
+      <div class="vfan-stats-row"><span class="vfan-stats-label">音视频信息</span><span class="vfan-stats-value" data-vfan-info="codec"></span></div>
+    `
+  }
+  return `
+    <div class="vfan-stats-heading vfan-stats-section-heading">原生媒体详情</div>
+    <div class="vfan-stats-row"><span class="vfan-stats-label">缓冲区间</span><span class="vfan-stats-value" data-vfan-info="buffered-ranges"></span></div>
+  `
 }
 
-function getMimeTypeText(art: Artplayer, isHls: boolean, hls?: Hls): string {
-  if (isHls && hls?.levels?.length) {
+function getStreamTypeText(streamType: MediaStreamType): string {
+  return { hls: 'HLS / M3U8', flv: 'FLV', mpegts: 'MPEG-TS', native: '原生直链' }[streamType]
+}
+
+function getPlayerEngineText(streamType: MediaStreamType): string {
+  const engine =
+    streamType === 'hls' ? 'HLS.js' : streamType === 'flv' || streamType === 'mpegts' ? 'mpegts.js' : '浏览器原生'
+  return `Artplayer ${Artplayer.version} · ${engine}`
+}
+
+function getMimeTypeText(
+  art: Artplayer,
+  streamType: MediaStreamType,
+  hls?: Hls,
+  mpegtsPlayer?: MpegtsPlayer | null,
+): string {
+  if (streamType === 'hls' && hls?.levels?.length) {
     const level = hls.levels[Math.max(0, hls.currentLevel)] ?? hls.levels[0]
     const codec = level.codecSet || level.videoCodec || level.attrs?.CODECS
     if (codec) {
@@ -1206,8 +1318,63 @@ function getMimeTypeText(art: Artplayer, isHls: boolean, hls?: Hls): string {
     return 'application/x-mpegURL'
   }
 
+  if (streamType === 'flv' || streamType === 'mpegts') {
+    return formatMpegtsMediaInfo(mpegtsPlayer?.mediaInfo)
+  }
+
   const mimeType = art.video.currentSrc ? guessMimeType(art.video.currentSrc) : '-'
   return mimeType
+}
+
+function formatMpegtsSpeed(speed: unknown): string {
+  return typeof speed === 'number' && Number.isFinite(speed) && speed > 0 ? `${speed.toFixed(1)} KB/s` : '检测中'
+}
+
+function getMpegtsSpeedMeterPercent(speed: unknown): number {
+  return typeof speed === 'number' && Number.isFinite(speed) ? Math.min(100, Math.round((speed / 1_250) * 100)) : 0
+}
+
+function getMpegtsStatistics(
+  player: MpegtsPlayer | null,
+): { speed?: unknown; loaderType?: unknown; currentSegmentIndex?: unknown; totalSegmentCount?: unknown } | undefined {
+  if (!player?.statisticsInfo || player.statisticsInfo.playerType !== 'MSEPlayer') return undefined
+  return player.statisticsInfo
+}
+
+function formatMpegtsSegments(
+  stats: { currentSegmentIndex?: unknown; totalSegmentCount?: unknown } | undefined,
+): string {
+  const current = stats?.currentSegmentIndex
+  const total = stats?.totalSegmentCount
+  return typeof current === 'number' && typeof total === 'number' && total > 0 ? `${current + 1} / ${total}` : '直播流'
+}
+
+function formatMpegtsMediaInfo(
+  mediaInfo:
+    | {
+        mimeType?: unknown
+        videoCodec?: unknown
+        audioCodec?: unknown
+        videoDataRate?: unknown
+        audioDataRate?: unknown
+      }
+    | undefined,
+): string {
+  if (!mediaInfo) return '-'
+  const codecs = [mediaInfo.videoCodec, mediaInfo.audioCodec].filter(
+    (value): value is string => typeof value === 'string',
+  )
+  const rates = [
+    typeof mediaInfo.videoDataRate === 'number' ? `视频 ${formatBitsPerSecond(mediaInfo.videoDataRate)}` : undefined,
+    typeof mediaInfo.audioDataRate === 'number' ? `音频 ${formatBitsPerSecond(mediaInfo.audioDataRate)}` : undefined,
+  ].filter(Boolean)
+  return [mediaInfo.mimeType, codecs.join(' / '), rates.join(' · ')].filter(Boolean).join(' · ') || '-'
+}
+
+function formatBitsPerSecond(bitsPerSecond: number): string {
+  return bitsPerSecond >= 1_000_000
+    ? `${(bitsPerSecond / 1_000_000).toFixed(2)} Mbps`
+    : `${Math.round(bitsPerSecond / 1_000)} Kbps`
 }
 
 function getResolutionStatsText(art: Artplayer, isHls: boolean, hls?: Hls): string {

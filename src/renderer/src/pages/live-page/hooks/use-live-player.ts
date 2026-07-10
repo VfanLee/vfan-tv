@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 import { LIVE_SELECTED_SOURCE_STORAGE_KEY } from '@shared/constants'
-import type { LiveChannel, LiveChannelStream, LivePlaylist, LiveSourceConfig } from '@shared/types'
-import { getMediaProxyBaseUrl, isApiAvailable, listLiveSources, loadLivePlaylist } from '@renderer/services/api'
+import type { LiveChannel, LiveChannelStream, LivePlaylist, LiveSourceConfig, MediaStreamType } from '@shared/types'
+import {
+  detectMediaStreamType,
+  getMediaProxyBaseUrl,
+  isApiAvailable,
+  listLiveSources,
+  loadLivePlaylist,
+} from '@renderer/services/api'
 import {
   groupChannels,
-  isLikelyFlvStream,
-  isLikelyHlsStream,
+  getKnownStreamType,
   normalizeLivePlaylist,
   readCachedPlaylist,
   readCachedSelection,
@@ -20,8 +25,7 @@ export interface LivePlayerState {
   activeChannel?: LiveChannel
   activeChannelId: string
   activeStream?: LiveChannelStream
-  activeStreamIsFlv: boolean
-  activeStreamIsHls: boolean
+  activeStreamType?: MediaStreamType
   channelCount: number
   expandedGroups: Set<string>
   formatPlaybackUrl: (currentSrc: string) => string
@@ -62,12 +66,21 @@ export function useLivePlayer(): LivePlayerState {
   const [isLoadingSettings, setIsLoadingSettings] = useState(true)
   const [isLoadingPlaylist, setIsLoadingPlaylist] = useState(false)
   const [isTheaterMode, setIsTheaterMode] = useState(false)
+  const [detectedStream, setDetectedStream] = useState<{ url: string; type: MediaStreamType }>()
+  const [streamTypeCache, setStreamTypeCache] = useState<Record<string, MediaStreamType>>({})
   const selectedSource = liveSources.find((source) => source.id === selectedSourceId)
   const activeChannel = playlist?.channels.find((channel) => channel.id === activeChannelId)
   const activeStream =
     activeChannel?.streams.find((stream) => stream.id === activeStreamId) ?? activeChannel?.streams[0]
   const activeStreamIndex = activeChannel?.streams.findIndex((stream) => stream.id === activeStreamId) ?? -1
   const activeStreamUrl = activeStream?.url ?? ''
+  const knownStreamType = getKnownStreamType(activeStreamUrl)
+  const cachedStreamType = streamTypeCache[activeStreamUrl]
+  const activeStreamType =
+    knownStreamType ??
+    cachedStreamType ??
+    (detectedStream?.url === activeStreamUrl ? detectedStream.type : undefined) ??
+    (activeStreamUrl && !isApiAvailable() ? 'native' : undefined)
   const groupedChannels = useMemo(() => groupChannels(playlist?.channels ?? [], keyword), [keyword, playlist])
 
   const applyPlaylist = useCallback((nextPlaylist: LivePlaylist, sourceId: string): void => {
@@ -151,6 +164,20 @@ export function useLivePlayer(): LivePlayerState {
     return () => window.removeEventListener('keydown', onKeyDown)
   }, [isTheaterMode])
 
+  useEffect(() => {
+    if (!activeStreamUrl || knownStreamType || cachedStreamType || !isApiAvailable()) return
+
+    let active = true
+    void detectMediaStreamType({ url: activeStreamUrl }).then((result) => {
+      if (!active || !result) return
+      setStreamTypeCache((current) => ({ ...current, [activeStreamUrl]: result.type }))
+      setDetectedStream({ url: activeStreamUrl, type: result.type })
+    })
+    return () => {
+      active = false
+    }
+  }, [activeStreamUrl, cachedStreamType, knownStreamType])
+
   const selectSource = (sourceId: string): void => {
     setSelectedSourceId(sourceId)
     window.localStorage.setItem(LIVE_SELECTED_SOURCE_STORAGE_KEY, sourceId)
@@ -183,8 +210,7 @@ export function useLivePlayer(): LivePlayerState {
     activeChannel,
     activeChannelId,
     activeStream,
-    activeStreamIsFlv: isLikelyFlvStream(activeStreamUrl),
-    activeStreamIsHls: isLikelyHlsStream(activeStreamUrl),
+    activeStreamType,
     expandedGroups,
     groupedChannels,
     hasNextStream:
@@ -195,7 +221,7 @@ export function useLivePlayer(): LivePlayerState {
     isTheaterMode,
     keyword,
     liveSources,
-    playerSrc: resolveStreamPlaybackUrl(liveProxyBaseUrl, activeStreamUrl),
+    playerSrc: activeStreamType ? resolveStreamPlaybackUrl(liveProxyBaseUrl, activeStreamUrl) : undefined,
     playerTitle: activeChannel?.title,
     playlist,
     selectedSource,

@@ -23,6 +23,7 @@ import { LiveSourceService } from '../services/live-source.service'
 import { MediaProxyServer } from '../services/media-proxy-server'
 import { LivePlaylistService } from '../services/live-playlist.service'
 import { probeMediaSource } from '../services/media-probe.service'
+import { detectMediaStreamType } from '../services/media-stream-detector.service'
 import { SearchTaskManager } from '../services/search-task-manager'
 import { SettingsService } from '../services/settings.service'
 import { SourceService } from '../services/source.service'
@@ -264,6 +265,9 @@ export function registerIpcHandlers(): void {
     livePlaylistService.load(url),
   )
   ipcMain.handle('media:get-proxy-base-url', () => mediaProxyServer.getBaseUrl())
+  ipcMain.handle('media:detect-stream-type', (_event, input: Parameters<AppApi['media']['detectStreamType']>[0]) =>
+    detectMediaStreamType(input),
+  )
   ipcMain.handle('settings:get', () => settingsService.get())
   ipcMain.handle('settings:update', (_event, input: Parameters<AppApi['settings']['update']>[0]) =>
     settingsService.update(input),

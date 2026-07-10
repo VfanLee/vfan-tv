@@ -3,7 +3,7 @@ import {
   LIVE_SELECTED_SOURCE_STORAGE_KEY,
   LIVE_SELECTION_STORAGE_PREFIX,
 } from '@shared/constants'
-import type { LiveChannel, LivePlaylist, LiveSourceConfig } from '@shared/types'
+import type { LiveChannel, LivePlaylist, LiveSourceConfig, MediaStreamType } from '@shared/types'
 import type { LiveSelectionCache } from './types'
 
 const LIVE_CONTEXT_KEYWORDS = ['直播', '卫视', '央视', '央卫视']
@@ -139,26 +139,34 @@ function inferStreamIsLive(group: string, title: string, url: string): boolean {
 }
 
 export function isLikelyHlsStream(url: string | undefined): boolean {
-  if (!url) return false
-  try {
-    const parsedUrl = new URL(url)
-    return /\.m3u8(?:$|[?#])/i.test(parsedUrl.pathname) || /(?:^|[/?&=])(?:m3u8|hls|iptv|tvod)(?:$|[/?&=])/i.test(url)
-  } catch {
-    return /\.m3u8(?:$|[?#])/i.test(url)
-  }
+  return getKnownStreamType(url) === 'hls'
 }
 
 export function isLikelyFlvStream(url: string | undefined): boolean {
-  if (!url) return false
+  return getKnownStreamType(url) === 'flv'
+}
+
+export function getKnownStreamType(url: string | undefined): Exclude<MediaStreamType, 'native'> | undefined {
+  if (!url) return undefined
   try {
     const parsedUrl = new URL(url)
-    return (
+    if (/\.m3u8(?:$|[?#])/i.test(parsedUrl.pathname) || /(?:^|[/?&=])(?:m3u8|hls|iptv|tvod)(?:$|[/?&=])/i.test(url)) {
+      return 'hls'
+    }
+    if (
       /\.flv(?:$|[?#])/i.test(parsedUrl.pathname) ||
       (parsedUrl.hostname === 'yg.ygbox.de5.net' &&
         parsedUrl.pathname === '/huya.php' &&
         parsedUrl.searchParams.has('id'))
-    )
+    ) {
+      return 'flv'
+    }
+    if (/\.(?:ts|m2ts)(?:$|[?#])/i.test(parsedUrl.pathname)) return 'mpegts'
   } catch {
-    return /\.flv(?:$|[?#])/i.test(url) || /(?:^|\.)yg\.ygbox\.de5\.net\/huya\.php\?/i.test(url)
+    if (/\.m3u8(?:$|[?#])/i.test(url) || /(?:^|[/?&=])(?:m3u8|hls|iptv|tvod)(?:$|[/?&=])/i.test(url)) return 'hls'
+    if (/\.flv(?:$|[?#])/i.test(url) || /(?:^|\.)yg\.ygbox\.de5\.net\/huya\.php\?/i.test(url)) return 'flv'
+    if (/\.(?:ts|m2ts)(?:$|[?#])/i.test(url)) return 'mpegts'
   }
+
+  return undefined
 }

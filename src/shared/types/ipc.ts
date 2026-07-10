@@ -20,6 +20,7 @@ import type {
   LiveSourceInput,
 } from './live'
 import type { RecentPlayInput, RecentPlayItem } from './recent'
+import type { MediaStreamDetectionInput, MediaStreamDetectionResult } from './media'
 import type { SearchEvent } from './search'
 import type { MediaProbeInput, MediaProbeResult, RecommendationItem } from './vod'
 import type { UpdateCheckResult, UpdateEvent } from './update'
@@ -113,6 +114,7 @@ export interface AppApi {
   }
   media: {
     getProxyBaseUrl: () => Promise<string>
+    detectStreamType: (input: MediaStreamDetectionInput) => Promise<MediaStreamDetectionResult>
   }
   settings: {
     get: () => Promise<AppSettings>

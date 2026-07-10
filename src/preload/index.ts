@@ -59,6 +59,7 @@ const api: AppApi = {
   },
   media: {
     getProxyBaseUrl: () => ipcRenderer.invoke('media:get-proxy-base-url'),
+    detectStreamType: (input) => ipcRenderer.invoke('media:detect-stream-type', input),
   },
   settings: {
     get: () => ipcRenderer.invoke('settings:get'),

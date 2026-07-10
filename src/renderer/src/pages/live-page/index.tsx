@@ -49,7 +49,7 @@ export function LivePage(): React.JSX.Element {
                 loop={player.variant !== 'live'}
                 persistPlaybackSettings={false}
                 navigationLabels={{ next: '下一线路', previous: '上一线路' }}
-                sourceType={player.activeStreamIsHls ? 'hls' : player.activeStreamIsFlv ? 'flv' : undefined}
+                sourceType={player.activeStreamType}
                 src={player.playerSrc}
                 title={player.playerTitle}
                 variant={player.variant}
