@@ -30,18 +30,18 @@
 └── electron-builder.yml     # Electron Builder 配置
 ```
 
-## 分域规范
+## 分域规则
 
-按本次改动涉及的范围读取对应文档；跨域改动需要同时读取所有相关文档。
+必须按本次改动涉及的范围读取对应文档；跨域改动必须同时读取所有相关文档。
 
 - 修改 `src/main`：读取 `docs/agents-main.md`
 - 修改 `src/preload`：读取 `docs/agents-preload.md`
 - 修改 `src/renderer`、`components.json` 或 shadcn 组件：读取 `docs/agents-renderer.md`
 - 修改 `src/shared`：同时检查 main 与 renderer 影响，并执行 `pnpm typecheck`
 
-## 通用约定
+## 通用规则
 
-- 执行终端命令时优先使用 `zsh`。
-- 优先使用 `pnpm`、TypeScript 和项目既有技术栈。
-- 涉及多种实现路径时，先说明取舍；用户已给出具体方案时，先评估方案合理性。
+- 执行终端命令时应当优先使用 `zsh`。
+- 实现时应当优先使用 `pnpm`、TypeScript 和项目既有技术栈。
+- 涉及多种实现路径时应当先说明取舍；用户已给出具体方案时应当先评估方案合理性。
 - 高风险操作必须先确认：`rm -rf`、系统配置修改、Shell 配置修改、删除数据库/数据文件、Git force push。

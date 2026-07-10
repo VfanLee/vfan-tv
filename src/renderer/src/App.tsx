@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Toaster } from 'sonner'
 import { setMediaProxyBaseUrl } from '@shared/utils/media-image'
-import { ThemeProvider } from './components/layout/ThemeProvider'
+import { ThemeProvider } from './components/layout/theme-provider'
 import { AppRouter } from './routes/AppRouter'
 import { getMediaProxyBaseUrl } from './services/api'
 import { useThemeStore } from './stores/theme'
