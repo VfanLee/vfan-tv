@@ -1,5 +1,5 @@
 import { createHashRouter, Navigate, RouterProvider } from 'react-router'
-import { AppLayout } from '@renderer/components'
+import { AppLayout, AppRouteErrorPage } from '@renderer/components'
 import {
   AboutPage,
   HomePage,
@@ -16,6 +16,7 @@ const router = createHashRouter([
   {
     path: '/',
     element: <AppLayout />,
+    errorElement: <AppRouteErrorPage />,
     children: [
       { index: true, element: <HomePage />, handle: { showGlobalSearch: true } },
       { path: 'hot', element: <Navigate replace to="/hot/movie" /> },

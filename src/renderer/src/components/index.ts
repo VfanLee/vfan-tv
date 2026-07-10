@@ -1,4 +1,5 @@
 // common
+export * from './common/app-error-boundary'
 export * from './common/confirm-dialog'
 
 // layout

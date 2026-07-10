@@ -25,6 +25,7 @@ export {
   CardTitle,
 } from './card'
 export { Input } from './input'
+export { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from './empty'
 export {
   Select,
   SelectContent,
