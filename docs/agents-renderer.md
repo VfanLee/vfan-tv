@@ -32,8 +32,14 @@ src/renderer/src
 
 ### pages
 
-- 页面目录必须统一使用小写烧烤串命名，采用 `xxx-yyy/index.ts`。
+- 页面目录必须统一使用小写烧烤串命名，采用 `xxx-yyy/index.tsx`。
 - `pages/index.ts` 作为聚合导出入口，新增页面时必须同步维护。
+- `index.tsx` 应当聚焦路由页面布局、模块组合和路由级协调，不应长期混合大量子组件、领域状态、副作用与纯数据转换。
+- 页面私有 UI 放在页面目录的 `components/` 下，采用小写烧烤串单文件命名，例如 `components/source-table-card.tsx`。
+- 页面私有 hooks 放在页面目录的 `hooks/` 下，采用 `use-xxx-yyy.ts` 命名；应按稳定的业务行为或状态域拆分，避免创建返回大量无关状态和操作的“万能 hook”。
+- 页面私有类型与纯函数可以放在 `types.ts`、`utils.ts`，或在内容较多时使用含义明确的小写烧烤串文件名。
+- 页面私有模块应直接导入具体文件，默认不增加页面内部聚合导出，以降低循环依赖和无效打包风险。
+- 只有跨页面或跨组件实际复用、且语义稳定的能力，才提升到 renderer 全局 `components`、`hooks` 或 `utils` 目录。
 
 ### hooks
 
