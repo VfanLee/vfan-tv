@@ -50,7 +50,7 @@ export class MediaProxyServer {
     }
 
     const requestUrl = new URL(request.url ?? '/', 'http://127.0.0.1')
-    if (!['/media', '/image'].includes(requestUrl.pathname)) {
+    if (!['/media', '/image', '/resolve'].includes(requestUrl.pathname)) {
       response.writeHead(404)
       response.end('Not found')
       return
@@ -68,6 +68,16 @@ export class MediaProxyServer {
       if (!['http:', 'https:'].includes(parsedTargetUrl.protocol)) {
         response.writeHead(400)
         response.end('Only http/https media resources are supported')
+        return
+      }
+
+      if (requestUrl.pathname === '/resolve') {
+        await resolveMediaUrl(
+          response,
+          parsedTargetUrl.toString(),
+          requestUrl.searchParams.get('referer') ?? `${parsedTargetUrl.origin}/`,
+          requestUrl.searchParams.get('user-agent') ?? undefined,
+        )
         return
       }
 
@@ -90,6 +100,74 @@ export class MediaProxyServer {
   }
 }
 
+/**
+ * 仅跟随重定向并返回最终地址，不下载媒体正文。
+ * 避免为「解析地址」展示再开一条直播推流连接，导致正在播放的 FLV/TS 被 CDN 踢断。
+ */
+async function resolveMediaUrl(
+  response: ServerResponse,
+  targetUrl: string,
+  referer: string | undefined,
+  userAgent: string | undefined,
+): Promise<void> {
+  const resolvedUrl = await followRedirectsOnly(targetUrl, referer, userAgent)
+  const body = JSON.stringify({ url: resolvedUrl })
+  writeCorsHeaders(response)
+  response.writeHead(200, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Content-Length': Buffer.byteLength(body, 'utf-8'),
+    'Cache-Control': 'no-cache',
+  })
+  response.end(body)
+}
+
+async function followRedirectsOnly(
+  targetUrl: string,
+  referer: string | undefined,
+  userAgent: string | undefined,
+  maxRedirects = 5,
+): Promise<string> {
+  let currentUrl = targetUrl
+
+  for (let redirectCount = 0; redirectCount <= maxRedirects; redirectCount += 1) {
+    const upstream = await axios.get<Readable>(currentUrl, {
+      headers: {
+        'User-Agent':
+          userAgent ||
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36',
+        'Accept': '*/*',
+        'Accept-Encoding': 'identity',
+        ...(referer ? { Referer: referer } : {}),
+      },
+      maxRedirects: 0,
+      proxy: false,
+      responseType: 'stream',
+      timeout: 12_000,
+      validateStatus: () => true,
+    })
+
+    // 拿到响应头后立刻断开，绝不消费直播推流正文。
+    upstream.data.destroy()
+
+    if (upstream.status >= 300 && upstream.status < 400) {
+      const location = getResponseHeader(upstream.headers, 'location')
+      if (!location) {
+        return getResponseUrl(upstream.request) ?? currentUrl
+      }
+      currentUrl = new URL(location, currentUrl).toString()
+      // 跳转目标已是媒体地址时直接返回，避免再请求一次推流。
+      if (/\.(?:m3u8|flv|ts|m2ts)(?:$|[?#])/i.test(currentUrl)) {
+        return currentUrl
+      }
+      continue
+    }
+
+    return getResponseUrl(upstream.request) ?? currentUrl
+  }
+
+  return currentUrl
+}
+
 async function proxyMediaRequest(
   request: IncomingMessage,
   response: ServerResponse,
@@ -102,17 +180,20 @@ async function proxyMediaRequest(
   response.once('close', () => abortController.abort())
 
   const upstream = await axios.get<Readable>(targetUrl, {
-    headers: getRequestHeaders(request, referer, userAgent),
+    headers: getRequestHeaders(request, referer, userAgent, targetUrl),
     proxy: false,
     responseType: 'stream',
     signal: abortController.signal,
-    timeout: 30_000,
+    // 直播推流是长连接，不能设整请求超时，否则约 30s 会被 axios 主动掐断，表现为「自动暂停」。
+    timeout: 0,
+    decompress: false,
     validateStatus: () => true,
   })
 
   const contentType = getResponseHeader(upstream.headers, 'content-type') ?? ''
   const status = normalizeStatus(upstream.status)
   const responseUrl = getResponseUrl(upstream.request) ?? targetUrl
+  const isLiveMedia = isLiveMediaUrl(responseUrl, contentType)
 
   if (isPlaylist(responseUrl, contentType)) {
     const body = await readStream(upstream.data)
@@ -131,11 +212,12 @@ async function proxyMediaRequest(
 
   writeHeaders(
     response,
-    status,
+    // 直播推流用 200 + 分块传输；透传 206/Content-Length 会让播放器以为媒体已结束。
+    isLiveMedia ? 200 : status,
     createResponseHeaders(
       contentType || inferContentType(responseUrl),
-      getContentLength(upstream.headers),
-      upstream.headers,
+      isLiveMedia ? 0 : getContentLength(upstream.headers),
+      isLiveMedia ? undefined : upstream.headers,
       responseUrl,
     ),
   )
@@ -146,16 +228,20 @@ function getRequestHeaders(
   request: IncomingMessage,
   referer: string | undefined,
   userAgent: string | undefined,
+  targetUrl?: string,
 ): Record<string, string> {
   const headers: Record<string, string> = {
     'User-Agent':
       userAgent ||
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36',
     'Accept': '*/*',
+    // 禁止压缩，避免 FLV/TS 二进制流被错误处理。
+    'Accept-Encoding': 'identity',
   }
 
   const range = request.headers.range
-  if (range) {
+  // 直播 FLV/TS 不应转发 Range，否则 CDN 可能只返回一小段就结束。
+  if (range && !isLiveMediaUrl(targetUrl ?? '', '')) {
     headers.Range = range
   }
 
@@ -164,6 +250,17 @@ function getRequestHeaders(
   }
 
   return headers
+}
+
+function isLiveMediaUrl(url: string, contentType: string): boolean {
+  const normalizedContentType = contentType.toLowerCase()
+  if (normalizedContentType.includes('video/x-flv') || normalizedContentType.includes('video/flv')) {
+    return true
+  }
+  if (normalizedContentType.includes('video/mp2t') || normalizedContentType.includes('video/mpegts')) {
+    return true
+  }
+  return /\.(?:flv|ts|m2ts)(?:$|[?#])/i.test(url)
 }
 
 function createResponseHeaders(

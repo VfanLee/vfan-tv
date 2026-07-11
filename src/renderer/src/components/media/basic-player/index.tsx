@@ -171,14 +171,21 @@ export function BasicPlayer({
     const displayPlaybackUrl = formatPlaybackUrlRef.current(src)
     const debugLog = new PlaybackDebugRecorder()
 
-    resolvedUrlRef.current = '检测中…'
     const resolveAbortController = new AbortController()
     let isResolveActive = true
-    void resolvePlaybackAddress(src, resolveAbortController.signal).then((resolvedUrl) => {
-      if (isResolveActive) {
-        resolvedUrlRef.current = resolvedUrl
-      }
-    })
+    // FLV/TS 直播源必须跳过二次解析探测：这类 CDN 常用 URL 里的 session token（seqid/stream_key 等）
+    // 做单连接鉴权，哪怕探测请求只读头就断开，服务端一旦收到同 token 的新请求就可能判定为「重连」，
+    // 把正在播放的那条连接踢掉——表现为播一小段就卡住，点播放又重复同一小段。
+    if (isLive || isFlv || isMpegts) {
+      resolvedUrlRef.current = extractProxiedTargetUrl(src) ?? displayPlaybackUrl
+    } else {
+      resolvedUrlRef.current = '检测中…'
+      void resolvePlaybackAddress(src, resolveAbortController.signal).then((resolvedUrl) => {
+        if (isResolveActive) {
+          resolvedUrlRef.current = resolvedUrl
+        }
+      })
+    }
 
     if (!cachedAppVersion && window.api?.updates?.getCurrentVersion) {
       void window.api.updates.getCurrentVersion().then((version) => {
@@ -681,6 +688,9 @@ function getArtplayerType(src: string | undefined, sourceType: BasicPlayerProps[
   return ''
 }
 
+const MAX_MPEGTS_RECONNECT_ATTEMPTS = 6
+const MPEGTS_RECONNECT_RESET_DELAY_MS = 5_000
+
 function createMpegtsPlayback(
   video: HTMLVideoElement,
   url: string,
@@ -702,23 +712,102 @@ function createMpegtsPlayback(
     return
   }
 
-  const player = mpegts.createPlayer(
-    { type, url, isLive },
-    {
-      enableWorker: true,
-      enableStashBuffer: !isLive,
-      stashInitialSize: isLive ? 128 * 1024 : 384 * 1024,
-      liveBufferLatencyChasing: isLive,
-    },
-  )
-  mpegtsRef.current = player
-  player.on(mpegts.Events.ERROR, (errorType: string, errorDetail: string, errorInfo: unknown) => {
-    debugLog.push(label, `${errorType} · ${errorDetail} · ${formatUnknownErrorInfo(errorInfo)}`)
-    reportPlaybackFailure(art, `${label} 播放失败：${errorDetail || errorType}`)
-  })
-  player.on(mpegts.Events.MEDIA_INFO, () => debugLog.push(label, '媒体信息已解析'))
-  player.attachMediaElement(video)
-  player.load()
+  const treatAsLive = isLive || type === 'flv'
+  let reconnectAttempts = 0
+  let resetAttemptsTimer: number | undefined
+
+  const clearResetAttemptsTimer = (): void => {
+    if (resetAttemptsTimer !== undefined) {
+      window.clearTimeout(resetAttemptsTimer)
+      resetAttemptsTimer = undefined
+    }
+  }
+
+  // 一段时间内没有再次触发重连，说明这次重连已经稳定住了，重置计数器，
+  // 避免「断了很多次」这个历史状态一直压着最大重试次数不放。
+  const scheduleResetAttempts = (): void => {
+    clearResetAttemptsTimer()
+    resetAttemptsTimer = window.setTimeout(() => {
+      reconnectAttempts = 0
+    }, MPEGTS_RECONNECT_RESET_DELAY_MS)
+  }
+
+  const startPlayer = (): MpegtsPlayer => {
+    const player = mpegts.createPlayer(
+      { type, url, isLive: treatAsLive },
+      {
+        enableWorker: true,
+        enableStashBuffer: !treatAsLive,
+        stashInitialSize: treatAsLive ? 128 * 1024 : 384 * 1024,
+        liveBufferLatencyChasing: treatAsLive,
+        // 直播必须关闭 lazyLoad：默认 true 会在缓冲足够后主动断开 HTTP，
+        // 推流一断就只剩已缓冲的一小段，表现为播几秒暂停、点播放又重播同一段。
+        // IPTV 场景下 FLV 基本都是推流，即使被标成录播也按直播处理。
+        lazyLoad: !treatAsLive,
+        deferLoadAfterSourceOpen: !treatAsLive,
+        autoCleanupSourceBuffer: treatAsLive,
+      },
+    )
+
+    // 用 ref 是否仍指向当前 player 实例判断回调是否过期：
+    // 组件卸载/切换源会替换或清空 mpegtsRef，此后旧 player 的异步事件应被忽略。
+    const isStale = (): boolean => mpegtsRef.current !== player
+
+    player.on(mpegts.Events.ERROR, (errorType: string, errorDetail: string, errorInfo: unknown) => {
+      if (isStale()) return
+      debugLog.push(label, `${errorType} · ${errorDetail} · ${formatUnknownErrorInfo(errorInfo)}`)
+      if (treatAsLive) {
+        reconnect(player, `${errorDetail || errorType}`)
+        return
+      }
+      reportPlaybackFailure(art, `${label} 播放失败：${errorDetail || errorType}`)
+    })
+    player.on(mpegts.Events.MEDIA_INFO, () => {
+      if (isStale()) return
+      debugLog.push(label, '媒体信息已解析')
+    })
+    player.on(mpegts.Events.LOADING_COMPLETE, () => {
+      if (isStale() || !treatAsLive) return
+      // 直播推流被上游正常关闭（无报错的 HTTP 响应结束）时，mpegts.js 会直接判定为播放
+      // 完毕并调用 endOfStream，表现为播一会儿就停、点播放又重播同一小段。
+      // 直播场景下这其实等价于断线，需要自动重新拉流，而不是当作播放结束处理。
+      reconnect(player, '上游连接正常关闭')
+    })
+    player.attachMediaElement(video)
+    player.load()
+    return player
+  }
+
+  // reason 参数携带触发重连的原 player 实例：定时器触发时需要重新核对
+  // mpegtsRef 是否仍指向它，避免组件卸载/切换播放源后，过期的重连定时器
+  // 反而把新播放源刚创建好的 player 顶掉。
+  const reconnect = (fromPlayer: MpegtsPlayer, reason: string): void => {
+    reconnectAttempts += 1
+    clearResetAttemptsTimer()
+    if (reconnectAttempts > MAX_MPEGTS_RECONNECT_ATTEMPTS) {
+      reportPlaybackFailure(art, `${label} 直播连接反复中断（${reason}），已停止自动重连`)
+      return
+    }
+
+    const delayMs = Math.min(500 * 2 ** (reconnectAttempts - 1), 5_000)
+    debugLog.push(label, `直播连接中断 · ${reason} · ${delayMs}ms 后第 ${reconnectAttempts} 次重连`)
+    window.setTimeout(() => {
+      if (mpegtsRef.current !== fromPlayer) return
+      try {
+        fromPlayer.unload()
+        fromPlayer.detachMediaElement()
+        fromPlayer.destroy()
+      } catch {
+        // Ignore teardown errors from the previous, already-broken player instance.
+      }
+      const nextPlayer = startPlayer()
+      mpegtsRef.current = nextPlayer
+      scheduleResetAttempts()
+      void nextPlayer.play()?.catch(() => undefined)
+    }, delayMs)
+  }
+
+  mpegtsRef.current = startPlayer()
 }
 
 function removeDefaultContextMenuItems(art: Artplayer): void {
@@ -1627,34 +1716,59 @@ function bindCopyableUrlClicks(panel: HTMLElement, art: Artplayer): void {
 
 /**
  * 探测播放地址在跳转（HTTP 重定向）后实际解析到的最终地址，用于统计信息面板展示排查。
- * 直播源经由本地代理转发时，代理会通过 `X-Vfan-Resolved-Url` 响应头回传真实解析地址；
- * 若目标地址本身支持跨域重定向探测（如未经代理的直链），则回退为浏览器 fetch 后的 `response.url`。
+ * 本地代理地址会走 `/resolve`（只跟跳转、不拉流）。
+ * 注意：仅用于非直播源。FLV/TS 直播源由调用方直接跳过，不要在此对同一 URL 发起二次请求，
+ * 否则会被 CDN 的单连接 session 鉴权判定为重连，导致正在播放的连接被踢断。
  */
 async function resolvePlaybackAddress(url: string, signal: AbortSignal): Promise<string> {
   try {
-    const response = await fetch(url, {
+    const resolveUrl = createResolveProbeUrl(url)
+    const response = await fetch(resolveUrl, {
       method: 'GET',
-      headers: { Range: 'bytes=0-0' },
       redirect: 'follow',
       signal,
     })
+
+    if (resolveUrl !== url) {
+      const payload = (await response.json()) as { url?: unknown }
+      return typeof payload.url === 'string' && payload.url ? payload.url : extractProxiedTargetUrl(url) || url
+    }
+
     void response.body?.cancel().catch(() => {})
-    const resolvedFromHeader = response.headers.get('x-vfan-resolved-url')
-    if (resolvedFromHeader) {
-      try {
-        return decodeURIComponent(resolvedFromHeader)
-      } catch {
-        return resolvedFromHeader
-      }
-    }
-    // 本地代理不会发生浏览器级跳转，response.url 仍是代理地址；此时回退到原始目标地址。
-    const proxiedTarget = extractProxiedTargetUrl(url)
-    if (proxiedTarget) {
-      return proxiedTarget
-    }
     return response.url || url
   } catch {
     return extractProxiedTargetUrl(url) || url
+  }
+}
+
+function createResolveProbeUrl(playbackUrl: string): string {
+  try {
+    const parsed = new URL(playbackUrl)
+    if (parsed.hostname !== '127.0.0.1' && parsed.hostname !== 'localhost') {
+      return playbackUrl
+    }
+    if (parsed.pathname !== '/media') {
+      return playbackUrl
+    }
+
+    const targetUrl = parsed.searchParams.get('url')
+    if (!targetUrl) {
+      return playbackUrl
+    }
+
+    const resolveUrl = new URL('/resolve', parsed.origin)
+    resolveUrl.searchParams.set('url', targetUrl)
+    const referer = parsed.searchParams.get('referer')
+    const userAgent = parsed.searchParams.get('user-agent')
+    if (referer) {
+      resolveUrl.searchParams.set('referer', referer)
+    }
+    if (userAgent) {
+      resolveUrl.searchParams.set('user-agent', userAgent)
+    }
+    return resolveUrl.toString()
+  } catch {
+    return playbackUrl
   }
 }
 

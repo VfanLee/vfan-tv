@@ -15,7 +15,7 @@ const primaryNavItems: Array<{ to: string; label: string; icon: LucideIcon }> = 
   { to: '/hot/animation', label: '动画', icon: categoryIcons.animation },
   { to: '/hot/documentary', label: '纪录片', icon: categoryIcons.documentary },
   { to: '/hot/show', label: '综艺', icon: categoryIcons.show },
-  { to: '/link-player', label: '链接播放', icon: Link },
+  { to: '/link-player', label: '直链播放', icon: Link },
 ]
 
 const secondaryNavItems: Array<{ to: string; label: string; icon: LucideIcon }> = [
@@ -143,12 +143,12 @@ function LayoutSearchForm(): React.JSX.Element {
       <input
         aria-label="搜索片名"
         className="text-foreground placeholder:text-muted-foreground h-full min-w-0 flex-1 bg-transparent text-[15px] font-medium outline-none"
-        placeholder="搜索电影、电视剧、动画、纪录片、综艺，支持演员、导演"
+        placeholder="搜索电影、电视剧、动画、纪录片、综艺"
         value={keyword}
         onChange={(event) => setKeyword(event.target.value)}
       />
       <button
-        className="bg-muted text-muted-foreground hover:text-foreground focus-visible:ring-ring rounded-xl px-5 py-2.5 text-sm font-semibold outline-none focus-visible:ring-2"
+        className="bg-muted text-muted-foreground border-border/80 hover:bg-muted/80 hover:text-foreground focus-visible:ring-ring cursor-pointer rounded-xl border px-5 py-2.5 text-sm font-semibold shadow-[0_1px_0_0_rgba(255,255,255,0.55)_inset,0_2px_5px_rgba(0,0,0,0.08)] transition-[transform,box-shadow,background-color,color] duration-150 outline-none hover:shadow-[0_1px_0_0_rgba(255,255,255,0.7)_inset,0_3px_8px_rgba(0,0,0,0.1)] focus-visible:ring-2 active:translate-y-px active:shadow-[0_1px_0_0_rgba(255,255,255,0.35)_inset,0_1px_2px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_0_0_rgba(255,255,255,0.08)_inset,0_2px_5px_rgba(0,0,0,0.35)] dark:hover:shadow-[0_1px_0_0_rgba(255,255,255,0.12)_inset,0_3px_8px_rgba(0,0,0,0.4)] dark:active:shadow-[0_1px_0_0_rgba(255,255,255,0.05)_inset,0_1px_2px_rgba(0,0,0,0.3)]"
         type="submit"
       >
         搜索

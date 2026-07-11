@@ -55,10 +55,10 @@ export function LinkPlayerPage(): React.JSX.Element {
         <header>
           <div className="text-primary flex items-center gap-2">
             <Sparkles className="size-4" aria-hidden />
-            <span className="text-xs font-semibold tracking-[0.16em]">LINK PLAYER</span>
+            <span className="text-xs font-semibold tracking-[0.16em]">DIRECT LINK</span>
           </div>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight">链接播放</h1>
-          <p className="text-muted-foreground mt-1.5 text-sm">粘贴播放链接，解析后立即播放。</p>
+          <h1 className="mt-2 text-2xl font-semibold tracking-tight">直链播放</h1>
+          <p className="text-muted-foreground mt-1.5 text-sm">粘贴媒体地址，解析后立即播放。</p>
         </header>
 
         <form className="border-border bg-card rounded-xl border p-3 shadow-sm" onSubmit={handleSubmit}>
@@ -97,7 +97,7 @@ export function LinkPlayerPage(): React.JSX.Element {
             persistPlaybackSettings={false}
             sourceType={playbackSource?.sourceType}
             src={playbackSource?.url}
-            title="链接播放"
+            title="直链播放"
           />
         </section>
       </div>
