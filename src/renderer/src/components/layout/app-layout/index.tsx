@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useMatches, useNavigate, useSearchParams } from 'react-router'
-import { ChevronsLeft, ChevronsRight, Clock3, Heart, Home, Info, Search, Settings, Tv } from 'lucide-react'
+import { ChevronsLeft, ChevronsRight, Clock3, Heart, Home, Info, Link, Search, Settings, Tv } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { SIDEBAR_COLLAPSED_STORAGE_KEY } from '@shared/constants'
 import { cn } from '@renderer/utils/cn'
@@ -15,6 +15,7 @@ const primaryNavItems: Array<{ to: string; label: string; icon: LucideIcon }> = 
   { to: '/hot/animation', label: '动画', icon: categoryIcons.animation },
   { to: '/hot/documentary', label: '纪录片', icon: categoryIcons.documentary },
   { to: '/hot/show', label: '综艺', icon: categoryIcons.show },
+  { to: '/link-player', label: '链接播放', icon: Link },
 ]
 
 const secondaryNavItems: Array<{ to: string; label: string; icon: LucideIcon }> = [
