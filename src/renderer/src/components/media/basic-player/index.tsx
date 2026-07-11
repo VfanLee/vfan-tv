@@ -28,6 +28,7 @@ export interface BasicPlayerProps {
   sourceType?: MediaStreamType
   title?: string
   initialTime?: number
+  isResolvingSource?: boolean
   hasNextEpisode?: boolean
   hasPreviousEpisode?: boolean
   isTheaterMode?: boolean
@@ -113,6 +114,7 @@ export function BasicPlayer({
   enableAdFilter = true,
   enableAutoNext = true,
   initialTime = 0,
+  isResolvingSource = false,
   isTheaterMode = false,
   loop,
   persistPlaybackSettings = true,
@@ -134,6 +136,7 @@ export function BasicPlayer({
   const resumeTimeRef = useRef(0)
   const adSkipRangesRef = useRef<HlsAdSkipRange[]>([])
   const lastAdSkipRef = useRef<{ key: string; at: number } | undefined>(undefined)
+  const resolvedUrlRef = useRef('检测中…')
   const [adFilterEnabled, setAdFilterEnabled] = useState(() =>
     persistPlaybackSettings ? readAdFilterEnabled() : false,
   )
@@ -168,6 +171,15 @@ export function BasicPlayer({
     const displayPlaybackUrl = formatPlaybackUrlRef.current(src)
     const debugLog = new PlaybackDebugRecorder()
 
+    resolvedUrlRef.current = '检测中…'
+    const resolveAbortController = new AbortController()
+    let isResolveActive = true
+    void resolvePlaybackAddress(src, resolveAbortController.signal).then((resolvedUrl) => {
+      if (isResolveActive) {
+        resolvedUrlRef.current = resolvedUrl
+      }
+    })
+
     if (!cachedAppVersion && window.api?.updates?.getCurrentVersion) {
       void window.api.updates.getCurrentVersion().then((version) => {
         cachedAppVersion = version
@@ -178,6 +190,15 @@ export function BasicPlayer({
     let audioMenuItem: HTMLElement | undefined
     let loopEnabled = loop ?? (persistPlaybackSettings ? readLoopEnabled() : false)
     let autoNextEnabled = enableAutoNext && (persistPlaybackSettings ? readAutoNextEnabled() : true)
+    let hasReportedPlaybackFailure = false
+    let hlsNetworkRecoveryAttempts = 0
+
+    const reportPlaybackFailure = (artInstance: Artplayer, reason: string): void => {
+      if (hasReportedPlaybackFailure) return
+      hasReportedPlaybackFailure = true
+      debugLog.push('FAIL', reason)
+      artInstance.notice.show = `无法播放：${reason}`
+    }
 
     const openSettingPanel = function (this: Artplayer, contextmenu: { show: boolean }): void {
       this.setting.show = true
@@ -416,6 +437,7 @@ export function BasicPlayer({
               }
             })
             hls.on(Hls.Events.LEVEL_LOADED, () => {
+              hlsNetworkRecoveryAttempts = 0
               syncHlsQualityUi(artInstance, hls, isLive, {
                 updateHlsControl: () => hlsControlUpdate?.(),
               })
@@ -423,13 +445,18 @@ export function BasicPlayer({
             hls.on(Hls.Events.ERROR, (_event, data) => {
               debugLog.push('HLS', formatHlsErrorBrief(data))
               if (data.fatal && isLive && data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                debugLog.push('HLS', 'network fatal · 尝试重新加载清单')
-                hls.startLoad()
+                hlsNetworkRecoveryAttempts += 1
+                if (hlsNetworkRecoveryAttempts <= 2) {
+                  debugLog.push('HLS', `network fatal · 第 ${hlsNetworkRecoveryAttempts} 次尝试重新加载清单`)
+                  hls.startLoad()
+                  return
+                }
+                reportPlaybackFailure(artInstance, 'HLS 网络连接持续失败，自动恢复未成功')
                 return
               }
 
               if (data.fatal) {
-                artInstance.notice.show = `播放失败：${data.details}`
+                reportPlaybackFailure(artInstance, formatHlsPlaybackFailureReason(data))
               }
             })
             hls.loadSource(url)
@@ -444,13 +471,33 @@ export function BasicPlayer({
           }
 
           debugLog.push('HLS', '当前环境不支持 HLS 播放')
-          artInstance.notice.show = '当前环境不支持 HLS 播放'
+          reportPlaybackFailure(artInstance, '当前环境不支持 HLS 播放')
         },
         flv(video, url, artInstance) {
-          createMpegtsPlayback(video, url, artInstance, 'flv', isLive, mpegtsRef, hlsRef, debugLog)
+          createMpegtsPlayback(
+            video,
+            url,
+            artInstance,
+            'flv',
+            isLive,
+            mpegtsRef,
+            hlsRef,
+            debugLog,
+            reportPlaybackFailure,
+          )
         },
         mpegts(video, url, artInstance) {
-          createMpegtsPlayback(video, url, artInstance, 'mpegts', isLive, mpegtsRef, hlsRef, debugLog)
+          createMpegtsPlayback(
+            video,
+            url,
+            artInstance,
+            'mpegts',
+            isLive,
+            mpegtsRef,
+            hlsRef,
+            debugLog,
+            reportPlaybackFailure,
+          )
         },
       },
     } satisfies Option)
@@ -461,7 +508,7 @@ export function BasicPlayer({
       removeLiveSettingItems(art)
     }
     injectPlayerChromeStyles(art)
-    localizeInfoPanel(art, displayPlaybackUrl, getStreamType(isHls, isFlv, isMpegts), isLive, mpegtsRef)
+    localizeInfoPanel(art, displayPlaybackUrl, resolvedUrlRef, getStreamType(isHls, isFlv, isMpegts), isLive, mpegtsRef)
     const refreshHlsQualityUi = (): void => {
       const hls = (art as ArtplayerWithHls).hls
       if (!hls?.levels.length) {
@@ -534,14 +581,17 @@ export function BasicPlayer({
       const mediaError = formatMediaElementError(art.video)
       if (mediaError) {
         debugLog.push('video:error', mediaError)
+        reportPlaybackFailure(art, getMediaPlaybackFailureReason(art.video))
       }
     })
     art.on('error', (error) => {
       debugLog.push('Artplayer', error.message || '播放器加载失败')
-      art.notice.show = error.message || '播放器加载失败'
+      reportPlaybackFailure(art, error.message || '播放器加载失败')
     })
 
     return () => {
+      isResolveActive = false
+      resolveAbortController.abort()
       destroyHls(hlsRef)
       destroyMpegts(mpegtsRef)
       art.destroy(false)
@@ -577,7 +627,7 @@ export function BasicPlayer({
             isTheaterMode ? 'inset-y-0' : 'top-14 bottom-16',
           )}
         >
-          请选择一个可播放剧集
+          {isResolvingSource ? '正在识别播放源…' : '请选择一个可播放剧集'}
         </div>
       ) : null}
     </div>
@@ -640,6 +690,7 @@ function createMpegtsPlayback(
   mpegtsRef: MutableRefObject<MpegtsPlayer | null>,
   hlsRef: MutableRefObject<Hls | null>,
   debugLog: PlaybackDebugRecorder,
+  reportPlaybackFailure: (art: Artplayer, reason: string) => void,
 ): void {
   destroyHls(hlsRef)
   destroyMpegts(mpegtsRef)
@@ -647,7 +698,7 @@ function createMpegtsPlayback(
   const label = type === 'flv' ? 'FLV' : 'MPEG-TS'
   if (!mpegts.isSupported()) {
     debugLog.push(label, '当前环境不支持播放')
-    art.notice.show = `当前环境不支持 ${label} 播放`
+    reportPlaybackFailure(art, `当前环境不支持 ${label} 播放`)
     return
   }
 
@@ -663,7 +714,7 @@ function createMpegtsPlayback(
   mpegtsRef.current = player
   player.on(mpegts.Events.ERROR, (errorType: string, errorDetail: string, errorInfo: unknown) => {
     debugLog.push(label, `${errorType} · ${errorDetail} · ${formatUnknownErrorInfo(errorInfo)}`)
-    art.notice.show = `${label} 播放失败：${errorDetail || errorType}`
+    reportPlaybackFailure(art, `${label} 播放失败：${errorDetail || errorType}`)
   })
   player.on(mpegts.Events.MEDIA_INFO, () => debugLog.push(label, '媒体信息已解析'))
   player.attachMediaElement(video)
@@ -910,6 +961,15 @@ function formatMediaElementError(video: HTMLVideoElement): string | undefined {
   return message ? `${codeLabel} · ${message}` : codeLabel
 }
 
+function getMediaPlaybackFailureReason(video: HTMLVideoElement): string {
+  const error = video.error
+  if (!error) return '浏览器无法加载该媒体资源'
+
+  const reasons = ['', '媒体加载被中断', '媒体资源请求失败', '媒体解码失败', '浏览器不支持该媒体格式']
+  const reason = reasons[error.code] ?? '浏览器无法加载该媒体资源'
+  return error.message?.trim() ? `${reason}：${error.message.trim()}` : reason
+}
+
 function formatUnknownErrorInfo(errorInfo: unknown): string {
   if (!errorInfo) {
     return '-'
@@ -973,6 +1033,21 @@ function formatHlsErrorBrief(data: ErrorData): string {
   ].filter(Boolean)
 
   return parts.join(' · ')
+}
+
+function formatHlsPlaybackFailureReason(data: ErrorData): string {
+  if (data.response?.code) {
+    return `HLS 资源请求失败（HTTP ${data.response.code}）`
+  }
+
+  const labels: Partial<Record<ErrorData['details'], string>> = {
+    manifestLoadError: 'HLS 播放列表加载失败',
+    manifestParsingError: 'HLS 播放列表解析失败',
+    levelLoadError: 'HLS 清晰度列表加载失败',
+    fragLoadError: 'HLS 视频分片加载失败',
+    fragParsingError: 'HLS 视频分片解析失败',
+  }
+  return labels[data.details] ?? `HLS 播放失败（${data.details}）`
 }
 
 function formatHlsDebugLines(hls: Hls | undefined, isLive: boolean): string[] {
@@ -1102,6 +1177,7 @@ function reloadPlayback(art: Artplayer): void {
 function localizeInfoPanel(
   art: Artplayer,
   playbackUrl: string,
+  resolvedUrlRef: MutableRefObject<string>,
   streamType: MediaStreamType,
   isLive: boolean,
   mpegtsRef: MutableRefObject<MpegtsPlayer | null>,
@@ -1124,10 +1200,13 @@ function localizeInfoPanel(
       <div class="vfan-stats-row"><span class="vfan-stats-label">播放进度</span><span class="vfan-stats-value" data-vfan-info="progress"></span></div>
       <div class="vfan-stats-row vfan-stats-row-meter"><span class="vfan-stats-label">缓冲健康</span><span class="vfan-stats-value"><span data-vfan-info="buffer-health"></span><span class="vfan-stats-meter" data-vfan-info="buffer-meter"><span></span></span></span></div>
       <div class="vfan-stats-row"><span class="vfan-stats-label">丢帧</span><span class="vfan-stats-value" data-vfan-info="dropped-frames"></span></div>
-      <div class="vfan-stats-row vfan-stats-row-url"><span class="vfan-stats-label">视频地址</span><span class="vfan-stats-value" data-vfan-info="url" title="${escapeHtmlAttribute(playbackUrl)}"></span></div>
+      <div class="vfan-stats-row vfan-stats-row-url"><span class="vfan-stats-label">视频地址</span><span class="vfan-stats-value vfan-stats-value-copyable" data-vfan-info="url" data-vfan-copy="${escapeHtmlAttribute(playbackUrl)}" title="点击复制：${escapeHtmlAttribute(playbackUrl)}"></span></div>
+      <div class="vfan-stats-row vfan-stats-row-url"><span class="vfan-stats-label">解析地址</span><span class="vfan-stats-value vfan-stats-value-copyable" data-vfan-info="resolved-url" title="点击复制"></span></div>
       ${getProtocolStatsMarkup(streamType)}
     </div>
   `
+
+  bindCopyableUrlClicks($infoPanel, art)
 
   const refresh = (): void => {
     const isHls = streamType === 'hls'
@@ -1147,6 +1226,7 @@ function localizeInfoPanel(
     setInfoMeter($infoPanel, 'buffer-meter', getBufferMeterPercent(bufferHealth.seconds, art.duration, isLive))
     setInfoText($infoPanel, 'dropped-frames', getDroppedFramesText(art.video))
     setInfoText($infoPanel, 'url', shortenText(playbackUrl, 56))
+    setInfoTextWithTitle($infoPanel, 'resolved-url', resolvedUrlRef.current)
     if (isHls) {
       setInfoText($infoPanel, 'quality', getQualityText(art, true))
       setInfoText($infoPanel, 'download-speed', formatBandwidthEstimate(downloadSpeed))
@@ -1230,6 +1310,18 @@ function injectStatsStyles(art: Artplayer): void {
     }
     .vfan-stats-row-url {
       align-items: start;
+    }
+    .vfan-stats-value-copyable {
+      cursor: pointer;
+      color: rgba(147, 197, 253, 0.95);
+      text-decoration: underline;
+      text-decoration-color: rgba(147, 197, 253, 0.35);
+      text-underline-offset: 2px;
+      transition: color 0.15s ease, text-decoration-color 0.15s ease;
+    }
+    .vfan-stats-value-copyable:hover {
+      color: rgba(191, 219, 254, 1);
+      text-decoration-color: rgba(191, 219, 254, 0.7);
     }
     .vfan-stats-label {
       color: rgba(255, 255, 255, 0.62);
@@ -1493,6 +1585,89 @@ function setInfoText(panel: HTMLElement, name: string, value: string): void {
   const element = panel.querySelector(`[data-vfan-info="${name}"]`)
   if (element && element.textContent !== value) {
     element.textContent = value
+  }
+}
+
+function setInfoTextWithTitle(panel: HTMLElement, name: string, value: string): void {
+  const element = panel.querySelector(`[data-vfan-info="${name}"]`)
+  if (!(element instanceof HTMLElement)) {
+    return
+  }
+  const shortValue = shortenText(value, 56)
+  if (element.textContent !== shortValue) {
+    element.textContent = shortValue
+  }
+  if (element.dataset.vfanCopy !== value) {
+    element.dataset.vfanCopy = value
+  }
+  const nextTitle = `点击复制：${value}`
+  if (element.title !== nextTitle) {
+    element.title = nextTitle
+  }
+}
+
+function bindCopyableUrlClicks(panel: HTMLElement, art: Artplayer): void {
+  for (const element of panel.querySelectorAll<HTMLElement>('.vfan-stats-value-copyable')) {
+    element.addEventListener('click', () => {
+      const value = element.dataset.vfanCopy?.trim()
+      if (!value || value === '检测中…') {
+        return
+      }
+      void navigator.clipboard.writeText(value).then(
+        () => {
+          art.notice.show = '链接已复制'
+        },
+        () => {
+          art.notice.show = '复制失败'
+        },
+      )
+    })
+  }
+}
+
+/**
+ * 探测播放地址在跳转（HTTP 重定向）后实际解析到的最终地址，用于统计信息面板展示排查。
+ * 直播源经由本地代理转发时，代理会通过 `X-Vfan-Resolved-Url` 响应头回传真实解析地址；
+ * 若目标地址本身支持跨域重定向探测（如未经代理的直链），则回退为浏览器 fetch 后的 `response.url`。
+ */
+async function resolvePlaybackAddress(url: string, signal: AbortSignal): Promise<string> {
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { Range: 'bytes=0-0' },
+      redirect: 'follow',
+      signal,
+    })
+    void response.body?.cancel().catch(() => {})
+    const resolvedFromHeader = response.headers.get('x-vfan-resolved-url')
+    if (resolvedFromHeader) {
+      try {
+        return decodeURIComponent(resolvedFromHeader)
+      } catch {
+        return resolvedFromHeader
+      }
+    }
+    // 本地代理不会发生浏览器级跳转，response.url 仍是代理地址；此时回退到原始目标地址。
+    const proxiedTarget = extractProxiedTargetUrl(url)
+    if (proxiedTarget) {
+      return proxiedTarget
+    }
+    return response.url || url
+  } catch {
+    return extractProxiedTargetUrl(url) || url
+  }
+}
+
+function extractProxiedTargetUrl(url: string): string | undefined {
+  try {
+    const parsed = new URL(url)
+    if (parsed.hostname !== '127.0.0.1' && parsed.hostname !== 'localhost') {
+      return undefined
+    }
+    const target = parsed.searchParams.get('url')
+    return target || undefined
+  } catch {
+    return undefined
   }
 }
 

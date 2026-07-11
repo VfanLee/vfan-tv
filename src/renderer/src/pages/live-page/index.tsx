@@ -45,6 +45,7 @@ export function LivePage(): React.JSX.Element {
                 formatPlaybackUrl={player.formatPlaybackUrl}
                 hasNextEpisode={player.hasNextStream}
                 hasPreviousEpisode={player.hasPreviousStream}
+                isResolvingSource={player.isResolvingStreamType}
                 isTheaterMode={player.isTheaterMode}
                 loop={player.variant !== 'live'}
                 persistPlaybackSettings={false}

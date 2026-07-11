@@ -3,7 +3,13 @@ import {
   LIVE_SELECTED_SOURCE_STORAGE_KEY,
   LIVE_SELECTION_STORAGE_PREFIX,
 } from '@shared/constants'
-import type { LiveChannel, LivePlaylist, LiveSourceConfig, MediaStreamType } from '@shared/types'
+import type {
+  LiveChannel,
+  LivePlaylist,
+  LiveSourceConfig,
+  LiveStreamRequestHeaders,
+  MediaStreamType,
+} from '@shared/types'
 import type { LiveSelectionCache } from './types'
 
 const LIVE_CONTEXT_KEYWORDS = ['直播', '卫视', '央视', '央卫视']
@@ -115,7 +121,11 @@ export function normalizeLivePlaylist(playlist: LivePlaylist): LivePlaylist {
   }
 }
 
-export function resolveStreamPlaybackUrl(proxyBaseUrl: string, url: string | undefined): string | undefined {
+export function resolveStreamPlaybackUrl(
+  proxyBaseUrl: string,
+  url: string | undefined,
+  requestHeaders?: LiveStreamRequestHeaders,
+): string | undefined {
   if (!url) return undefined
   if (!proxyBaseUrl) return url
   try {
@@ -123,7 +133,10 @@ export function resolveStreamPlaybackUrl(proxyBaseUrl: string, url: string | und
     if (!['http:', 'https:'].includes(targetUrl.protocol)) return url
     const proxyUrl = new URL('/media', proxyBaseUrl)
     proxyUrl.searchParams.set('url', targetUrl.toString())
-    proxyUrl.searchParams.set('referer', `${targetUrl.origin}/`)
+    proxyUrl.searchParams.set('referer', requestHeaders?.referer || `${targetUrl.origin}/`)
+    if (requestHeaders?.userAgent) {
+      proxyUrl.searchParams.set('user-agent', requestHeaders.userAgent)
+    }
     return proxyUrl.toString()
   } catch {
     return url

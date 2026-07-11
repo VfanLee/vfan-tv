@@ -34,6 +34,7 @@ export interface LivePlayerState {
   hasPreviousStream: boolean
   isLoadingPlaylist: boolean
   isLoadingSettings: boolean
+  isResolvingStreamType: boolean
   isTheaterMode: boolean
   keyword: string
   liveSources: LiveSourceConfig[]
@@ -81,6 +82,7 @@ export function useLivePlayer(): LivePlayerState {
     cachedStreamType ??
     (detectedStream?.url === activeStreamUrl ? detectedStream.type : undefined) ??
     (activeStreamUrl && !isApiAvailable() ? 'native' : undefined)
+  const isResolvingStreamType = Boolean(activeStreamUrl && !activeStreamType)
   const groupedChannels = useMemo(() => groupChannels(playlist?.channels ?? [], keyword), [keyword, playlist])
 
   const applyPlaylist = useCallback((nextPlaylist: LivePlaylist, sourceId: string): void => {
@@ -168,15 +170,29 @@ export function useLivePlayer(): LivePlayerState {
     if (!activeStreamUrl || knownStreamType || cachedStreamType || !isApiAvailable()) return
 
     let active = true
-    void detectMediaStreamType({ url: activeStreamUrl }).then((result) => {
+    void detectMediaStreamType({
+      url: activeStreamUrl,
+      referer: activeStream?.requestHeaders?.referer,
+      userAgent: activeStream?.requestHeaders?.userAgent,
+    }).then((result) => {
       if (!active || !result) return
-      setStreamTypeCache((current) => ({ ...current, [activeStreamUrl]: result.type }))
+      // 探测因超时/网络错误被动降级为 native 时不写入永久缓存，
+      // 以便下次访问该频道时仍有机会重新探测出真实的流类型。
+      if (!result.uncertain) {
+        setStreamTypeCache((current) => ({ ...current, [activeStreamUrl]: result.type }))
+      }
       setDetectedStream({ url: activeStreamUrl, type: result.type })
     })
     return () => {
       active = false
     }
-  }, [activeStreamUrl, cachedStreamType, knownStreamType])
+  }, [
+    activeStream?.requestHeaders?.referer,
+    activeStream?.requestHeaders?.userAgent,
+    activeStreamUrl,
+    cachedStreamType,
+    knownStreamType,
+  ])
 
   const selectSource = (sourceId: string): void => {
     setSelectedSourceId(sourceId)
@@ -218,10 +234,13 @@ export function useLivePlayer(): LivePlayerState {
     hasPreviousStream: activeStreamIndex > 0,
     isLoadingPlaylist,
     isLoadingSettings,
+    isResolvingStreamType,
     isTheaterMode,
     keyword,
     liveSources,
-    playerSrc: activeStreamType ? resolveStreamPlaybackUrl(liveProxyBaseUrl, activeStreamUrl) : undefined,
+    playerSrc: activeStreamType
+      ? resolveStreamPlaybackUrl(liveProxyBaseUrl, activeStreamUrl, activeStream?.requestHeaders)
+      : undefined,
     playerTitle: activeChannel?.title,
     playlist,
     selectedSource,

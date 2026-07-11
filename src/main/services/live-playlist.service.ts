@@ -1,4 +1,5 @@
-import type { LiveChannel, LiveChannelStream, LivePlaylist } from '@shared/types'
+import { parse, type PlaylistItem } from 'iptv-playlist-parser'
+import type { LiveChannel, LiveChannelStream, LivePlaylist, LiveStreamRequestHeaders } from '@shared/types'
 import type { HttpClient } from './http-client'
 
 const MAX_PLAYLIST_SIZE = 10 * 1024 * 1024
@@ -15,6 +16,7 @@ interface ParsedExtInf {
   logo?: string
   tvgName?: string
   epgUrl?: string
+  requestHeaders?: LiveStreamRequestHeaders
 }
 
 interface ParsedPlaylistItem extends ParsedExtInf {
@@ -97,43 +99,39 @@ function parsePlaylistItems(content: string): ParsedPlaylistItem[] {
 }
 
 function parseM3uPlaylistItems(content: string): ParsedPlaylistItem[] {
-  const lines = parsePlaylistLines(content)
-  const items: ParsedPlaylistItem[] = []
-  let pendingInfo: ParsedExtInf | undefined
+  return parse(content).items.flatMap(toParsedPlaylistItem)
+}
 
-  for (const line of lines.slice(1)) {
-    if (line.startsWith('#EXTINF:')) {
-      pendingInfo = parseExtInf(line)
-      continue
-    }
+function toParsedPlaylistItem(item: PlaylistItem): ParsedPlaylistItem[] {
+  const url = normalizeM3uStreamUrl(item.url)
+  if (!url) return []
 
-    if (line.startsWith('#EXTGRP:')) {
-      if (pendingInfo) {
-        const group = line.slice('#EXTGRP:'.length).trim()
-        pendingInfo = {
-          ...pendingInfo,
-          group: group || pendingInfo.group,
-        }
-      }
-      continue
-    }
+  const requestHeaders = normalizeRequestHeaders(item.http.referrer, item.http['user-agent'])
+  return [
+    {
+      title: item.name.trim() || item.tvg.name.trim() || '未命名频道',
+      group: item.group.title.trim() || DEFAULT_GROUP,
+      logo: item.tvg.logo.trim() || undefined,
+      tvgName: item.tvg.name.trim() || undefined,
+      epgUrl: item.tvg.url.trim() || undefined,
+      requestHeaders,
+      url,
+    },
+  ]
+}
 
-    if (line.startsWith('#')) {
-      continue
-    }
+function normalizeM3uStreamUrl(value: string): string {
+  return value.split('|', 1)[0]?.trim() || ''
+}
 
-    if (!pendingInfo) {
-      continue
-    }
-
-    items.push({
-      ...pendingInfo,
-      url: line,
-    })
-    pendingInfo = undefined
+function normalizeRequestHeaders(referer: string, userAgent: string): LiveStreamRequestHeaders | undefined {
+  const normalizedReferer = referer.trim()
+  const normalizedUserAgent = userAgent.trim()
+  if (!normalizedReferer && !normalizedUserAgent) return undefined
+  return {
+    ...(normalizedReferer ? { referer: normalizedReferer } : {}),
+    ...(normalizedUserAgent ? { userAgent: normalizedUserAgent } : {}),
   }
-
-  return items
 }
 
 function parseTextPlaylistItems(content: string): ParsedPlaylistItem[] {
@@ -201,23 +199,6 @@ function isM3uPlaylist(content: string): boolean {
   return parsePlaylistLines(content)[0]?.startsWith('#EXTM3U') ?? false
 }
 
-function parseExtInf(line: string): ParsedExtInf {
-  const commaIndex = line.indexOf(',')
-  const metadata = commaIndex >= 0 ? line.slice(0, commaIndex) : line
-  const displayName = commaIndex >= 0 ? line.slice(commaIndex + 1).trim() : ''
-  const attributes = parseAttributes(metadata)
-  const tvgName = attributes['tvg-name']?.trim()
-  const title = displayName || tvgName || '未命名频道'
-
-  return {
-    title,
-    group: attributes['group-title']?.trim() || DEFAULT_GROUP,
-    logo: attributes['tvg-logo']?.trim() || undefined,
-    tvgName: tvgName || undefined,
-    epgUrl: attributes['epg-url']?.trim() || undefined,
-  }
-}
-
 function parseTextGroupMarker(line: string): { name: string; type: '#genre#' | '#group#' } | undefined {
   const commaIndex = line.lastIndexOf(',')
   if (commaIndex < 0) {
@@ -259,24 +240,13 @@ function parseTextStreamItem(line: string): { title: string; url: string } | und
   }
 }
 
-function parseAttributes(input: string): Record<string, string> {
-  const attributes: Record<string, string> = {}
-  const pattern = /([\w-]+)="([^"]*)"/g
-  let match: RegExpExecArray | null
-
-  while ((match = pattern.exec(input)) !== null) {
-    attributes[match[1]] = match[2]
-  }
-
-  return attributes
-}
-
 function addStream(channelMap: Map<string, LiveChannel>, info: ParsedExtInf, url: string): void {
   const channelId = createStableId(`${info.group}:${info.title}`)
   const stream: LiveChannelStream = {
     id: createStableId(`${info.group}:${info.title}:${url}`),
     name: `线路 ${((channelMap.get(channelId)?.streams.length ?? 0) + 1).toString()}`,
     url,
+    ...(info.requestHeaders ? { requestHeaders: info.requestHeaders } : {}),
     isLive: inferStreamIsLive(info.group, info.title, url),
   }
   const current = channelMap.get(channelId)

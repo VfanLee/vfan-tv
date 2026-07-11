@@ -63,8 +63,14 @@ export interface LiveChannelStream {
   id: string
   name: string
   url: string
+  requestHeaders?: LiveStreamRequestHeaders
   /** 明显点播文件（如 .mp4/.mkv/.flv/.webm）按假直播处理 */
   isLive: boolean
+}
+
+export interface LiveStreamRequestHeaders {
+  referer?: string
+  userAgent?: string
 }
 
 export interface LiveChannel {

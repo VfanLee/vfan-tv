@@ -77,6 +77,7 @@ export class MediaProxyServer {
         parsedTargetUrl.toString(),
         this.baseUrl ?? '',
         requestUrl.searchParams.get('referer') ?? `${parsedTargetUrl.origin}/`,
+        requestUrl.searchParams.get('user-agent') ?? undefined,
       )
     } catch (error) {
       console.error('Live media proxy failed:', targetUrl, error)
@@ -95,12 +96,14 @@ async function proxyMediaRequest(
   targetUrl: string,
   baseUrl: string,
   referer: string | undefined,
+  userAgent: string | undefined,
 ): Promise<void> {
   const abortController = new AbortController()
   response.once('close', () => abortController.abort())
 
   const upstream = await axios.get<Readable>(targetUrl, {
-    headers: getRequestHeaders(request, referer),
+    headers: getRequestHeaders(request, referer, userAgent),
+    proxy: false,
     responseType: 'stream',
     signal: abortController.signal,
     timeout: 30_000,
@@ -113,10 +116,12 @@ async function proxyMediaRequest(
 
   if (isPlaylist(responseUrl, contentType)) {
     const body = await readStream(upstream.data)
-    const rewrittenPlaylist = rewritePlaylist(body.toString('utf-8'), responseUrl, baseUrl)
+    const rewrittenPlaylist = rewritePlaylist(body.toString('utf-8'), responseUrl, baseUrl, referer, userAgent)
     const headers = createResponseHeaders(
       contentType || 'application/vnd.apple.mpegurl',
       Buffer.byteLength(rewrittenPlaylist, 'utf-8'),
+      undefined,
+      responseUrl,
     )
 
     writeHeaders(response, status, headers)
@@ -131,14 +136,20 @@ async function proxyMediaRequest(
       contentType || inferContentType(responseUrl),
       getContentLength(upstream.headers),
       upstream.headers,
+      responseUrl,
     ),
   )
   upstream.data.pipe(response)
 }
 
-function getRequestHeaders(request: IncomingMessage, referer: string | undefined): Record<string, string> {
+function getRequestHeaders(
+  request: IncomingMessage,
+  referer: string | undefined,
+  userAgent: string | undefined,
+): Record<string, string> {
   const headers: Record<string, string> = {
     'User-Agent':
+      userAgent ||
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36',
     'Accept': '*/*',
   }
@@ -159,13 +170,18 @@ function createResponseHeaders(
   contentType: string,
   contentLength: number,
   upstreamHeaders?: RawAxiosResponseHeaders | AxiosResponseHeaders,
+  resolvedUrl?: string,
 ): Record<string, string> {
   const headers: Record<string, string> = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Range, Content-Type',
-    'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges',
+    'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, X-Vfan-Resolved-Url',
     'Cache-Control': 'no-cache',
     'Content-Type': contentType,
+  }
+
+  if (resolvedUrl) {
+    headers['X-Vfan-Resolved-Url'] = encodeURIComponent(resolvedUrl)
   }
 
   if (contentLength > 0) {
@@ -189,7 +205,10 @@ function createResponseHeaders(
 function writeCorsHeaders(response: ServerResponse): void {
   response.setHeader('Access-Control-Allow-Origin', '*')
   response.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type')
-  response.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges')
+  response.setHeader(
+    'Access-Control-Expose-Headers',
+    'Content-Length, Content-Range, Accept-Ranges, X-Vfan-Resolved-Url',
+  )
 }
 
 function writeHeaders(response: ServerResponse, status: number, headers: Record<string, string>): void {
@@ -264,7 +283,13 @@ async function readStream(stream: Readable): Promise<Buffer> {
   return Buffer.concat(chunks)
 }
 
-function rewritePlaylist(playlist: string, playlistUrl: string, baseUrl: string): string {
+function rewritePlaylist(
+  playlist: string,
+  playlistUrl: string,
+  baseUrl: string,
+  referer: string | undefined,
+  userAgent: string | undefined,
+): string {
   return playlist
     .split('\n')
     .map((line) => {
@@ -275,22 +300,39 @@ function rewritePlaylist(playlist: string, playlistUrl: string, baseUrl: string)
       }
 
       if (trimmedLine.startsWith('#')) {
-        return rewritePlaylistTagUri(line, playlistUrl, baseUrl)
+        return rewritePlaylistTagUri(line, playlistUrl, baseUrl, referer, userAgent)
       }
 
-      return createProxyUrl(baseUrl, new URL(trimmedLine, playlistUrl).toString())
+      return createProxyUrl(baseUrl, new URL(trimmedLine, playlistUrl).toString(), referer, userAgent)
     })
     .join('\n')
 }
 
-function rewritePlaylistTagUri(line: string, playlistUrl: string, baseUrl: string): string {
+function rewritePlaylistTagUri(
+  line: string,
+  playlistUrl: string,
+  baseUrl: string,
+  referer: string | undefined,
+  userAgent: string | undefined,
+): string {
   return line.replace(/URI="([^"]+)"/g, (_match, rawUri: string) => {
-    return `URI="${createProxyUrl(baseUrl, new URL(rawUri, playlistUrl).toString())}"`
+    return `URI="${createProxyUrl(baseUrl, new URL(rawUri, playlistUrl).toString(), referer, userAgent)}"`
   })
 }
 
-function createProxyUrl(baseUrl: string, targetUrl: string): string {
+function createProxyUrl(
+  baseUrl: string,
+  targetUrl: string,
+  referer: string | undefined,
+  userAgent: string | undefined,
+): string {
   const proxyUrl = new URL('/media', baseUrl)
   proxyUrl.searchParams.set('url', targetUrl)
+  if (referer) {
+    proxyUrl.searchParams.set('referer', referer)
+  }
+  if (userAgent) {
+    proxyUrl.searchParams.set('user-agent', userAgent)
+  }
   return proxyUrl.toString()
 }

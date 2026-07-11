@@ -6,15 +6,15 @@
 
 ## 技术栈
 
-- Node.js `>=22.12 <23`、pnpm `11.11.0`
-- TypeScript `^5.9.3`
-- Electron `39.2.6`、electron-vite `^5.0.0`、electron-builder `26.0.12`
-- React `^19.2.1`、React Router `^7.17.0`、Zustand `^5.0.14`
-- Tailwind CSS `^4.3.0`、shadcn `^4.12.0`、radix-ui `^1.6.0`
-- SQLite：better-sqlite3 `^12.10.0`、Drizzle ORM `^0.45.2`、drizzle-kit `^0.31.10`
-- ArtPlayer `5.4.0`、HLS.js `^1.6.16`
+- Node.js、pnpm
+- TypeScript
+- Electron、electron-vite、electron-builder
+- React、React Router、Zustand
+- Tailwind CSS、shadcn、radix-ui
+- SQLite：better-sqlite3、Drizzle ORM
+- ArtPlayer、HLS.js、mpegts.js、file-type
 
-版本以 `package.json` 为准；修改依赖版本时同步更新本节。
+版本以 `package.json` 为准。
 
 ## 项目目录
 
