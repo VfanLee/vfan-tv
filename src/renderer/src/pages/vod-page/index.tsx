@@ -8,6 +8,7 @@ import { useSearchContextStore } from '@renderer/stores/search-context'
 import { EpisodesPanel, NowPlayingTitle, PanelTab, SourcesPanel, VodDetailPanel } from './components/vod-panels'
 import { useRecentPlayback } from './hooks/use-recent-playback'
 import { useVodFavorite } from './hooks/use-vod-favorite'
+import { useVodPageHydration } from './hooks/use-vod-page-hydration'
 import { useVodSourceDiscovery } from './hooks/use-vod-source-discovery'
 import type { EpisodeSelection, PlayerLocationState, PlayerTab } from './types'
 import {
@@ -34,12 +35,16 @@ export function VodPage(): React.JSX.Element {
   const [isEpisodeDescending, setIsEpisodeDescending] = useState(false)
   const [selection, setSelection] = useState<EpisodeSelection>()
   const [isTheaterMode, setIsTheaterMode] = useState(false)
-  const locationState = location.state as PlayerLocationState | null
+  const routeLocationState = location.state as PlayerLocationState | null
 
-  const current = useMemo(
+  const provisionalCurrent = useMemo(
     () => candidates.find((item) => item.sourceId === sourceId && item.vodId === vodId),
     [candidates, sourceId, vodId],
   )
+  const hydration = useVodPageHydration(sourceId, vodId, Boolean(provisionalCurrent), routeLocationState)
+  const locationState = hydration.restoredLocationState
+
+  const current = provisionalCurrent
   const resourceKey = `${sourceId ?? ''}:${vodId ?? ''}`
   const favorite = useVodFavorite(current, resourceKey)
   const currentTitleKey = normalizeTitle(current?.title ?? '')
@@ -128,7 +133,9 @@ export function VodPage(): React.JSX.Element {
   const toggleFavorite = favorite.toggle
   const metaText = current
     ? [current.year, current.area, current.category].filter(Boolean).join(' · ')
-    : '刷新或直接进入点播页时，后续会通过 sourceId + vodId 恢复详情。'
+    : hydration.isHydrating
+      ? '正在恢复播放详情…'
+      : '未找到该资源详情，请从搜索、最近播放或收藏重新进入。'
 
   const selectSource = (item: VodSearchResult): void => {
     const targetLines = getPlayLines(item)
@@ -202,6 +209,7 @@ export function VodPage(): React.JSX.Element {
                 hasNextEpisode={hasNextEpisode}
                 hasPreviousEpisode={hasPreviousEpisode}
                 initialTime={initialTime}
+                isResolvingSource={hydration.isHydrating}
                 isTheaterMode={isTheaterMode}
                 src={playerSrc}
                 title={playerTitle}
@@ -239,6 +247,7 @@ export function VodPage(): React.JSX.Element {
                       hasNextEpisode={hasNextEpisode}
                       hasPreviousEpisode={hasPreviousEpisode}
                       initialTime={initialTime}
+                      isResolvingSource={hydration.isHydrating}
                       isTheaterMode={isTheaterMode}
                       src={playerSrc}
                       title={playerTitle}

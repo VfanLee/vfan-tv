@@ -1,4 +1,6 @@
 import { create } from 'zustand'
+import { createJSONStorage, persist } from 'zustand/middleware'
+import { SEARCH_CONTEXT_STORAGE_KEY } from '@shared/constants'
 import type { VodSearchResult } from '@shared/types'
 
 interface SearchContextState {
@@ -9,16 +11,28 @@ interface SearchContextState {
   clear: () => void
 }
 
-export const useSearchContextStore = create<SearchContextState>((set) => ({
-  keyword: '',
-  candidates: [],
-  setContext: (keyword, candidates) => set({ keyword, candidates }),
-  mergeCandidates: (candidates) =>
-    set((state) => ({
-      candidates: mergeCandidates(state.candidates, candidates),
-    })),
-  clear: () => set({ keyword: '', candidates: [] }),
-}))
+export const useSearchContextStore = create<SearchContextState>()(
+  persist(
+    (set) => ({
+      keyword: '',
+      candidates: [],
+      setContext: (keyword, candidates) => set({ keyword, candidates }),
+      mergeCandidates: (candidates) =>
+        set((state) => ({
+          candidates: mergeCandidates(state.candidates, candidates),
+        })),
+      clear: () => set({ keyword: '', candidates: [] }),
+    }),
+    {
+      name: SEARCH_CONTEXT_STORAGE_KEY,
+      storage: createJSONStorage(() => sessionStorage),
+      partialize: (state) => ({
+        keyword: state.keyword,
+        candidates: state.candidates,
+      }),
+    },
+  ),
+)
 
 function mergeCandidates(currentCandidates: VodSearchResult[], nextCandidates: VodSearchResult[]): VodSearchResult[] {
   const map = new Map<string, VodSearchResult>()
