@@ -8,7 +8,13 @@ import mpegts from 'mpegts.js'
 import { HLS_AD_FILTER_STORAGE_KEY, PLAYER_AUTO_NEXT_STORAGE_KEY, PLAYER_LOOP_STORAGE_KEY } from '@shared/constants'
 import type { MediaStreamType } from '@shared/types'
 import { cn } from '@renderer/utils/cn'
-import { createAdAwareHlsLoader, type HlsAdSkipRange } from '@renderer/utils/hls-playlist-filter'
+import {
+  collectCueSkipRangesFromM3U8,
+  createAdAwareHlsLoader,
+  type HlsAdFilterReport,
+  type HlsAdFilterResult,
+  type HlsAdSkipRange,
+} from '@renderer/utils/hls-playlist-filter'
 import { artplayerSettingIcons, artplayerSwitchIcons } from '@renderer/utils/artplayer-icons'
 
 export type PlayerVariant = 'vod' | 'live'
@@ -97,6 +103,7 @@ interface DebugInfoParams {
   loop: boolean
   initialTime: number
   adFilterEnabled: boolean
+  adFilterReport?: HlsAdFilterReport
   audioTrackUrl?: string
   debugLog: PlaybackDebugRecorder
   autoNextEnabled: boolean
@@ -136,10 +143,13 @@ export function BasicPlayer({
   const resumeTimeRef = useRef(0)
   const adSkipRangesRef = useRef<HlsAdSkipRange[]>([])
   const lastAdSkipRef = useRef<{ key: string; at: number } | undefined>(undefined)
+  const adFilterReportRef = useRef<HlsAdFilterReport | undefined>(undefined)
   const resolvedUrlRef = useRef('检测中…')
+  const restoreFullscreenWebRef = useRef(false)
   const [adFilterEnabled, setAdFilterEnabled] = useState(() =>
     persistPlaybackSettings ? readAdFilterEnabled() : false,
   )
+  const adFilterEnabledRef = useRef(adFilterEnabled)
 
   const isLive = variant === 'live'
   const isHls = isHlsSource(src, sourceType)
@@ -154,7 +164,8 @@ export function BasicPlayer({
     }
     formatPlaybackUrlRef.current = formatPlaybackUrl
     initialTimeRef.current = initialTime
-  }, [formatPlaybackUrl, initialTime, onEnded, onProgress])
+    adFilterEnabledRef.current = adFilterEnabled
+  }, [adFilterEnabled, formatPlaybackUrl, initialTime, onEnded, onProgress])
 
   useEffect(() => {
     const container = containerRef.current
@@ -166,6 +177,7 @@ export function BasicPlayer({
     destroyMpegts(mpegtsRef)
     adSkipRangesRef.current = []
     lastAdSkipRef.current = undefined
+    adFilterReportRef.current = undefined
     container.innerHTML = ''
     container.setAttribute('aria-label', title ?? 'Vfan TV 播放器')
     const displayPlaybackUrl = formatPlaybackUrlRef.current(src)
@@ -303,8 +315,13 @@ export function BasicPlayer({
                   if (persistPlaybackSettings) {
                     window.localStorage.setItem(HLS_AD_FILTER_STORAGE_KEY, String(nextEnabled))
                   }
-                  resumeTimeRef.current = art.currentTime
+                  // 热切换 HLS，避免重建 ArtPlayer（网页全屏下销毁会残留 body 遮罩）
+                  adFilterEnabledRef.current = nextEnabled
                   setAdFilterEnabled(nextEnabled)
+                  adSkipRangesRef.current = []
+                  lastAdSkipRef.current = undefined
+                  adFilterReportRef.current = undefined
+                  reloadPlayback(art)
                   return nextEnabled
                 },
               },
@@ -387,7 +404,8 @@ export function BasicPlayer({
                 autoPlay,
                 loop: loopEnabled,
                 initialTime: initialTimeRef.current,
-                adFilterEnabled: canUseAdFilter && adFilterEnabled,
+                adFilterEnabled: canUseAdFilter && adFilterEnabledRef.current,
+                adFilterReport: adFilterReportRef.current,
                 isFlv,
                 isMpegts,
                 audioTrackUrl,
@@ -424,10 +442,23 @@ export function BasicPlayer({
 
           if (Hls.isSupported()) {
             const hls = new Hls(
-              createHlsConfig(isLive, canUseAdFilter && adFilterEnabled, (ranges) => {
-                adSkipRangesRef.current = ranges
-                if (ranges.length > 0) {
-                  debugLog.push('AD', `识别到 ${ranges.length} 个广告区间`)
+              createHlsConfig(isLive, canUseAdFilter && adFilterEnabledRef.current, (result) => {
+                adFilterReportRef.current = result.report
+                // 分片已从清单切除；仅对净化后残留的 CUE 做播放时兜底跳过
+                adSkipRangesRef.current = collectCueSkipRangesFromM3U8(result.content)
+
+                if (result.report.reverted) {
+                  debugLog.push('AD', `回滚 · ${result.report.revertReason ?? '未知原因'}`)
+                  return
+                }
+
+                if (result.report.removedGroups > 0) {
+                  const engines = result.report.engines.join('+') || 'unknown'
+                  debugLog.push(
+                    'AD',
+                    `切除 ${result.report.removedGroups} 组 / ${result.report.removedSegments} 片 / ${result.report.removedDuration.toFixed(1)}s · ${engines}`,
+                  )
+                  artInstance.notice.show = `已过滤广告 ${result.report.removedGroups} 组（${formatInfoTime(result.report.removedDuration)}）`
                 }
               }),
             )
@@ -529,6 +560,11 @@ export function BasicPlayer({
 
     art.on('ready', () => {
       moveHlsQualityControl(art)
+      // 换源等必要重建时，恢复销毁前的网页全屏状态
+      if (restoreFullscreenWebRef.current) {
+        restoreFullscreenWebRef.current = false
+        art.fullscreenWeb = true
+      }
     })
     art.on('restart', () => moveHlsQualityControl(art))
     art.on('video:loadedmetadata', refreshHlsQualityUi)
@@ -566,7 +602,7 @@ export function BasicPlayer({
     art.on('video:loadedmetadata', applyStartTime)
     art.on('video:canplay', applyStartTime)
     art.on('video:timeupdate', () => {
-      if (canUseAdFilter && adFilterEnabled) {
+      if (canUseAdFilter && adFilterEnabledRef.current) {
         skipCurrentAdRange(art, adSkipRangesRef.current, lastAdSkipRef, debugLog)
       }
 
@@ -601,6 +637,18 @@ export function BasicPlayer({
       resolveAbortController.abort()
       destroyHls(hlsRef)
       destroyMpegts(mpegtsRef)
+      // ArtPlayer 网页全屏会把 $player 挂到 body，销毁前需先退出，否则残留遮罩会卡住页面
+      try {
+        if (art.fullscreenWeb) {
+          restoreFullscreenWebRef.current = true
+          art.fullscreenWeb = false
+        }
+        if (art.fullscreen) {
+          art.fullscreen = false
+        }
+      } catch {
+        // Ignore teardown errors while leaving fullscreen states.
+      }
       art.destroy(false)
       if (artRef.current === art) {
         artRef.current = null
@@ -608,7 +656,6 @@ export function BasicPlayer({
       container.innerHTML = ''
     }
   }, [
-    adFilterEnabled,
     audioTrackUrl,
     autoPlay,
     canUseAdFilter,
@@ -924,6 +971,7 @@ function buildDebugInfoText(params: DebugInfoParams): string {
     loop,
     initialTime,
     adFilterEnabled,
+    adFilterReport,
     audioTrackUrl,
     debugLog,
     autoNextEnabled,
@@ -956,9 +1004,12 @@ function buildDebugInfoText(params: DebugInfoParams): string {
     `循环播放: ${loop ? '开启' : '关闭'}`,
     `自动续播: ${autoNextEnabled ? '开启' : '关闭'}`,
     `续播时间点: ${initialTime > 0 ? `${initialTime}s` : '无'}`,
-    ...(isHls && !isLive ? [`去广告跳过: ${adFilterEnabled ? '开启' : '关闭'}`] : []),
+    ...(isHls && !isLive ? [`去广告: ${adFilterEnabled ? '开启' : '关闭'}`] : []),
     `外部音轨: ${audioTrackUrl ? audioTrackUrl : '无'}`,
     '',
+    ...(isHls && !isLive && adFilterEnabled
+      ? ['--- 去广告报告 ---', ...formatAdFilterReportLines(adFilterReport), '']
+      : []),
     '--- 当前状态 ---',
     `播放状态: ${getPlaybackStateText(art)}`,
     `就绪状态: ${formatMediaReadyState(video.readyState)}`,
@@ -1891,10 +1942,33 @@ function normalizePlaybackUrlForDisplay(src: string): string {
   }
 }
 
+function formatAdFilterReportLines(report: HlsAdFilterReport | undefined): string[] {
+  if (!report) {
+    return ['状态: 尚未收到清单净化结果']
+  }
+
+  if (report.reverted) {
+    return [`状态: 已回滚`, `原因: ${report.revertReason ?? '未知'}`]
+  }
+
+  if (report.removedGroups <= 0) {
+    return ['状态: 未识别到可切除广告分组']
+  }
+
+  return [
+    `状态: 已切除`,
+    `分组: ${report.removedGroups}`,
+    `分片: ${report.removedSegments}`,
+    `时长: ${report.removedDuration.toFixed(1)}s`,
+    `引擎: ${report.engines.join(', ') || '-'}`,
+    ...(report.reasons.length > 0 ? [`特征: ${report.reasons.slice(0, 12).join(' | ')}`] : []),
+  ]
+}
+
 function createHlsConfig(
   isLive: boolean,
   adFilterEnabled: boolean,
-  onAdSkipRanges: (ranges: HlsAdSkipRange[]) => void,
+  onAdFiltered: (result: HlsAdFilterResult) => void,
 ): ConstructorParameters<typeof Hls>[0] {
   return {
     startLevel: -1,
@@ -1916,7 +1990,7 @@ function createHlsConfig(
           backBufferLength: 30,
         }
       : {}),
-    ...(adFilterEnabled && !isLive ? { loader: createAdAwareHlsLoader(Hls, onAdSkipRanges) } : undefined),
+    ...(adFilterEnabled && !isLive ? { loader: createAdAwareHlsLoader(Hls, onAdFiltered) } : undefined),
   }
 }
 

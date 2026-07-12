@@ -4,16 +4,28 @@ import type { MediaStreamType } from '@shared/types'
 import { BasicPlayer } from '@renderer/components/media/basic-player'
 import { Button } from '@renderer/components/ui/button'
 import { Input } from '@renderer/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@renderer/components/ui/select'
 import { detectMediaStreamType, getMediaProxyBaseUrl } from '@renderer/services/api/media'
+
+type LinkPlaybackVariant = 'vod' | 'live'
 
 interface PlaybackSource {
   displayUrl: string
   sourceType: MediaStreamType
   url: string
+  variant: LinkPlaybackVariant
 }
 
 export function LinkPlayerPage(): React.JSX.Element {
   const [inputUrl, setInputUrl] = useState('')
+  const [playbackVariant, setPlaybackVariant] = useState<LinkPlaybackVariant>('vod')
   const [playbackSource, setPlaybackSource] = useState<PlaybackSource>()
   const [errorMessage, setErrorMessage] = useState('')
   const [isResolving, setIsResolving] = useState(false)
@@ -41,6 +53,7 @@ export function LinkPlayerPage(): React.JSX.Element {
         displayUrl,
         sourceType: knownType ?? detection?.type ?? 'native',
         url: createMediaProxyUrl(proxyBaseUrl, displayUrl),
+        variant: playbackVariant,
       })
     } catch {
       setErrorMessage('链接解析失败，请检查地址后重试。')
@@ -61,7 +74,7 @@ export function LinkPlayerPage(): React.JSX.Element {
           <p className="text-muted-foreground mt-1.5 text-sm">粘贴媒体地址，解析后立即播放。</p>
         </header>
 
-        <form className="border-border bg-card rounded-xl border p-3 shadow-sm" onSubmit={handleSubmit}>
+        <form className="flex flex-col gap-2" onSubmit={handleSubmit}>
           <label className="sr-only" htmlFor="playback-url">
             播放链接
           </label>
@@ -79,17 +92,28 @@ export function LinkPlayerPage(): React.JSX.Element {
                 onChange={(event) => setInputUrl(event.target.value)}
               />
             </div>
+            <Select value={playbackVariant} onValueChange={(value) => setPlaybackVariant(value as LinkPlaybackVariant)}>
+              <SelectTrigger aria-label="播放类型" className="!h-11 w-full sm:w-24">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="vod">点播</SelectItem>
+                  <SelectItem value="live">直播</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
             <Button className="h-11 sm:min-w-28" disabled={isResolving} type="submit">
               <Play data-icon="inline-start" />
               {isResolving ? '解析中' : '播放'}
             </Button>
           </div>
-          {errorMessage ? <p className="text-destructive mt-2 px-1 text-xs">{errorMessage}</p> : null}
+          {errorMessage ? <p className="text-destructive px-1 text-xs">{errorMessage}</p> : null}
         </form>
 
         <section className="aspect-video overflow-hidden rounded-xl bg-black shadow-sm">
           <BasicPlayer
-            key={playbackSource?.url}
+            key={`${playbackSource?.url}-${playbackSource?.variant}`}
             autoPlay
             className="h-full"
             enableAutoNext={false}
@@ -98,6 +122,7 @@ export function LinkPlayerPage(): React.JSX.Element {
             sourceType={playbackSource?.sourceType}
             src={playbackSource?.url}
             title="直链播放"
+            variant={playbackSource?.variant}
           />
         </section>
       </div>
