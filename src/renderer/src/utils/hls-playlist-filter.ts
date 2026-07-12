@@ -3,7 +3,7 @@ import type { LoaderCallbacks, LoaderConfiguration, LoaderContext, LoaderRespons
 
 type PlaylistLoaderContext = LoaderContext & { type?: string; url?: string }
 
-export type HlsAdSkipReason = 'cue' | 'uri' | 'path' | 'behavior'
+export type HlsAdSkipReason = 'cue' | 'uri' | 'path' | 'behavior' | 'outlier'
 
 export interface HlsAdSkipRange {
   start: number
@@ -98,7 +98,10 @@ export function filterAdsFromM3U8(content: string, baseUrl = ''): HlsAdFilterRes
     }
   }
 
-  // 3) 行为启发式：夹心短插播、序列号断层、极短同长 EXTINF
+  // 3) 分片数众数离群：mixed 源正片常被切成固定 N 片一组，广告组明显更短
+  markSegmentCountOutliers(groups, engines, reasons)
+
+  // 4) 行为启发式：夹心短插播、序列号断层、片头片尾
   markBehavioralAdCandidates(groups, engines, reasons)
 
   const adGroups = groups.filter((group) => group.isAd)
@@ -467,6 +470,44 @@ function detectCueOrUriAdReason(group: DiscontinuityGroup): string | undefined {
   return undefined
 }
 
+function markSegmentCountOutliers(groups: DiscontinuityGroup[], engines: Set<string>, reasons: string[]): void {
+  // 样本太少时众数不可靠
+  if (groups.length < 8) {
+    return
+  }
+
+  const countFrequency = new Map<number, number>()
+  for (const group of groups) {
+    countFrequency.set(group.segmentCount, (countFrequency.get(group.segmentCount) ?? 0) + 1)
+  }
+
+  let modeCount = 0
+  let modeFrequency = 0
+  for (const [segmentCount, frequency] of countFrequency) {
+    if (frequency > modeFrequency || (frequency === modeFrequency && segmentCount > modeCount)) {
+      modeCount = segmentCount
+      modeFrequency = frequency
+    }
+  }
+
+  // 需要存在占优的“常规打包”（如 ffzy mixed 常见 5 片一组）
+  if (modeCount < 4 || modeFrequency / groups.length < 0.45) {
+    return
+  }
+
+  const outlierMax = Math.max(2, Math.floor(modeCount * 0.6))
+
+  for (const group of groups) {
+    if (group.isAd) {
+      continue
+    }
+    if (group.segmentCount < modeCount && group.segmentCount <= outlierMax) {
+      engines.add('outlier')
+      markGroupAsAd(group, `seg-outlier:${group.segmentCount}of${modeCount}`, reasons)
+    }
+  }
+}
+
 function markBehavioralAdCandidates(groups: DiscontinuityGroup[], engines: Set<string>, reasons: string[]): void {
   // 片头：首段短、随后正片长
   if (groups.length >= 2) {
@@ -502,13 +543,17 @@ function markBehavioralAdCandidates(groups: DiscontinuityGroup[], engines: Set<s
       continue
     }
 
-    if (curr.score < 20) {
+    // 长正片后的短少片组：mixed 源插播常见形态
+    const isAfterLongSparse =
+      prev.duration > CONTEXT_LONG_DURATION && curr.segmentCount <= 3 && curr.duration < MIDROLL_CURR_DURATION
+
+    if (curr.score < 20 && !isAfterLongSparse) {
       continue
     }
 
     const isSandwiched = prev.duration > CONTEXT_LONG_DURATION && next.duration > CONTEXT_LONG_DURATION
     const isMidRoll = prev.duration > MIDROLL_PREV_DURATION && curr.duration < MIDROLL_CURR_DURATION
-    if (isSandwiched || isMidRoll) {
+    if (isSandwiched || isMidRoll || isAfterLongSparse) {
       engines.add('behavior')
       markGroupAsAd(curr, `contextual-short:${curr.duration.toFixed(1)}s`, reasons)
     }
@@ -545,7 +590,8 @@ function isHardEvidenceReason(reason: string): boolean {
     reason.startsWith('cue') ||
     reason.startsWith('uri:') ||
     reason.startsWith('path:') ||
-    reason.startsWith('sequence-bridge')
+    reason.startsWith('sequence-bridge') ||
+    reason.startsWith('seg-outlier')
   )
 }
 
@@ -596,6 +642,7 @@ function reasonToSkipReason(reason: string): HlsAdSkipReason {
   if (reason.startsWith('cue')) return 'cue'
   if (reason.startsWith('uri') || reason.startsWith('uniform-short')) return 'uri'
   if (reason.startsWith('path')) return 'path'
+  if (reason.startsWith('seg-outlier')) return 'outlier'
   return 'behavior'
 }
 
