@@ -1,21 +1,20 @@
 import { useEffect, useRef, useState, type MutableRefObject } from 'react'
+import { createPortal } from 'react-dom'
 import Artplayer, { type Option } from 'artplayer'
 import artplayerPluginAmbilight from 'artplayer-plugin-ambilight'
 import artplayerPluginAudioTrack from 'artplayer-plugin-audio-track'
 import artplayerPluginHlsControl from 'artplayer-plugin-hls-control'
 import Hls, { type ErrorData } from 'hls.js'
 import mpegts from 'mpegts.js'
-import { HLS_AD_FILTER_STORAGE_KEY, PLAYER_AUTO_NEXT_STORAGE_KEY, PLAYER_LOOP_STORAGE_KEY } from '@shared/constants'
+import {
+  PLAYER_AUTO_NEXT_STORAGE_KEY,
+  PLAYER_LOOP_STORAGE_KEY,
+  PLAYER_PLAYBACK_RATE_STORAGE_KEY,
+  PLAYER_SEEK_STEP_STORAGE_KEY,
+} from '@shared/constants'
 import type { MediaStreamType } from '@shared/types'
 import { cn } from '@renderer/utils/cn'
-import {
-  collectCueSkipRangesFromM3U8,
-  createAdAwareHlsLoader,
-  type HlsAdFilterReport,
-  type HlsAdFilterResult,
-  type HlsAdSkipRange,
-} from '@renderer/utils/hls-playlist-filter'
-import { artplayerSettingIcons, artplayerSwitchIcons } from '@renderer/utils/artplayer-icons'
+import { artplayerSwitchIcons } from '@renderer/utils/artplayer-icons'
 
 export type PlayerVariant = 'vod' | 'live'
 
@@ -25,7 +24,6 @@ export interface PlayerNavigationLabels {
 }
 
 export interface BasicPlayerProps {
-  enableAdFilter?: boolean
   enableAutoNext?: boolean
   autoPlay?: boolean
   audioTrackUrl?: string
@@ -102,8 +100,6 @@ interface DebugInfoParams {
   autoPlay: boolean
   loop: boolean
   initialTime: number
-  adFilterEnabled: boolean
-  adFilterReport?: HlsAdFilterReport
   audioTrackUrl?: string
   debugLog: PlaybackDebugRecorder
   autoNextEnabled: boolean
@@ -114,11 +110,331 @@ interface VideoPlaybackQualityInfo {
   totalVideoFrames?: number
 }
 
+interface CustomSliderInput {
+  title: string
+  initialValue: number
+  min: number
+  max: number
+  step: number
+  suffix: string
+  presets: readonly number[]
+  normalPreset?: number
+  formatValue: (value: number) => string
+  onChange: (value: number) => void
+}
+
+interface CustomOptionsInput {
+  title: string
+  selectedValue: number
+  options: readonly { value: number; label: string }[]
+  onChange: (value: number) => void
+}
+
+interface DisplaySettingsState {
+  aspectRatio: string
+  flip: string
+  audioTrack?: {
+    label: string
+    onClick: () => void
+  }
+  quality?: {
+    label: string
+    onClick: () => void
+  }
+  playbackRate: number
+  seekStep: number
+  loop: boolean
+  autoNext: boolean
+  showPlaybackSettings: boolean
+  showAutoNext: boolean
+  onAspectRatio: () => void
+  onFlip: () => void
+  onPlaybackRate: () => void
+  onSeekStep: () => void
+  onLoop: () => void
+  onAutoNext: () => void
+}
+
+function DisplaySettingsMenu({
+  state,
+  closing,
+  bottomOffset,
+}: {
+  state: DisplaySettingsState
+  closing: boolean
+  bottomOffset: number
+}): React.JSX.Element {
+  return (
+    <section
+      data-display-settings
+      style={{ bottom: bottomOffset }}
+      className={cn(
+        'absolute right-4 z-[200] w-80 overflow-hidden rounded-xl border border-white/10 bg-zinc-900/95 p-2 shadow-2xl backdrop-blur-sm transition-all duration-150 select-none',
+        closing && 'translate-y-1 opacity-0',
+      )}
+      onCopy={(event) => event.preventDefault()}
+    >
+      <DisplaySettingRow label="画面比例" value={formatAspectRatio(state.aspectRatio)} onClick={state.onAspectRatio} />
+      <DisplaySettingRow label="画面翻转" value={formatFlip(state.flip)} onClick={state.onFlip} />
+      {state.quality ? (
+        <DisplaySettingRow label="画质" value={state.quality.label} onClick={state.quality.onClick} />
+      ) : null}
+      {state.audioTrack ? (
+        <DisplaySettingRow label="音效" value={state.audioTrack.label} onClick={state.audioTrack.onClick} />
+      ) : null}
+      {state.showPlaybackSettings ? (
+        <>
+          <DisplaySettingRow label="播放速度" value={`${state.playbackRate}倍`} onClick={state.onPlaybackRate} />
+          <DisplaySettingRow label="跳转步长" value={`${state.seekStep} 秒`} onClick={state.onSeekStep} />
+          <DisplaySettingRow
+            label="循环播放"
+            value={state.loop ? '开启' : '关闭'}
+            toggle={state.loop}
+            onClick={state.onLoop}
+          />
+        </>
+      ) : null}
+      {state.showAutoNext ? (
+        <DisplaySettingRow
+          label="自动续播"
+          value={state.autoNext ? '开启' : '关闭'}
+          toggle={state.autoNext}
+          onClick={state.onAutoNext}
+        />
+      ) : null}
+    </section>
+  )
+}
+
+function DisplaySettingRow({
+  label,
+  value,
+  toggle,
+  onClick,
+}: {
+  label: string
+  value: string
+  toggle?: boolean
+  onClick: () => void
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left transition-colors hover:bg-white/10"
+      onClick={onClick}
+    >
+      <span className="min-w-0 flex-1 truncate text-sm font-medium text-white">{label}</span>
+      <span className="w-16 text-right text-sm text-white/65">{value}</span>
+      {toggle === undefined ? (
+        <svg
+          className="size-5 shrink-0 text-white/75"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="m9 18 6-6-6-6" />
+        </svg>
+      ) : (
+        <span className={cn('h-5 w-9 shrink-0 rounded-full p-0.5', toggle ? 'bg-white' : 'bg-white/30')}>
+          <span
+            className={cn(
+              'block size-4 rounded-full transition-transform',
+              toggle ? 'translate-x-4 bg-zinc-900' : 'bg-white/80',
+            )}
+          />
+        </span>
+      )}
+    </button>
+  )
+}
+
+function CustomSliderDialog({
+  input,
+  closing,
+  onBack,
+  bottomOffset,
+}: {
+  input: CustomSliderInput
+  closing: boolean
+  onBack: () => void
+  bottomOffset: number
+}): React.JSX.Element {
+  const [value, setValue] = useState(input.initialValue)
+  const updateValue = (nextValue: number): void => {
+    const normalized = Math.min(input.max, Math.max(input.min, Number(nextValue.toFixed(2))))
+    setValue(normalized)
+    input.onChange(normalized)
+  }
+
+  return (
+    <section
+      data-display-settings
+      style={{ bottom: bottomOffset }}
+      className={cn(
+        'absolute right-4 z-[200] w-96 overflow-hidden rounded-xl border border-white/10 bg-zinc-900/95 shadow-2xl backdrop-blur-sm transition-all duration-150 select-none',
+        closing && 'translate-y-1 opacity-0',
+      )}
+      onCopy={(event) => event.preventDefault()}
+    >
+      <header className="flex items-center gap-3 border-b border-white/10 px-4 py-3.5">
+        <button
+          type="button"
+          aria-label="返回显示设置"
+          className="-ml-2 flex size-8 items-center justify-center rounded-full text-white hover:bg-white/10"
+          onClick={onBack}
+        >
+          <svg
+            className="size-5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+        </button>
+        <h2 className="text-base font-semibold text-white">{input.title}</h2>
+      </header>
+      <div className="px-5 py-8">
+        <div className="text-center text-2xl font-semibold tracking-tight text-white">{input.formatValue(value)}</div>
+        <div className="mt-7 flex items-center gap-4">
+          <button
+            type="button"
+            aria-label="减小"
+            className="flex size-11 items-center justify-center rounded-full bg-white/10 text-2xl text-white hover:bg-white/20"
+            onClick={() => updateValue(value - input.step)}
+          >
+            −
+          </button>
+          <input
+            aria-label={input.title}
+            className="h-2 min-w-0 flex-1 cursor-pointer accent-white"
+            min={input.min}
+            max={input.max}
+            step={input.step}
+            type="range"
+            value={value}
+            onChange={(event) => updateValue(Number(event.target.value))}
+          />
+          <button
+            type="button"
+            aria-label="增大"
+            className="flex size-11 items-center justify-center rounded-full bg-white/10 text-2xl text-white hover:bg-white/20"
+            onClick={() => updateValue(value + input.step)}
+          >
+            +
+          </button>
+        </div>
+        <div className="mt-7 flex gap-2">
+          {input.presets.map((preset) => (
+            <div key={preset} className="min-w-0 flex-1 text-center">
+              <button
+                type="button"
+                className={cn(
+                  'w-full rounded-full px-2 py-2 text-sm font-medium transition-colors',
+                  Math.abs(value - preset) < input.step / 2
+                    ? 'bg-white text-black'
+                    : 'bg-white/10 text-white hover:bg-white/20',
+                )}
+                onClick={() => updateValue(preset)}
+              >
+                {formatPresetNumber(preset)}
+              </button>
+              {preset === input.normalPreset ? <div className="mt-1.5 text-xs text-white/65">正常</div> : null}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function CustomOptionsDialog({
+  input,
+  closing,
+  onBack,
+  bottomOffset,
+}: {
+  input: CustomOptionsInput
+  closing: boolean
+  onBack: () => void
+  bottomOffset: number
+}): React.JSX.Element {
+  const [value, setValue] = useState(input.selectedValue)
+
+  return (
+    <section
+      data-display-settings
+      style={{ bottom: bottomOffset }}
+      className={cn(
+        'absolute right-4 z-[200] w-80 overflow-hidden rounded-xl border border-white/10 bg-zinc-900/95 p-2 shadow-2xl backdrop-blur-sm transition-all duration-150 select-none',
+        closing && 'translate-y-1 opacity-0',
+      )}
+      onCopy={(event) => event.preventDefault()}
+    >
+      <header className="flex items-center gap-3 border-b border-white/10 px-2 py-2.5">
+        <button
+          type="button"
+          aria-label="返回显示设置"
+          className="flex size-8 items-center justify-center rounded-full text-white hover:bg-white/10"
+          onClick={onBack}
+        >
+          <svg
+            className="size-5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+        </button>
+        <h2 className="text-base font-semibold text-white">{input.title}</h2>
+      </header>
+      <div className="py-1">
+        {input.options.map((option) => {
+          const selected = value === option.value
+          return (
+            <button
+              key={option.value}
+              type="button"
+              className={cn(
+                'flex h-11 w-full items-center px-3 text-left text-sm transition-colors hover:bg-white/10',
+                selected && 'bg-white/10 text-white',
+              )}
+              onClick={() => {
+                setValue(option.value)
+                input.onChange(option.value)
+              }}
+            >
+              <span className="flex-1">{option.label}</span>
+              {selected ? (
+                <span className="text-base" aria-label="已选择">
+                  ✓
+                </span>
+              ) : null}
+            </button>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
 export function BasicPlayer({
   autoPlay = false,
   audioTrackUrl,
   className,
-  enableAdFilter = true,
   enableAutoNext = true,
   initialTime = 0,
   isResolvingSource = false,
@@ -141,21 +457,28 @@ export function BasicPlayer({
   const formatPlaybackUrlRef = useRef(formatPlaybackUrl)
   const initialTimeRef = useRef(initialTime)
   const resumeTimeRef = useRef(0)
-  const adSkipRangesRef = useRef<HlsAdSkipRange[]>([])
-  const lastAdSkipRef = useRef<{ key: string; at: number } | undefined>(undefined)
-  const adFilterReportRef = useRef<HlsAdFilterReport | undefined>(undefined)
   const resolvedUrlRef = useRef('检测中…')
   const restoreFullscreenWebRef = useRef(false)
-  const [adFilterEnabled, setAdFilterEnabled] = useState(() =>
-    persistPlaybackSettings ? readAdFilterEnabled() : false,
-  )
-  const adFilterEnabledRef = useRef(adFilterEnabled)
+  const [customNumberInput, setCustomNumberInput] = useState<CustomSliderInput | undefined>(undefined)
+  const [customOptionsInput, setCustomOptionsInput] = useState<CustomOptionsInput | undefined>(undefined)
+  const [displaySettings, setDisplaySettings] = useState<DisplaySettingsState | undefined>(undefined)
+  const [isDisplaySettingsClosing, setIsDisplaySettingsClosing] = useState(false)
+  const [settingsPortalContainer, setSettingsPortalContainer] = useState<HTMLElement | undefined>(undefined)
+  const [settingsBottomOffset, setSettingsBottomOffset] = useState(64)
 
   const isLive = variant === 'live'
   const isHls = isHlsSource(src, sourceType)
   const isFlv = isFlvSource(src, sourceType)
   const isMpegts = isMpegtsSource(src, sourceType)
-  const canUseAdFilter = enableAdFilter && isHls && !isLive
+
+  useEffect(() => {
+    setCustomNumberInput(undefined)
+    setCustomOptionsInput(undefined)
+    setDisplaySettings(undefined)
+    setIsDisplaySettingsClosing(false)
+    setSettingsPortalContainer(undefined)
+    setSettingsBottomOffset(64)
+  }, [sourceType, src])
 
   useEffect(() => {
     callbacksRef.current = {
@@ -164,8 +487,7 @@ export function BasicPlayer({
     }
     formatPlaybackUrlRef.current = formatPlaybackUrl
     initialTimeRef.current = initialTime
-    adFilterEnabledRef.current = adFilterEnabled
-  }, [adFilterEnabled, formatPlaybackUrl, initialTime, onEnded, onProgress])
+  }, [formatPlaybackUrl, initialTime, onEnded, onProgress])
 
   useEffect(() => {
     const container = containerRef.current
@@ -175,9 +497,6 @@ export function BasicPlayer({
 
     destroyHls(hlsRef)
     destroyMpegts(mpegtsRef)
-    adSkipRangesRef.current = []
-    lastAdSkipRef.current = undefined
-    adFilterReportRef.current = undefined
     container.innerHTML = ''
     container.setAttribute('aria-label', title ?? 'Vfan TV 播放器')
     const displayPlaybackUrl = formatPlaybackUrlRef.current(src)
@@ -209,6 +528,8 @@ export function BasicPlayer({
     let audioMenuItem: HTMLElement | undefined
     let loopEnabled = loop ?? (persistPlaybackSettings ? readLoopEnabled() : false)
     let autoNextEnabled = enableAutoNext && (persistPlaybackSettings ? readAutoNextEnabled() : true)
+    let playbackRate = persistPlaybackSettings ? readPlaybackRate() : 1
+    let seekStep = persistPlaybackSettings ? readSeekStep() : 5
     let hasReportedPlaybackFailure = false
     let hlsNetworkRecoveryAttempts = 0
 
@@ -233,15 +554,15 @@ export function BasicPlayer({
       autoplay: autoPlay, // 是否自动播放
       loop: loopEnabled, // 是否循环播放
       isLive, // 是否启用直播模式（真直播无进度条、无倍速）
-      setting: true, // 是否显示原生设置面板
-      playbackRate: !isLive, // 是否显示倍速菜单，直播不显示
-      aspectRatio: true, // 是否启用画面比例菜单
-      flip: true, // 是否启用画面翻转菜单
+      setting: true, // 保留原生齿轮入口，面板由项目自定义 UI 接管
+      playbackRate: false, // 使用项目自定义的倍速选项
+      aspectRatio: false, // 使用项目自定义的画面比例项
+      flip: false, // 使用项目自定义的画面翻转项
       hotkey: true, // 是否启用 ArtPlayer 原生快捷键
-      pip: true, // 是否启用画中画
+      pip: false, // 不提供画中画功能与入口
       fullscreen: true, // 是否启用浏览器全屏
       fullscreenWeb: true, // 是否启用网页全屏
-      miniProgressBar: false, // 关闭迷你进度条：其样式在本项目构建下会渲染异常（残留白竖线）
+      miniProgressBar: true, // 控制栏收起时保留播放进度提示
       screenshot: true, // 是否启用截图
       lock: true, // 是否启用移动端锁定按钮
       fastForward: true, // 是否启用长按快进
@@ -259,75 +580,7 @@ export function BasicPlayer({
         preload: 'metadata', // 只预加载媒体元信息
         playsInline: true, // 透传 video playsinline 属性
       },
-      settings: [
-        ...(!isLive
-          ? [
-              {
-                name: 'vfan-loop',
-                html: '循环播放',
-                icon: artplayerSettingIcons.loop,
-                tooltip: loopEnabled ? '开启' : '关闭',
-                switch: loopEnabled,
-                onSwitch(item) {
-                  const nextEnabled = !item.switch
-                  loopEnabled = nextEnabled
-                  item.tooltip = nextEnabled ? '开启' : '关闭'
-                  art.video.loop = nextEnabled
-                  if (persistPlaybackSettings) {
-                    window.localStorage.setItem(PLAYER_LOOP_STORAGE_KEY, String(nextEnabled))
-                  }
-                  return nextEnabled
-                },
-              },
-              ...(enableAutoNext
-                ? [
-                    {
-                      name: 'vfan-auto-next',
-                      html: '自动续播',
-                      icon: artplayerSettingIcons.autoNext,
-                      tooltip: autoNextEnabled ? '开启' : '关闭',
-                      switch: autoNextEnabled,
-                      onSwitch(item) {
-                        const nextEnabled = !item.switch
-                        autoNextEnabled = nextEnabled
-                        item.tooltip = nextEnabled ? '开启' : '关闭'
-                        if (persistPlaybackSettings) {
-                          window.localStorage.setItem(PLAYER_AUTO_NEXT_STORAGE_KEY, String(nextEnabled))
-                        }
-                        return nextEnabled
-                      },
-                    },
-                  ]
-                : []),
-            ]
-          : []),
-        ...(canUseAdFilter
-          ? [
-              {
-                name: 'hls-ad-filter',
-                html: '去广告（试验性）',
-                icon: artplayerSettingIcons.adFilter,
-                tooltip: adFilterEnabled ? '开启' : '关闭',
-                switch: adFilterEnabled,
-                onSwitch(item) {
-                  const nextEnabled = !item.switch
-                  item.tooltip = nextEnabled ? '开启' : '关闭'
-                  if (persistPlaybackSettings) {
-                    window.localStorage.setItem(HLS_AD_FILTER_STORAGE_KEY, String(nextEnabled))
-                  }
-                  // 热切换 HLS，避免重建 ArtPlayer（网页全屏下销毁会残留 body 遮罩）
-                  adFilterEnabledRef.current = nextEnabled
-                  setAdFilterEnabled(nextEnabled)
-                  adSkipRangesRef.current = []
-                  lastAdSkipRef.current = undefined
-                  adFilterReportRef.current = undefined
-                  reloadPlayback(art)
-                  return nextEnabled
-                },
-              },
-            ]
-          : []),
-      ],
+      settings: [], // 原生设置项全部改由自定义菜单渲染
       plugins: [
         // 背光插件
         artplayerPluginAmbilight({
@@ -347,7 +600,7 @@ export function BasicPlayer({
               (art) => {
                 const plugin = artplayerPluginHlsControl({
                   quality: {
-                    control: true, // 在控制栏显示 HLS 清晰度入口
+                    control: false, // 清晰度入口由项目自定义设置菜单提供
                     setting: false, // 在设置面板显示 HLS 清晰度入口
                     title: '清晰度', // HLS 清晰度菜单标题
                     auto: '自动', // HLS 自动清晰度文案
@@ -404,8 +657,6 @@ export function BasicPlayer({
                 autoPlay,
                 loop: loopEnabled,
                 initialTime: initialTimeRef.current,
-                adFilterEnabled: canUseAdFilter && adFilterEnabledRef.current,
-                adFilterReport: adFilterReportRef.current,
                 isFlv,
                 isMpegts,
                 audioTrackUrl,
@@ -441,27 +692,7 @@ export function BasicPlayer({
           destroyMpegts(mpegtsRef)
 
           if (Hls.isSupported()) {
-            const hls = new Hls(
-              createHlsConfig(isLive, canUseAdFilter && adFilterEnabledRef.current, (result) => {
-                adFilterReportRef.current = result.report
-                // 分片已从清单切除；仅对净化后残留的 CUE 做播放时兜底跳过
-                adSkipRangesRef.current = collectCueSkipRangesFromM3U8(result.content)
-
-                if (result.report.reverted) {
-                  debugLog.push('AD', `回滚 · ${result.report.revertReason ?? '未知原因'}`)
-                  return
-                }
-
-                if (result.report.removedGroups > 0) {
-                  const engines = result.report.engines.join('+') || 'unknown'
-                  debugLog.push(
-                    'AD',
-                    `切除 ${result.report.removedGroups} 组 / ${result.report.removedSegments} 片 / ${result.report.removedDuration.toFixed(1)}s · ${engines}`,
-                  )
-                  artInstance.notice.show = `已过滤广告 ${result.report.removedGroups} 组（${formatInfoTime(result.report.removedDuration)}）`
-                }
-              }),
-            )
+            const hls = new Hls(createHlsConfig(isLive))
             hlsRef.current = hls
             artInstance.hls = hls
             hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -541,12 +772,138 @@ export function BasicPlayer({
     } satisfies Option)
 
     artRef.current = art
+    setSettingsPortalContainer(art.template.$player)
+    let layoutFrame: number | undefined
+    let layoutTimer: number | undefined
+    const updateSettingsBottomOffset = (): void => {
+      const playerRect = art.template.$player.getBoundingClientRect()
+      const progressRect = art.template.$progress.getBoundingClientRect()
+      if (playerRect.height <= 0 || progressRect.height <= 0) return
+
+      const nextOffset = Math.max(16, Math.round(playerRect.bottom - progressRect.top + 4))
+      setSettingsBottomOffset((current) => (current === nextOffset ? current : nextOffset))
+    }
+    const scheduleSettingsLayout = (): void => {
+      if (layoutFrame !== undefined) cancelAnimationFrame(layoutFrame)
+      layoutFrame = requestAnimationFrame(() => {
+        layoutFrame = undefined
+        updateSettingsBottomOffset()
+      })
+    }
+    const updateSettingsLayoutAfterControlTransition = (): void => {
+      scheduleSettingsLayout()
+      if (layoutTimer !== undefined) window.clearTimeout(layoutTimer)
+      layoutTimer = window.setTimeout(scheduleSettingsLayout, 220)
+    }
+    const settingsLayoutObserver = new ResizeObserver(scheduleSettingsLayout)
+    settingsLayoutObserver.observe(art.template.$player)
+    settingsLayoutObserver.observe(art.template.$progress)
+    window.addEventListener('resize', scheduleSettingsLayout)
+    document.addEventListener('fullscreenchange', scheduleSettingsLayout)
+    scheduleSettingsLayout()
+    if (!isLive) {
+      art.playbackRate = playbackRate
+      art.template.$player.tabIndex = 0
+    }
     removeDefaultContextMenuItems(art)
     if (isLive) {
       removeLiveSettingItems(art)
     }
     injectPlayerChromeStyles(art)
     localizeInfoPanel(art, displayPlaybackUrl, resolvedUrlRef, getStreamType(isHls, isFlv, isMpegts), isLive, mpegtsRef)
+    const openDisplaySettings = (): void => {
+      updateSettingsLayoutAfterControlTransition()
+      const refresh = (): void => openDisplaySettings()
+      const hls = (art as ArtplayerWithHls).hls
+      const audioTrack =
+        hls && hls.audioTracks.length > 1
+          ? {
+              label: hls.audioTracks[hls.audioTrack]?.name || `音轨 ${hls.audioTrack + 1}`,
+              onClick: () => {
+                hls.audioTrack = (hls.audioTrack + 1) % hls.audioTracks.length
+                refresh()
+              },
+            }
+          : undefined
+      const quality =
+        hls && shouldShowHlsQualityControl(hls, isLive)
+          ? {
+              label: getQualityText(art, true),
+              onClick: () => {
+                setCustomOptionsInput({
+                  title: '画质',
+                  selectedValue: hls.currentLevel,
+                  options: [
+                    { value: -1, label: '自动' },
+                    ...hls.levels.map((level, index) => ({
+                      value: index,
+                      label: getHlsQualityLabel(level, art.video),
+                    })),
+                  ],
+                  onChange: (nextLevel) => {
+                    hls.currentLevel = nextLevel
+                    art.notice.show = `画质 ${nextLevel < 0 ? '自动' : getHlsQualityLabel(hls.levels[nextLevel], art.video)}`
+                    refresh()
+                  },
+                })
+              },
+            }
+          : undefined
+      setDisplaySettings({
+        aspectRatio: art.aspectRatio,
+        flip: art.flip,
+        audioTrack,
+        quality,
+        playbackRate,
+        seekStep,
+        loop: loopEnabled,
+        autoNext: autoNextEnabled,
+        showPlaybackSettings: !isLive,
+        showAutoNext: !isLive && enableAutoNext,
+        onAspectRatio: () => {
+          art.aspectRatio = nextFromList(art.aspectRatio, ['default', '4:3', '16:9'])
+          refresh()
+        },
+        onFlip: () => {
+          art.flip = nextFromList(art.flip, ['normal', 'horizontal', 'vertical'])
+          refresh()
+        },
+        onPlaybackRate: () => {
+          setCustomNumberInput(
+            createPlaybackRateSliderInput(art, playbackRate, (nextRate) => {
+              playbackRate = nextRate
+              if (persistPlaybackSettings)
+                window.localStorage.setItem(PLAYER_PLAYBACK_RATE_STORAGE_KEY, String(nextRate))
+            }),
+          )
+        },
+        onSeekStep: () => {
+          setCustomNumberInput(
+            createSeekStepSliderInput(art, seekStep, (nextStep) => {
+              seekStep = nextStep
+              if (persistPlaybackSettings) window.localStorage.setItem(PLAYER_SEEK_STEP_STORAGE_KEY, String(nextStep))
+            }),
+          )
+        },
+        onLoop: () => {
+          loopEnabled = !loopEnabled
+          art.video.loop = loopEnabled
+          if (persistPlaybackSettings) window.localStorage.setItem(PLAYER_LOOP_STORAGE_KEY, String(loopEnabled))
+          refresh()
+        },
+        onAutoNext: () => {
+          autoNextEnabled = !autoNextEnabled
+          if (persistPlaybackSettings)
+            window.localStorage.setItem(PLAYER_AUTO_NEXT_STORAGE_KEY, String(autoNextEnabled))
+          refresh()
+        },
+      })
+    }
+    art.on('setting', (visible) => {
+      if (!visible) return
+      art.setting.show = false
+      openDisplaySettings()
+    })
     const refreshHlsQualityUi = (): void => {
       const hls = (art as ArtplayerWithHls).hls
       if (!hls?.levels.length) {
@@ -560,6 +917,7 @@ export function BasicPlayer({
 
     art.on('ready', () => {
       moveHlsQualityControl(art)
+      scheduleSettingsLayout()
       // 换源等必要重建时，恢复销毁前的网页全屏状态
       if (restoreFullscreenWebRef.current) {
         restoreFullscreenWebRef.current = false
@@ -567,8 +925,37 @@ export function BasicPlayer({
       }
     })
     art.on('restart', () => moveHlsQualityControl(art))
+    art.on('fullscreen', scheduleSettingsLayout)
+    art.on('fullscreenWeb', scheduleSettingsLayout)
     art.on('video:loadedmetadata', refreshHlsQualityUi)
     art.on('video:resize', refreshHlsQualityUi)
+
+    const focusPlayer = (): void => art.template.$player.focus()
+    const handleSeekShortcut = (event: KeyboardEvent): void => {
+      if (
+        isLive ||
+        (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        !art.template.$player.contains(document.activeElement) ||
+        isTextInputTarget(event.target)
+      ) {
+        return
+      }
+
+      event.preventDefault()
+      event.stopPropagation()
+      if (event.key === 'ArrowRight') {
+        art.forward = seekStep
+        art.notice.show = `向前跳转 ${seekStep} 秒`
+      } else {
+        art.backward = seekStep
+        art.notice.show = `向后跳转 ${seekStep} 秒`
+      }
+    }
+    art.template.$player.addEventListener('pointerdown', focusPlayer)
+    document.addEventListener('keydown', handleSeekShortcut, true)
 
     let startTimeApplied = false
 
@@ -602,10 +989,6 @@ export function BasicPlayer({
     art.on('video:loadedmetadata', applyStartTime)
     art.on('video:canplay', applyStartTime)
     art.on('video:timeupdate', () => {
-      if (canUseAdFilter && adFilterEnabledRef.current) {
-        skipCurrentAdRange(art, adSkipRangesRef.current, lastAdSkipRef, debugLog)
-      }
-
       callbacksRef.current.onProgress?.({
         currentTime: Math.floor(art.currentTime),
         duration: Number.isFinite(art.duration) ? Math.floor(art.duration) : 0,
@@ -633,8 +1016,16 @@ export function BasicPlayer({
     })
 
     return () => {
+      if (layoutFrame !== undefined) cancelAnimationFrame(layoutFrame)
+      if (layoutTimer !== undefined) window.clearTimeout(layoutTimer)
+      settingsLayoutObserver.disconnect()
+      window.removeEventListener('resize', scheduleSettingsLayout)
+      document.removeEventListener('fullscreenchange', scheduleSettingsLayout)
+      setSettingsPortalContainer((current) => (current === art.template.$player ? undefined : current))
       isResolveActive = false
       resolveAbortController.abort()
+      art.template.$player.removeEventListener('pointerdown', focusPlayer)
+      document.removeEventListener('keydown', handleSeekShortcut, true)
       destroyHls(hlsRef)
       destroyMpegts(mpegtsRef)
       // ArtPlayer 网页全屏会把 $player 挂到 body，销毁前需先退出，否则残留遮罩会卡住页面
@@ -658,7 +1049,6 @@ export function BasicPlayer({
   }, [
     audioTrackUrl,
     autoPlay,
-    canUseAdFilter,
     enableAutoNext,
     isHls,
     isFlv,
@@ -671,8 +1061,51 @@ export function BasicPlayer({
     title,
   ])
 
+  const displaySettingsOverlay = customNumberInput ? (
+    <CustomSliderDialog
+      key={`${customNumberInput.title}-${customNumberInput.initialValue}`}
+      input={customNumberInput}
+      closing={isDisplaySettingsClosing}
+      bottomOffset={settingsBottomOffset}
+      onBack={() => setCustomNumberInput(undefined)}
+    />
+  ) : customOptionsInput ? (
+    <CustomOptionsDialog
+      key={`${customOptionsInput.title}-${customOptionsInput.selectedValue}`}
+      input={customOptionsInput}
+      closing={isDisplaySettingsClosing}
+      bottomOffset={settingsBottomOffset}
+      onBack={() => setCustomOptionsInput(undefined)}
+    />
+  ) : displaySettings ? (
+    <DisplaySettingsMenu
+      state={displaySettings}
+      closing={isDisplaySettingsClosing}
+      bottomOffset={settingsBottomOffset}
+    />
+  ) : null
+
   return (
-    <div className={cn('relative w-full overflow-hidden bg-black', isTheaterMode && 'h-full', className)}>
+    <div
+      className={cn('relative w-full overflow-hidden bg-black', isTheaterMode && 'h-full', className)}
+      onPointerDownCapture={(event) => {
+        if (!displaySettings || !(event.target instanceof Element) || event.target.closest('[data-display-settings]'))
+          return
+        const isControlInteraction = Boolean(event.target.closest('.art-bottom'))
+        if (!isControlInteraction) {
+          event.preventDefault()
+          event.stopPropagation()
+        }
+        if (isDisplaySettingsClosing) return
+        setIsDisplaySettingsClosing(true)
+        window.setTimeout(() => {
+          setCustomNumberInput(undefined)
+          setCustomOptionsInput(undefined)
+          setDisplaySettings(undefined)
+          setIsDisplaySettingsClosing(false)
+        }, 150)
+      }}
+    >
       <div ref={containerRef} aria-hidden={!src ? true : undefined} className="h-full w-full" />
       {!src ? (
         <div
@@ -684,6 +1117,7 @@ export function BasicPlayer({
           {isResolvingSource ? '正在识别播放源…' : '请选择一个可播放剧集'}
         </div>
       ) : null}
+      {settingsPortalContainer ? createPortal(displaySettingsOverlay, settingsPortalContainer) : displaySettingsOverlay}
     </div>
   )
 }
@@ -970,8 +1404,6 @@ function buildDebugInfoText(params: DebugInfoParams): string {
     autoPlay,
     loop,
     initialTime,
-    adFilterEnabled,
-    adFilterReport,
     audioTrackUrl,
     debugLog,
     autoNextEnabled,
@@ -998,18 +1430,14 @@ function buildDebugInfoText(params: DebugInfoParams): string {
     `模式: ${isLive ? '直播' : '点播'}`,
     `源类型: ${sourceType || (isHls ? 'hls' : isFlv ? 'flv' : isMpegts ? 'mpegts' : 'native')}`,
     `原始地址: ${rawSrc}`,
-    `实际地址: ${displayUrl}`,
+    `最终播放地址: ${displayUrl}`,
     ...(rawSrc !== displayUrl ? ['地址转换: 是（可能与代理/格式化有关）'] : []),
     `自动播放: ${autoPlay ? '是' : '否'}`,
     `循环播放: ${loop ? '开启' : '关闭'}`,
     `自动续播: ${autoNextEnabled ? '开启' : '关闭'}`,
     `续播时间点: ${initialTime > 0 ? `${initialTime}s` : '无'}`,
-    ...(isHls && !isLive ? [`去广告: ${adFilterEnabled ? '开启' : '关闭'}`] : []),
     `外部音轨: ${audioTrackUrl ? audioTrackUrl : '无'}`,
     '',
-    ...(isHls && !isLive && adFilterEnabled
-      ? ['--- 去广告报告 ---', ...formatAdFilterReportLines(adFilterReport), '']
-      : []),
     '--- 当前状态 ---',
     `播放状态: ${getPlaybackStateText(art)}`,
     `就绪状态: ${formatMediaReadyState(video.readyState)}`,
@@ -1325,6 +1753,12 @@ function localizeInfoPanel(
   const { $info, $infoClose, $infoPanel } = art.template
   injectStatsStyles(art)
   $info.classList.add('vfan-stats-overlay')
+  $info.style.setProperty('background', 'transparent', 'important')
+  $info.style.setProperty('background-color', 'transparent', 'important')
+  $info.style.setProperty('border', '0', 'important')
+  $info.style.setProperty('box-shadow', 'none', 'important')
+  $info.style.setProperty('backdrop-filter', 'none', 'important')
+  $info.style.setProperty('padding', '16px', 'important')
   $infoClose.textContent = '×'
   $infoPanel.className = 'vfan-stats-panel'
   $infoPanel.innerHTML = `
@@ -1340,11 +1774,12 @@ function localizeInfoPanel(
       <div class="vfan-stats-row"><span class="vfan-stats-label">播放进度</span><span class="vfan-stats-value" data-vfan-info="progress"></span></div>
       <div class="vfan-stats-row vfan-stats-row-meter"><span class="vfan-stats-label">缓冲健康</span><span class="vfan-stats-value"><span data-vfan-info="buffer-health"></span><span class="vfan-stats-meter" data-vfan-info="buffer-meter"><span></span></span></span></div>
       <div class="vfan-stats-row"><span class="vfan-stats-label">丢帧</span><span class="vfan-stats-value" data-vfan-info="dropped-frames"></span></div>
-      <div class="vfan-stats-row vfan-stats-row-url"><span class="vfan-stats-label">视频地址</span><span class="vfan-stats-value vfan-stats-value-copyable" data-vfan-info="url" data-vfan-copy="${escapeHtmlAttribute(playbackUrl)}" title="点击复制：${escapeHtmlAttribute(playbackUrl)}"></span></div>
-      <div class="vfan-stats-row vfan-stats-row-url"><span class="vfan-stats-label">解析地址</span><span class="vfan-stats-value vfan-stats-value-copyable" data-vfan-info="resolved-url" title="点击复制"></span></div>
+      <div class="vfan-stats-row vfan-stats-row-url"><span class="vfan-stats-label">视频地址</span><span class="vfan-stats-value vfan-stats-value-copyable" data-vfan-info="url" data-vfan-copy-label="视频地址" data-vfan-copy="${escapeHtmlAttribute(playbackUrl)}" title="点击复制：${escapeHtmlAttribute(playbackUrl)}"></span></div>
+      <div class="vfan-stats-row vfan-stats-row-url"><span class="vfan-stats-label">最终播放地址</span><span class="vfan-stats-value vfan-stats-value-copyable" data-vfan-info="resolved-url" data-vfan-copy-label="最终播放地址" title="点击复制"></span></div>
       ${getProtocolStatsMarkup(streamType)}
     </div>
   `
+  $infoPanel.appendChild($infoClose)
 
   bindCopyableUrlClicks($infoPanel, art)
 
@@ -1400,28 +1835,42 @@ function injectStatsStyles(art: Artplayer): void {
   const style = document.createElement('style')
   style.dataset.vfanStatsStyle = 'true'
   style.textContent = `
-    .vfan-stats-overlay .art-info-panel {
-      width: min(460px, calc(100vw - 32px));
+    .art-video-player .vfan-stats-overlay {
+      box-sizing: border-box !important;
+      padding: 16px !important;
+      background: transparent !important;
+      border: 0 !important;
+      box-shadow: none !important;
+      backdrop-filter: none !important;
+      pointer-events: none;
+    }
+    .vfan-stats-overlay .vfan-stats-panel {
+      position: relative;
+      width: min(480px, calc(100vw - 32px));
       max-height: calc(100vh - 48px);
       overflow: auto;
-      background: rgba(18, 18, 18, 0.92);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 12px;
-      box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+      background: rgba(24, 24, 27, 0.98);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 16px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.55);
+      backdrop-filter: blur(4px);
+      pointer-events: auto;
     }
     .vfan-stats-panel {
-      padding: 16px 18px 18px;
+      padding: 14px 16px 16px;
       color: rgba(255, 255, 255, 0.92);
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 13px;
-      line-height: 1.45;
+      font-size: 14px;
+      line-height: 1.5;
     }
     .vfan-stats-heading {
-      margin: 0 0 14px;
+      margin: 0 0 12px;
       color: rgba(255, 255, 255, 0.96);
-      font-size: 18px;
-      font-weight: 650;
-      letter-spacing: 0.01em;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .vfan-stats-panel > .vfan-stats-heading {
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     }
     .vfan-stats-grid {
       display: grid;
@@ -1444,7 +1893,7 @@ function injectStatsStyles(art: Artplayer): void {
     }
     .vfan-stats-row {
       display: grid;
-      grid-template-columns: 98px minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr);
       gap: 12px;
       align-items: start;
     }
@@ -1465,12 +1914,13 @@ function injectStatsStyles(art: Artplayer): void {
     }
     .vfan-stats-label {
       color: rgba(255, 255, 255, 0.62);
-      text-align: right;
+      text-align: left;
       white-space: nowrap;
     }
     .vfan-stats-value {
       min-width: 0;
       word-break: break-all;
+      text-align: right;
     }
     .vfan-stats-row-meter .vfan-stats-value {
       display: grid;
@@ -1490,12 +1940,55 @@ function injectStatsStyles(art: Artplayer): void {
       transition: width 0.35s ease, background 0.35s ease;
     }
     .vfan-stats-overlay .art-info-close {
-      top: 10px;
+      position: absolute;
+      top: 12px;
       right: 12px;
       width: 28px;
       height: 28px;
       font-size: 18px;
       line-height: 28px;
+    }
+    .vfan-copy-feedback {
+      position: absolute;
+      top: 16px;
+      right: 16px;
+      z-index: 100;
+      padding: 9px 12px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+      background: rgba(24, 24, 27, 0.95);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
+      color: rgba(255, 255, 255, 0.95);
+      font-size: 14px;
+      opacity: 0;
+      pointer-events: none;
+      transform: translateY(-6px);
+      transition: opacity 0.15s ease, transform 0.15s ease;
+    }
+    .vfan-copy-feedback.is-visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .art-video-player .art-contextmenus {
+      padding: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      background: rgba(24, 24, 27, 0.98) !important;
+      box-shadow: 0 18px 36px rgba(0, 0, 0, 0.42);
+      backdrop-filter: blur(4px);
+      font-size: 14px;
+    }
+    .art-video-player .art-contextmenus .art-contextmenu {
+      align-items: center;
+      min-height: 40px;
+      padding: 0 10px;
+      border: 0;
+      border-radius: 8px;
+      color: rgba(255, 255, 255, 0.92);
+      transition: background-color 0.15s ease;
+    }
+    .art-video-player .art-contextmenus .art-contextmenu:hover {
+      background-color: rgba(255, 255, 255, 0.1);
     }
   `
   art.template.$player.appendChild(style)
@@ -1750,19 +2243,40 @@ function bindCopyableUrlClicks(panel: HTMLElement, art: Artplayer): void {
   for (const element of panel.querySelectorAll<HTMLElement>('.vfan-stats-value-copyable')) {
     element.addEventListener('click', () => {
       const value = element.dataset.vfanCopy?.trim()
+      const label = element.dataset.vfanCopyLabel || '链接'
       if (!value || value === '检测中…') {
         return
       }
       void navigator.clipboard.writeText(value).then(
         () => {
-          art.notice.show = '链接已复制'
+          showCopyFeedback(art, `${label}已复制`)
         },
         () => {
-          art.notice.show = '复制失败'
+          showCopyFeedback(art, '复制失败')
         },
       )
     })
   }
+}
+
+function showCopyFeedback(art: Artplayer, message: string): void {
+  const player = art.template.$player
+  let feedback = player.querySelector<HTMLElement>('[data-vfan-copy-feedback]')
+  if (!feedback) {
+    feedback = document.createElement('div')
+    feedback.className = 'vfan-copy-feedback'
+    feedback.dataset.vfanCopyFeedback = 'true'
+    player.appendChild(feedback)
+  }
+
+  const previousTimer = Number(feedback.dataset.vfanCopyFeedbackTimer)
+  if (previousTimer) window.clearTimeout(previousTimer)
+  feedback.textContent = message
+  feedback.classList.remove('is-visible')
+  window.requestAnimationFrame(() => feedback?.classList.add('is-visible'))
+  feedback.dataset.vfanCopyFeedbackTimer = String(
+    window.setTimeout(() => feedback?.classList.remove('is-visible'), 1800),
+  )
 }
 
 /**
@@ -1872,53 +2386,6 @@ function formatInfoTime(seconds: number): string {
   return hours > 0 ? `${pad(hours)}:${pad(minutes)}:${pad(secs)}` : `${pad(minutes)}:${pad(secs)}`
 }
 
-function skipCurrentAdRange(
-  art: Artplayer,
-  ranges: HlsAdSkipRange[],
-  lastSkipRef: MutableRefObject<{ key: string; at: number } | undefined>,
-  debugLog: PlaybackDebugRecorder,
-): void {
-  if (!ranges.length || art.video.seeking) {
-    return
-  }
-
-  const currentTime = art.currentTime
-  if (!Number.isFinite(currentTime)) {
-    return
-  }
-
-  const range = ranges.find((item) => currentTime >= item.start && currentTime < item.end - 0.5)
-  if (!range) {
-    return
-  }
-
-  const key = `${range.start.toFixed(2)}-${range.end.toFixed(2)}`
-  const now = performance.now()
-  if (lastSkipRef.current?.key === key && now - lastSkipRef.current.at < 1200) {
-    return
-  }
-
-  const duration = art.duration
-  const targetTime = Number.isFinite(duration) && duration > 0 ? Math.min(range.end + 0.3, duration - 0.1) : range.end
-  if (!Number.isFinite(targetTime) || targetTime <= currentTime) {
-    return
-  }
-
-  lastSkipRef.current = { key, at: now }
-  art.currentTime = targetTime
-  art.notice.show = `已跳过广告 ${formatInfoTime(range.start)}-${formatInfoTime(range.end)}`
-  debugLog.push('AD', `跳过 ${formatDebugTime(range.start)}-${formatDebugTime(range.end)} · ${range.reason}`)
-}
-
-function readAdFilterEnabled(): boolean {
-  const stored = window.localStorage.getItem(HLS_AD_FILTER_STORAGE_KEY)
-  if (stored === null) {
-    return false
-  }
-
-  return stored === 'true'
-}
-
 function readLoopEnabled(): boolean {
   return window.localStorage.getItem(PLAYER_LOOP_STORAGE_KEY) === 'true'
 }
@@ -1932,6 +2399,92 @@ function readAutoNextEnabled(): boolean {
   return stored !== 'false'
 }
 
+const PLAYBACK_RATE_OPTIONS = [0.5, 1, 1.25, 1.5, 2] as const
+const SEEK_STEP_OPTIONS = [3, 5, 10] as const
+
+function createPlaybackRateSliderInput(
+  art: Artplayer,
+  current: number,
+  setRate: (rate: number) => void,
+): CustomSliderInput {
+  return {
+    title: '播放速度',
+    initialValue: current,
+    min: 0.25,
+    max: 3,
+    step: 0.05,
+    suffix: '倍',
+    presets: PLAYBACK_RATE_OPTIONS,
+    normalPreset: 1,
+    formatValue: (rate) => `${rate.toFixed(2)}倍`,
+    onChange: (rate) => {
+      setRate(rate)
+      art.playbackRate = rate
+      art.notice.show = `播放速度 ${rate}倍`
+    },
+  }
+}
+
+function createSeekStepSliderInput(
+  art: Artplayer,
+  current: number,
+  setStep: (step: number) => void,
+): CustomSliderInput {
+  return {
+    title: '跳转步长',
+    initialValue: current,
+    min: 1,
+    max: 30,
+    step: 0.5,
+    suffix: '秒',
+    presets: SEEK_STEP_OPTIONS,
+    normalPreset: 5,
+    formatValue: (step) => `${formatSliderNumber(step)} 秒`,
+    onChange: (step) => {
+      setStep(step)
+      art.notice.show = `跳转步长 ${step} 秒`
+    },
+  }
+}
+
+function nextFromList<T extends string>(current: T, values: readonly T[]): T {
+  return values[(values.indexOf(current) + 1) % values.length] ?? values[0]
+}
+
+function formatAspectRatio(value: string): string {
+  return value === 'default' ? '默认' : value
+}
+function formatFlip(value: string): string {
+  return { normal: '正常', horizontal: '水平', vertical: '垂直' }[value] ?? value
+}
+
+function readPlaybackRate(): number {
+  return readStoredNumber(PLAYER_PLAYBACK_RATE_STORAGE_KEY, 1, 0.25, 3)
+}
+
+function readSeekStep(): number {
+  return readStoredNumber(PLAYER_SEEK_STEP_STORAGE_KEY, 5, 1, 30)
+}
+
+function formatSliderNumber(value: number): string {
+  return Number.isInteger(value) ? String(value) : value.toFixed(1)
+}
+
+function formatPresetNumber(value: number): string {
+  return Number.isInteger(value) ? String(value) : String(value)
+}
+
+function readStoredNumber(key: string, fallback: number, min: number, max: number): number {
+  const value = Number(window.localStorage.getItem(key))
+  return Number.isFinite(value) && value >= min && value <= max ? value : fallback
+}
+
+function isTextInputTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement
+  )
+}
+
 function normalizePlaybackUrlForDisplay(src: string): string {
   try {
     const parsedUrl = new URL(src)
@@ -1942,34 +2495,7 @@ function normalizePlaybackUrlForDisplay(src: string): string {
   }
 }
 
-function formatAdFilterReportLines(report: HlsAdFilterReport | undefined): string[] {
-  if (!report) {
-    return ['状态: 尚未收到清单净化结果']
-  }
-
-  if (report.reverted) {
-    return [`状态: 已回滚`, `原因: ${report.revertReason ?? '未知'}`]
-  }
-
-  if (report.removedGroups <= 0) {
-    return ['状态: 未识别到可切除广告分组']
-  }
-
-  return [
-    `状态: 已切除`,
-    `分组: ${report.removedGroups}`,
-    `分片: ${report.removedSegments}`,
-    `时长: ${report.removedDuration.toFixed(1)}s`,
-    `引擎: ${report.engines.join(', ') || '-'}`,
-    ...(report.reasons.length > 0 ? [`特征: ${report.reasons.slice(0, 12).join(' | ')}`] : []),
-  ]
-}
-
-function createHlsConfig(
-  isLive: boolean,
-  adFilterEnabled: boolean,
-  onAdFiltered: (result: HlsAdFilterResult) => void,
-): ConstructorParameters<typeof Hls>[0] {
+function createHlsConfig(isLive: boolean): ConstructorParameters<typeof Hls>[0] {
   return {
     startLevel: -1,
     manifestLoadingMaxRetry: 6,
@@ -1990,7 +2516,6 @@ function createHlsConfig(
           backBufferLength: 30,
         }
       : {}),
-    ...(adFilterEnabled && !isLive ? { loader: createAdAwareHlsLoader(Hls, onAdFiltered) } : undefined),
   }
 }
 

@@ -40,7 +40,6 @@ export function LivePage(): React.JSX.Element {
               <BasicPlayer
                 autoPlay
                 className={player.isTheaterMode ? undefined : 'h-full'}
-                enableAdFilter={false}
                 enableAutoNext={false}
                 formatPlaybackUrl={player.formatPlaybackUrl}
                 hasNextEpisode={player.hasNextStream}

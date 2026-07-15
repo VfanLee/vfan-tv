@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useMatches, useNavigate, useSearchParams } from 'react-router'
-import { ChevronsLeft, ChevronsRight, Clock3, Heart, Home, Info, Link, Search, Settings, Tv } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Clock3, Heart, Home, Info, Link, Search, Settings, Tv } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { SIDEBAR_COLLAPSED_STORAGE_KEY } from '@shared/constants'
 import { cn } from '@renderer/utils/cn'
@@ -93,7 +93,7 @@ export function AppLayout(): React.JSX.Element {
           type="button"
           onClick={toggleSidebar}
         >
-          {isSidebarCollapsed ? <ChevronsRight size={17} /> : <ChevronsLeft size={17} />}
+          {isSidebarCollapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}
         </button>
 
         <nav className="flex flex-col gap-1.5">

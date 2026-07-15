@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Clock3 } from 'lucide-react'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import type { RecentPlayItem, RecommendationItem } from '@shared/types'
@@ -55,7 +56,7 @@ export function HomePage(): React.JSX.Element {
     <div className="bg-background text-foreground min-h-full px-10 py-7">
       <div className="mx-auto max-w-[1500px]">
         <section className="mb-11">
-          <SectionHeader title="最近播放" onMore={() => navigate('/recent')} />
+          <SectionHeader icon={Clock3} title="最近播放" onMore={() => navigate('/recent')} />
           {recentLoading ? (
             <HomeShelfSkeleton />
           ) : recentPlays.length > 0 ? (
