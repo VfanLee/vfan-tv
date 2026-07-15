@@ -15,38 +15,11 @@ import {
 import type { MediaStreamType } from '@shared/types'
 import { cn } from '@renderer/utils/cn'
 import { artplayerSwitchIcons } from '@renderer/utils/artplayer-icons'
+import { CustomOptionsDialog, CustomSliderDialog, DisplaySettingsMenu } from './components/display-settings-dialogs'
+import { createSettingsPositionTracker } from './utils/settings-position'
+import type { BasicPlayerProps, CustomOptionsInput, CustomSliderInput, DisplaySettingsState } from './types'
 
-export type PlayerVariant = 'vod' | 'live'
-
-export interface PlayerNavigationLabels {
-  previous: string
-  next: string
-}
-
-export interface BasicPlayerProps {
-  enableAutoNext?: boolean
-  autoPlay?: boolean
-  audioTrackUrl?: string
-  className?: string
-  src?: string
-  sourceType?: MediaStreamType
-  title?: string
-  initialTime?: number
-  isResolvingSource?: boolean
-  hasNextEpisode?: boolean
-  hasPreviousEpisode?: boolean
-  isTheaterMode?: boolean
-  loop?: boolean
-  persistPlaybackSettings?: boolean
-  navigationLabels?: PlayerNavigationLabels
-  formatPlaybackUrl?: (src: string) => string
-  onNextEpisode?: () => void
-  onEnded?: () => void
-  onPreviousEpisode?: () => void
-  onProgress?: (progress: { currentTime: number; duration: number }) => void
-  onToggleTheaterMode?: () => void
-  variant?: PlayerVariant
-}
+export type { BasicPlayerProps, PlayerNavigationLabels, PlayerVariant } from './types'
 
 interface BasicPlayerCallbacks {
   onEnded?: () => void
@@ -108,327 +81,6 @@ interface DebugInfoParams {
 interface VideoPlaybackQualityInfo {
   droppedVideoFrames?: number
   totalVideoFrames?: number
-}
-
-interface CustomSliderInput {
-  title: string
-  initialValue: number
-  min: number
-  max: number
-  step: number
-  suffix: string
-  presets: readonly number[]
-  normalPreset?: number
-  formatValue: (value: number) => string
-  onChange: (value: number) => void
-}
-
-interface CustomOptionsInput {
-  title: string
-  selectedValue: number
-  options: readonly { value: number; label: string }[]
-  onChange: (value: number) => void
-}
-
-interface DisplaySettingsState {
-  aspectRatio: string
-  flip: string
-  audioTrack?: {
-    label: string
-    onClick: () => void
-  }
-  quality?: {
-    label: string
-    onClick: () => void
-  }
-  playbackRate: number
-  seekStep: number
-  loop: boolean
-  autoNext: boolean
-  showPlaybackSettings: boolean
-  showAutoNext: boolean
-  onAspectRatio: () => void
-  onFlip: () => void
-  onPlaybackRate: () => void
-  onSeekStep: () => void
-  onLoop: () => void
-  onAutoNext: () => void
-}
-
-function DisplaySettingsMenu({
-  state,
-  closing,
-  bottomOffset,
-}: {
-  state: DisplaySettingsState
-  closing: boolean
-  bottomOffset: number
-}): React.JSX.Element {
-  return (
-    <section
-      data-display-settings
-      style={{ bottom: bottomOffset }}
-      className={cn(
-        'absolute right-4 z-[200] w-80 overflow-hidden rounded-xl border border-white/10 bg-zinc-900/95 p-2 shadow-2xl backdrop-blur-sm transition-all duration-150 select-none',
-        closing && 'translate-y-1 opacity-0',
-      )}
-      onCopy={(event) => event.preventDefault()}
-    >
-      <DisplaySettingRow label="画面比例" value={formatAspectRatio(state.aspectRatio)} onClick={state.onAspectRatio} />
-      <DisplaySettingRow label="画面翻转" value={formatFlip(state.flip)} onClick={state.onFlip} />
-      {state.quality ? (
-        <DisplaySettingRow label="画质" value={state.quality.label} onClick={state.quality.onClick} />
-      ) : null}
-      {state.audioTrack ? (
-        <DisplaySettingRow label="音效" value={state.audioTrack.label} onClick={state.audioTrack.onClick} />
-      ) : null}
-      {state.showPlaybackSettings ? (
-        <>
-          <DisplaySettingRow label="播放速度" value={`${state.playbackRate}倍`} onClick={state.onPlaybackRate} />
-          <DisplaySettingRow label="跳转步长" value={`${state.seekStep} 秒`} onClick={state.onSeekStep} />
-          <DisplaySettingRow
-            label="循环播放"
-            value={state.loop ? '开启' : '关闭'}
-            toggle={state.loop}
-            onClick={state.onLoop}
-          />
-        </>
-      ) : null}
-      {state.showAutoNext ? (
-        <DisplaySettingRow
-          label="自动续播"
-          value={state.autoNext ? '开启' : '关闭'}
-          toggle={state.autoNext}
-          onClick={state.onAutoNext}
-        />
-      ) : null}
-    </section>
-  )
-}
-
-function DisplaySettingRow({
-  label,
-  value,
-  toggle,
-  onClick,
-}: {
-  label: string
-  value: string
-  toggle?: boolean
-  onClick: () => void
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left transition-colors hover:bg-white/10"
-      onClick={onClick}
-    >
-      <span className="min-w-0 flex-1 truncate text-sm font-medium text-white">{label}</span>
-      <span className="w-16 text-right text-sm text-white/65">{value}</span>
-      {toggle === undefined ? (
-        <svg
-          className="size-5 shrink-0 text-white/75"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <path d="m9 18 6-6-6-6" />
-        </svg>
-      ) : (
-        <span className={cn('h-5 w-9 shrink-0 rounded-full p-0.5', toggle ? 'bg-white' : 'bg-white/30')}>
-          <span
-            className={cn(
-              'block size-4 rounded-full transition-transform',
-              toggle ? 'translate-x-4 bg-zinc-900' : 'bg-white/80',
-            )}
-          />
-        </span>
-      )}
-    </button>
-  )
-}
-
-function CustomSliderDialog({
-  input,
-  closing,
-  onBack,
-  bottomOffset,
-}: {
-  input: CustomSliderInput
-  closing: boolean
-  onBack: () => void
-  bottomOffset: number
-}): React.JSX.Element {
-  const [value, setValue] = useState(input.initialValue)
-  const updateValue = (nextValue: number): void => {
-    const normalized = Math.min(input.max, Math.max(input.min, Number(nextValue.toFixed(2))))
-    setValue(normalized)
-    input.onChange(normalized)
-  }
-
-  return (
-    <section
-      data-display-settings
-      style={{ bottom: bottomOffset }}
-      className={cn(
-        'absolute right-4 z-[200] w-96 overflow-hidden rounded-xl border border-white/10 bg-zinc-900/95 shadow-2xl backdrop-blur-sm transition-all duration-150 select-none',
-        closing && 'translate-y-1 opacity-0',
-      )}
-      onCopy={(event) => event.preventDefault()}
-    >
-      <header className="flex items-center gap-3 border-b border-white/10 px-4 py-3.5">
-        <button
-          type="button"
-          aria-label="返回显示设置"
-          className="-ml-2 flex size-8 items-center justify-center rounded-full text-white hover:bg-white/10"
-          onClick={onBack}
-        >
-          <svg
-            className="size-5"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="m15 18-6-6 6-6" />
-          </svg>
-        </button>
-        <h2 className="text-base font-semibold text-white">{input.title}</h2>
-      </header>
-      <div className="px-5 py-8">
-        <div className="text-center text-2xl font-semibold tracking-tight text-white">{input.formatValue(value)}</div>
-        <div className="mt-7 flex items-center gap-4">
-          <button
-            type="button"
-            aria-label="减小"
-            className="flex size-11 items-center justify-center rounded-full bg-white/10 text-2xl text-white hover:bg-white/20"
-            onClick={() => updateValue(value - input.step)}
-          >
-            −
-          </button>
-          <input
-            aria-label={input.title}
-            className="h-2 min-w-0 flex-1 cursor-pointer accent-white"
-            min={input.min}
-            max={input.max}
-            step={input.step}
-            type="range"
-            value={value}
-            onChange={(event) => updateValue(Number(event.target.value))}
-          />
-          <button
-            type="button"
-            aria-label="增大"
-            className="flex size-11 items-center justify-center rounded-full bg-white/10 text-2xl text-white hover:bg-white/20"
-            onClick={() => updateValue(value + input.step)}
-          >
-            +
-          </button>
-        </div>
-        <div className="mt-7 flex gap-2">
-          {input.presets.map((preset) => (
-            <div key={preset} className="min-w-0 flex-1 text-center">
-              <button
-                type="button"
-                className={cn(
-                  'w-full rounded-full px-2 py-2 text-sm font-medium transition-colors',
-                  Math.abs(value - preset) < input.step / 2
-                    ? 'bg-white text-black'
-                    : 'bg-white/10 text-white hover:bg-white/20',
-                )}
-                onClick={() => updateValue(preset)}
-              >
-                {formatPresetNumber(preset)}
-              </button>
-              {preset === input.normalPreset ? <div className="mt-1.5 text-xs text-white/65">正常</div> : null}
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  )
-}
-
-function CustomOptionsDialog({
-  input,
-  closing,
-  onBack,
-  bottomOffset,
-}: {
-  input: CustomOptionsInput
-  closing: boolean
-  onBack: () => void
-  bottomOffset: number
-}): React.JSX.Element {
-  const [value, setValue] = useState(input.selectedValue)
-
-  return (
-    <section
-      data-display-settings
-      style={{ bottom: bottomOffset }}
-      className={cn(
-        'absolute right-4 z-[200] w-80 overflow-hidden rounded-xl border border-white/10 bg-zinc-900/95 p-2 shadow-2xl backdrop-blur-sm transition-all duration-150 select-none',
-        closing && 'translate-y-1 opacity-0',
-      )}
-      onCopy={(event) => event.preventDefault()}
-    >
-      <header className="flex items-center gap-3 border-b border-white/10 px-2 py-2.5">
-        <button
-          type="button"
-          aria-label="返回显示设置"
-          className="flex size-8 items-center justify-center rounded-full text-white hover:bg-white/10"
-          onClick={onBack}
-        >
-          <svg
-            className="size-5"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="m15 18-6-6 6-6" />
-          </svg>
-        </button>
-        <h2 className="text-base font-semibold text-white">{input.title}</h2>
-      </header>
-      <div className="py-1">
-        {input.options.map((option) => {
-          const selected = value === option.value
-          return (
-            <button
-              key={option.value}
-              type="button"
-              className={cn(
-                'flex h-11 w-full items-center px-3 text-left text-sm transition-colors hover:bg-white/10',
-                selected && 'bg-white/10 text-white',
-              )}
-              onClick={() => {
-                setValue(option.value)
-                input.onChange(option.value)
-              }}
-            >
-              <span className="flex-1">{option.label}</span>
-              {selected ? (
-                <span className="text-base" aria-label="已选择">
-                  ✓
-                </span>
-              ) : null}
-            </button>
-          )
-        })}
-      </div>
-    </section>
-  )
 }
 
 export function BasicPlayer({
@@ -773,34 +425,10 @@ export function BasicPlayer({
 
     artRef.current = art
     setSettingsPortalContainer(art.template.$player)
-    let layoutFrame: number | undefined
-    let layoutTimer: number | undefined
-    const updateSettingsBottomOffset = (): void => {
-      const playerRect = art.template.$player.getBoundingClientRect()
-      const progressRect = art.template.$progress.getBoundingClientRect()
-      if (playerRect.height <= 0 || progressRect.height <= 0) return
-
-      const nextOffset = Math.max(16, Math.round(playerRect.bottom - progressRect.top + 4))
+    const settingsPosition = createSettingsPositionTracker(art, (nextOffset) => {
       setSettingsBottomOffset((current) => (current === nextOffset ? current : nextOffset))
-    }
-    const scheduleSettingsLayout = (): void => {
-      if (layoutFrame !== undefined) cancelAnimationFrame(layoutFrame)
-      layoutFrame = requestAnimationFrame(() => {
-        layoutFrame = undefined
-        updateSettingsBottomOffset()
-      })
-    }
-    const updateSettingsLayoutAfterControlTransition = (): void => {
-      scheduleSettingsLayout()
-      if (layoutTimer !== undefined) window.clearTimeout(layoutTimer)
-      layoutTimer = window.setTimeout(scheduleSettingsLayout, 220)
-    }
-    const settingsLayoutObserver = new ResizeObserver(scheduleSettingsLayout)
-    settingsLayoutObserver.observe(art.template.$player)
-    settingsLayoutObserver.observe(art.template.$progress)
-    window.addEventListener('resize', scheduleSettingsLayout)
-    document.addEventListener('fullscreenchange', scheduleSettingsLayout)
-    scheduleSettingsLayout()
+    })
+    settingsPosition.schedule()
     if (!isLive) {
       art.playbackRate = playbackRate
       art.template.$player.tabIndex = 0
@@ -812,7 +440,7 @@ export function BasicPlayer({
     injectPlayerChromeStyles(art)
     localizeInfoPanel(art, displayPlaybackUrl, resolvedUrlRef, getStreamType(isHls, isFlv, isMpegts), isLive, mpegtsRef)
     const openDisplaySettings = (): void => {
-      updateSettingsLayoutAfterControlTransition()
+      settingsPosition.refreshAfterControlTransition()
       const refresh = (): void => openDisplaySettings()
       const hls = (art as ArtplayerWithHls).hls
       const audioTrack =
@@ -917,7 +545,7 @@ export function BasicPlayer({
 
     art.on('ready', () => {
       moveHlsQualityControl(art)
-      scheduleSettingsLayout()
+      settingsPosition.schedule()
       // 换源等必要重建时，恢复销毁前的网页全屏状态
       if (restoreFullscreenWebRef.current) {
         restoreFullscreenWebRef.current = false
@@ -925,8 +553,8 @@ export function BasicPlayer({
       }
     })
     art.on('restart', () => moveHlsQualityControl(art))
-    art.on('fullscreen', scheduleSettingsLayout)
-    art.on('fullscreenWeb', scheduleSettingsLayout)
+    art.on('fullscreen', settingsPosition.schedule)
+    art.on('fullscreenWeb', settingsPosition.schedule)
     art.on('video:loadedmetadata', refreshHlsQualityUi)
     art.on('video:resize', refreshHlsQualityUi)
 
@@ -1016,11 +644,7 @@ export function BasicPlayer({
     })
 
     return () => {
-      if (layoutFrame !== undefined) cancelAnimationFrame(layoutFrame)
-      if (layoutTimer !== undefined) window.clearTimeout(layoutTimer)
-      settingsLayoutObserver.disconnect()
-      window.removeEventListener('resize', scheduleSettingsLayout)
-      document.removeEventListener('fullscreenchange', scheduleSettingsLayout)
+      settingsPosition.destroy()
       setSettingsPortalContainer((current) => (current === art.template.$player ? undefined : current))
       isResolveActive = false
       resolveAbortController.abort()
@@ -2451,13 +2075,6 @@ function nextFromList<T extends string>(current: T, values: readonly T[]): T {
   return values[(values.indexOf(current) + 1) % values.length] ?? values[0]
 }
 
-function formatAspectRatio(value: string): string {
-  return value === 'default' ? '默认' : value
-}
-function formatFlip(value: string): string {
-  return { normal: '正常', horizontal: '水平', vertical: '垂直' }[value] ?? value
-}
-
 function readPlaybackRate(): number {
   return readStoredNumber(PLAYER_PLAYBACK_RATE_STORAGE_KEY, 1, 0.25, 3)
 }
@@ -2468,10 +2085,6 @@ function readSeekStep(): number {
 
 function formatSliderNumber(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1)
-}
-
-function formatPresetNumber(value: number): string {
-  return Number.isInteger(value) ? String(value) : String(value)
 }
 
 function readStoredNumber(key: string, fallback: number, min: number, max: number): number {
