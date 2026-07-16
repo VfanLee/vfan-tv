@@ -15,6 +15,7 @@ src
 ├── routes       # react router 配置
 ├── services     # 业务服务封装
 ├── stores       # zustand stores
+├── styles       # 全局样式与主题变量
 ├── ui           # shadcn 生成的组件
 └── utils        # 通用工具
 ```

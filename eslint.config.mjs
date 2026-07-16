@@ -12,7 +12,7 @@ export default defineConfig(
       '**/dist',
       '**/out',
       'components.json',
-      'src/renderer/src/assets/main.css',
+      'src/renderer/src/styles/main.css',
       'src/renderer/src/components/ui/**',
       'src/renderer/src/lib/utils.ts',
     ],

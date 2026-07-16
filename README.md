@@ -19,11 +19,14 @@
 
 ## ✨ 功能特性
 
-- 🖥️ **跨平台桌面客户端**：支持 Windows / macOS 平台
-- 🔍 **多源聚合搜索**：一次搜索聚合多个点播源，支持按影片聚合或按点播源查看结果
-- ▶️ **支持点播**：支持剧集选集、换源、播放进度记录、历史续播、收藏和自动续播
-- 📺 **支持直播**：支持 M3U 直播源、频道分组、频道搜索、多线路切换和上次选择记忆
-- ⚙️ **数据管理**：支持 点播源、直播源的导入 / 导出 / 订阅同步，以及应用数据备份、导入和初始化
+- 🖥️ **跨平台桌面客户端**：支持 macOS / Windows 平台
+- 🔍 **多源聚合搜索**：并行搜索多个点播源，支持按影片聚合或按数据源查看结果
+- 🎞️ **点播与热门推荐**：支持剧集选集、换源、热门影视推荐、收藏、播放记录与历史续播
+- ▶️ **流媒体播放**：自动识别 HLS、FLV、MPEG-TS 与原生直链，支持清晰度、音轨切换、倍速、自动续播和环境光效果
+- 🔗 **直链播放**：可直接播放 HLS 等媒体链接，并提供本地媒体代理以适配需要处理的播放地址
+- 📺 **直播播放**：支持 M3U 直播源、频道分组、频道搜索、多线路切换和上次选择记忆
+- ⚙️ **数据与网络管理**：支持点播源、直播源的导入 / 导出 / 订阅同步，以及应用数据备份、导入、初始化和网络代理配置
+- 🔄 **应用更新**：支持检查更新、查看更新日志，以及在支持的平台下载并安装更新
 - 🌗 **主题切换**：支持浅色、深色和跟随系统主题
 
 ## 📥 下载
@@ -32,20 +35,21 @@
 
 | 平台       | 架构        |
 | ---------- | ----------- |
-| 🪟 Windows | x64 / arm64 |
 | 🍎 macOS   | arm64       |
+| 🪟 Windows | x64 / arm64 |
 
 ## 🧰 技术栈
 
-| 技术栈      | 说明                                                                                                            |
-| ----------- | --------------------------------------------------------------------------------------------------------------- |
-| 语言        | [TypeScript](https://www.typescriptlang.org/)                                                                   |
-| 桌面框架    | [Electron](https://www.electronjs.org/)、[electron-vite](https://github.com/alex8088/electron-vite)             |
-| 前端框架    | [React](https://react.dev/)、[React Router](https://reactrouter.com/)、[Zustand](https://zustand.docs.pmnd.rs/) |
-| UI 框架组件 | [Tailwind CSS](https://tailwindcss.com/)、[shadcn/ui](https://ui.shadcn.com/)                                   |
-| 播放器      | [ArtPlayer](https://artplayer.org/)、[HLS.js](https://github.com/video-dev/hls.js/)                             |
-| 数据存储    | [SQLite](https://www.sqlite.org/)、[Drizzle ORM](https://orm.drizzle.team/)                                     |
-| 代码质量    | [ESLint](https://eslint.org/)、[Prettier](https://prettier.io/)                                                 |
+| 技术栈       | 说明                                             |
+| ------------ | ------------------------------------------------ |
+| 语言与运行时 | TypeScript、Node.js                              |
+| 桌面与构建   | Electron、electron-vite、electron-builder        |
+| 前端         | React、React Router、Zustand                     |
+| UI           | Tailwind CSS、shadcn/ui、Radix UI                |
+| 播放器       | ArtPlayer、HLS.js、mpegts.js                     |
+| 数据与校验   | SQLite、better-sqlite3、Drizzle ORM、Zod         |
+| 网络与更新   | Axios、electron-updater                          |
+| 工程质量     | ESLint、Prettier、Husky、lint-staged、Commitlint |
 
 ## ⚒️ 重要配置说明
 
