@@ -31,3 +31,31 @@
 ├── components.json          # shadcn 配置
 └── electron-builder.yml     # Electron Builder 配置
 ```
+
+## 常用命令
+
+```bash
+# 安装依赖
+pnpm install
+
+# 本地开发与预览
+pnpm dev
+pnpm start
+
+# 代码检查与格式化
+pnpm typecheck
+pnpm lint
+pnpm format
+
+# 构建与打包
+pnpm build
+pnpm build:dir
+pnpm build:mac
+pnpm build:mac:arm64
+pnpm build:win
+pnpm build:win:x64
+pnpm build:win:arm64
+
+# 生成 Drizzle 数据库迁移文件
+pnpm db:generate
+```

@@ -10,6 +10,7 @@
 src
 ├── assets       # 静态资源
 ├── components   # 公共组件
+├── constants    # 公共常量
 ├── hooks        # 公共 hooks
 ├── pages        # 路由页面
 ├── routes       # react router 配置
@@ -32,34 +33,34 @@ src
 
 - 组件目录必须使用英文小写命名；多单词使用 kebab-case，例如 `foo`、`foo-bar`。
 - 每个组件必须使用“目录 + `index.tsx`”的形式创建，例如 `foo/index.tsx`、`foo-bar/index.tsx`。
-- `components/index.ts` 统一导出所有公共组件；新增、移动或删除组件时必须同步维护。
+- `components/index.ts` 统一导出公共组件（使用方必须从此处导入；新增/移动/删除需同步维护）。
+
+### hooks
+
+- 公共 hooks 必须使用 kebab-case 命名，并以 `use-` 开头，例如 `use-foo.ts`、`use-foo-bar.ts`。
+- `hooks/index.ts` 统一导出公共 hooks（使用方必须从此处导入；新增/移动/删除需同步维护）。
 
 ### pages
 
 - 页面目录必须使用英文小写命名；多单词使用 kebab-case，例如 `foo`、`foo-bar`。
 - 每个页面必须使用“目录 + `index.tsx`”的形式创建，例如 `foo/index.tsx`、`foo-bar/index.tsx`。
-- `pages/index.ts` 统一导出所有页面；新增、移动或删除页面时必须同步维护。
-
-### hooks
-
-- 公共 hooks 必须使用 kebab-case 命名，并以 `use-` 开头，例如 `use-foo.ts`、`use-foo-bar.ts`。
-- `hooks/index.ts` 统一导出所有公共 hooks；新增、移动或删除 hooks 时必须同步维护。
+- `pages/index.ts` 统一导出所有页面（使用方必须从此处导入；新增/移动/删除需同步维护）。
 
 ### services
 
 - `services/api` 用于接口请求与数据访问封装。
 - API 文件必须使用英文小写命名；多单词使用 kebab-case，例如 `foo.ts`、`foo-bar.ts`。
-- `services/api/index.ts` 统一导出所有 API 函数；新增、移动或删除 API 时必须同步维护。
+- `services/api/index.ts` 统一导出所有 API 函数（使用方必须从此处导入；新增/移动/删除需同步维护）。
 
 ### stores
 
 - store 文件必须使用英文小写命名；多单词使用 kebab-case，例如 `foo.ts`、`foo-bar.ts`。
-- `stores/index.ts` 统一导出所有 store；新增、移动或删除 store 时必须同步维护。
+- `stores/index.ts` 统一导出所有 store（使用方必须从此处导入；新增/移动/删除需同步维护）。
 
 ### utils
 
 - 工具函数文件必须使用英文小写命名；多单词使用 kebab-case，例如 `foo.ts`、`foo-bar.ts`。
-- `utils/index.ts` 统一导出所有工具函数；新增、移动或删除工具函数时必须同步维护。
+- `utils/index.ts` 统一导出所有工具函数（使用方必须从此处导入；新增/移动/删除需同步维护）。
 
 ### shadcn
 
