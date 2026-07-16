@@ -1,8 +1,8 @@
 import { eq } from 'drizzle-orm'
 import { appSettingsSchema } from '@shared/schemas'
 import type { AppSettings } from '@shared/types'
-import type { AppDatabase } from '../db/client'
-import { settingsTable } from '../db/schema'
+import type { AppDatabase } from '../../infrastructure/database/client'
+import { settingsTable } from '../../infrastructure/database/schema'
 
 const settingsKey = 'app'
 

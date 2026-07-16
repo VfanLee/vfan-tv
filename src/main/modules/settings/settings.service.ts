@@ -6,7 +6,7 @@ import {
 } from '@shared/constants'
 import type { AppSettings } from '@shared/types'
 import type { GitHubProxyRouteId, GitHubProxyTestResult } from '@shared/types'
-import type { SettingsRepository } from '../repositories/settings.repository'
+import type { SettingsRepository } from './settings.repository'
 
 const GITHUB_PROXY_TEST_TIMEOUT_MS = 6_000
 const GITHUB_PROXY_TEST_HEADERS = {

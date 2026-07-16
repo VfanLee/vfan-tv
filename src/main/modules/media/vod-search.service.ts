@@ -1,8 +1,8 @@
 import { randomUUID } from 'crypto'
 import axios from 'axios'
 import type { SearchEvent } from '@shared/types'
-import type { HttpClient } from './http-client'
-import type { SourceService } from './source.service'
+import type { HttpClient } from '../../infrastructure/http/http-client'
+import type { SourceService } from '../sources/source.service'
 import type { SearchTaskManager } from './search-task-manager'
 import { buildVodSearchUrl, normalizeVodApiResponse } from './vod-api'
 

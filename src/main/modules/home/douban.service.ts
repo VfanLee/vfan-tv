@@ -4,7 +4,7 @@ import type {
   HotRecommendationsRequest,
   RecommendationItem,
 } from '@shared/types'
-import type { HttpClient } from './http-client'
+import type { HttpClient } from '../../infrastructure/http/http-client'
 
 interface DoubanRecentHotResponse {
   items?: unknown[]

@@ -1,7 +1,7 @@
 import { and, desc, eq } from 'drizzle-orm'
 import type { FavoriteInput, FavoriteItem } from '@shared/types'
-import type { AppDatabase } from '../db/client'
-import { favoritesTable } from '../db/schema'
+import type { AppDatabase } from '../../infrastructure/database/client'
+import { favoritesTable } from '../../infrastructure/database/schema'
 
 type FavoriteRow = typeof favoritesTable.$inferSelect
 

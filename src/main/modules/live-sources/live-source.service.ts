@@ -1,27 +1,26 @@
 import { randomUUID } from 'crypto'
-import { vodSourceImportItemSchema, vodSourceInputSchema } from '@shared/schemas'
+import { liveSourceImportItemSchema, liveSourceInputSchema } from '@shared/schemas'
 import type {
+  LiveSourceConfig,
+  LiveSourceExportItem,
+  LiveSourceImportItem,
+  LiveSourceImportPreview,
+  LiveSourceImportResult,
+  LiveSourceInput,
   SourceSubscriptionSectionResult,
-  VodSourceConfig,
-  VodSourceExportItem,
-  VodSourceInput,
-  VodSourceImportItem,
-  VodSourceImportPreview,
-  VodSourceImportResult,
-  VodSourceSubscriptionItem,
 } from '@shared/types'
-import type { VodSourceRepository } from '../repositories/vod-source.repository'
+import type { LiveSourceRepository } from './live-source.repository'
 
 function toImportItems(payload: unknown): {
-  validItems: VodSourceImportItem[]
-  invalidItems: VodSourceImportPreview['invalidItems']
+  validItems: LiveSourceImportItem[]
+  invalidItems: LiveSourceImportPreview['invalidItems']
 } {
   const rawItems = Array.isArray(payload) ? payload : [payload]
-  const validItems: VodSourceImportItem[] = []
-  const invalidItems: VodSourceImportPreview['invalidItems'] = []
+  const validItems: LiveSourceImportItem[] = []
+  const invalidItems: LiveSourceImportPreview['invalidItems'] = []
 
   for (const [index, raw] of rawItems.entries()) {
-    const result = vodSourceImportItemSchema.safeParse(raw)
+    const result = liveSourceImportItemSchema.safeParse(raw)
 
     if (result.success) {
       validItems.push(result.data)
@@ -37,19 +36,19 @@ function toImportItems(payload: unknown): {
   return { validItems, invalidItems }
 }
 
-export class SourceService {
-  constructor(private readonly repository: VodSourceRepository) {}
+export class LiveSourceService {
+  constructor(private readonly repository: LiveSourceRepository) {}
 
-  list(): VodSourceConfig[] {
+  list(): LiveSourceConfig[] {
     return this.repository.list()
   }
 
-  create(input: VodSourceInput): VodSourceConfig {
-    const data = vodSourceInputSchema.parse(input)
+  create(input: LiveSourceInput): LiveSourceConfig {
+    const data = liveSourceInputSchema.parse(input)
     const existing = this.repository.findByUrl(data.url)
 
     if (existing) {
-      throw new Error('源路径已存在')
+      throw new Error('直播源地址已存在')
     }
 
     const now = Date.now()
@@ -57,7 +56,6 @@ export class SourceService {
       id: randomUUID(),
       name: data.name,
       url: data.url,
-      referer: data.referer,
       enabled: data.enabled,
       sort: this.repository.list().length,
       origin: 'manual',
@@ -66,31 +64,30 @@ export class SourceService {
     })
   }
 
-  update(id: string, input: VodSourceInput): VodSourceConfig {
-    const data = vodSourceInputSchema.parse(input)
+  update(id: string, input: LiveSourceInput): LiveSourceConfig {
+    const data = liveSourceInputSchema.parse(input)
     const existing = this.repository.findById(id)
 
     if (!existing) {
-      throw new Error('数据源不存在')
+      throw new Error('直播源不存在')
     }
 
     const duplicated = this.repository.findByUrl(data.url)
 
     if (duplicated && duplicated.id !== id) {
-      throw new Error('源路径已存在')
+      throw new Error('直播源地址已存在')
     }
 
     return this.repository.update({
       ...existing,
       name: data.name,
       url: data.url,
-      referer: data.referer,
       enabled: data.enabled,
       updatedAt: Date.now(),
     })
   }
 
-  reorder(sourceIds: string[]): VodSourceConfig[] {
+  reorder(sourceIds: string[]): LiveSourceConfig[] {
     const sources = this.repository.list()
     const existingIds = new Set(sources.map((source) => source.id))
     const requestedIds = new Set(sourceIds)
@@ -100,7 +97,7 @@ export class SourceService {
       requestedIds.size !== sourceIds.length ||
       sourceIds.some((id) => !existingIds.has(id))
     ) {
-      throw new Error('数据源排序数据无效')
+      throw new Error('直播源排序数据无效')
     }
 
     return this.repository.reorder(sourceIds)
@@ -110,7 +107,7 @@ export class SourceService {
     const existing = this.repository.findById(id)
 
     if (!existing) {
-      throw new Error('数据源不存在')
+      throw new Error('直播源不存在')
     }
 
     this.repository.delete(id)
@@ -120,21 +117,20 @@ export class SourceService {
     this.repository.clear()
   }
 
-  exportItems(): VodSourceExportItem[] {
+  exportItems(): LiveSourceExportItem[] {
     return this.repository.list().map((source) => ({
       name: source.name,
       url: source.url,
-      referer: source.referer,
       enabled: source.enabled,
     }))
   }
 
-  previewImport(payload: unknown): VodSourceImportPreview {
+  previewImport(payload: unknown): LiveSourceImportPreview {
     const { validItems, invalidItems } = toImportItems(payload)
     const seen = new Set<string>()
-    const newItems: VodSourceImportItem[] = []
-    const overwriteItems: VodSourceImportItem[] = []
-    const skippedItems: VodSourceImportItem[] = []
+    const newItems: LiveSourceImportItem[] = []
+    const overwriteItems: LiveSourceImportItem[] = []
+    const skippedItems: LiveSourceImportItem[] = []
 
     for (const item of validItems) {
       if (seen.has(item.url)) {
@@ -160,25 +156,23 @@ export class SourceService {
     }
   }
 
-  confirmImport(payload: unknown): VodSourceImportResult {
+  confirmImport(payload: unknown): LiveSourceImportResult {
     const preview = this.previewImport(payload)
     const existingSources = this.repository.list()
     const nextSort = existingSources.length
     const now = Date.now()
-    const created: VodSourceConfig[] = []
-    const overwritten: VodSourceConfig[] = []
+    const created: LiveSourceConfig[] = []
+    const overwritten: LiveSourceConfig[] = []
 
     for (const [index, item] of [...preview.newItems, ...preview.overwriteItems].entries()) {
       const existing = this.repository.findByUrl(item.url)
-      const source: VodSourceConfig = {
+      const source: LiveSourceConfig = {
         id: existing?.id ?? randomUUID(),
         name: item.name,
         url: item.url,
-        referer: item.referer,
-        enabled: item.enabled ?? false,
+        enabled: item.enabled ?? true,
         sort: existing?.sort ?? nextSort + index,
         origin: 'manual',
-        remark: existing?.remark,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       }
@@ -199,7 +193,7 @@ export class SourceService {
     }
   }
 
-  syncSubscription(items: VodSourceSubscriptionItem[]): SourceSubscriptionSectionResult {
+  syncSubscription(items: LiveSourceImportItem[]): SourceSubscriptionSectionResult {
     const uniqueItems = new Map(items.map((item) => [item.url, item]))
     const now = Date.now()
     let created = 0
@@ -208,14 +202,13 @@ export class SourceService {
 
     for (const item of uniqueItems.values()) {
       const existing = this.repository.findByUrl(item.url)
-      const enabled = item.enabled ?? false
+      const enabled = item.enabled ?? true
 
       if (!existing) {
         this.repository.upsert({
           id: randomUUID(),
           name: item.name,
           url: item.url,
-          referer: item.referer,
           enabled,
           sort: this.repository.list().length,
           origin: 'subscription',
@@ -226,11 +219,7 @@ export class SourceService {
         continue
       }
 
-      const changed =
-        existing.name !== item.name ||
-        existing.referer !== item.referer ||
-        existing.enabled !== enabled ||
-        existing.origin !== 'subscription'
+      const changed = existing.name !== item.name || existing.enabled !== enabled || existing.origin !== 'subscription'
 
       if (!changed) {
         unchanged += 1
@@ -240,7 +229,6 @@ export class SourceService {
       this.repository.updateFromSubscription({
         ...existing,
         name: item.name,
-        referer: item.referer,
         enabled,
         origin: 'subscription',
         updatedAt: now,

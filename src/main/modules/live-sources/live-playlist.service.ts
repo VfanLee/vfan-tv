@@ -1,6 +1,6 @@
 import { parse, type PlaylistItem } from 'iptv-playlist-parser'
 import type { LiveChannel, LiveChannelStream, LivePlaylist, LiveStreamRequestHeaders } from '@shared/types'
-import type { HttpClient } from './http-client'
+import type { HttpClient } from '../../infrastructure/http/http-client'
 
 const MAX_PLAYLIST_SIZE = 10 * 1024 * 1024
 const DEFAULT_GROUP = '未分组'

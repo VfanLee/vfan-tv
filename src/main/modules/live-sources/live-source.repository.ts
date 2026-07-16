@@ -1,7 +1,7 @@
 import { asc, eq } from 'drizzle-orm'
 import type { LiveSourceConfig } from '@shared/types'
-import type { AppDatabase } from '../db/client'
-import { liveSourcesTable } from '../db/schema'
+import type { AppDatabase } from '../../infrastructure/database/client'
+import { liveSourcesTable } from '../../infrastructure/database/schema'
 
 type LiveSourceRow = typeof liveSourcesTable.$inferSelect
 

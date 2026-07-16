@@ -1,7 +1,7 @@
 import { and, desc, eq, ne } from 'drizzle-orm'
 import type { RecentPlayItem } from '@shared/types'
-import type { AppDatabase } from '../db/client'
-import { recentPlaysTable } from '../db/schema'
+import type { AppDatabase } from '../../infrastructure/database/client'
+import { recentPlaysTable } from '../../infrastructure/database/schema'
 
 type RecentPlayRow = typeof recentPlaysTable.$inferSelect
 

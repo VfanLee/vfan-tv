@@ -1,5 +1,5 @@
 import type { HomeData } from '@shared/types'
-import type { RecentPlayRepository } from '../repositories/recent-play.repository'
+import type { RecentPlayRepository } from '../library/recent-play.repository'
 import type { DoubanService } from './douban.service'
 
 export class HomeService {

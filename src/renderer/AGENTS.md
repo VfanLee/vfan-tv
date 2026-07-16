@@ -67,7 +67,7 @@ src
 
 ### shadcn
 
-- `components.json` 约定的 shadcn 生成文件默认不得直接修改，应当按依赖代码使用，避免后续升级与维护成本。
+- 根目录下 `components.json` 约定的 shadcn 生成文件默认不得直接修改，应当按依赖代码使用，避免后续升级与维护成本。
 - 修改 `components.json` 前，必须先确认不会影响后续生成路径或现有 import。
 - `ui` 下的生成组件应遵循 `components.json` 的别名配置；其中 `@/utils/cn` 是 shadcn 对工具函数文件的固定引用，无需改为 `utils/index.ts` 聚合入口。
 - 若生成组件不满足业务需求，应当优先在业务组件目录中复制或二次封装实现（如 `components/button/index.tsx`）。

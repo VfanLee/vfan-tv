@@ -3,9 +3,9 @@ import { NsisUpdater } from 'electron-updater'
 import type { ProgressInfo, UpdateDownloadedEvent, UpdateInfo } from 'electron-updater'
 import { resolveGitHubUrl } from '@shared/constants'
 import type { UpdateCheckResult, UpdateEvent } from '@shared/types'
-import type { SettingsService } from './settings.service'
+import type { SettingsService } from '../settings/settings.service'
 import { checkLatestRelease, isNewerVersion } from './update-checker'
-import packageJson from '../../../package.json'
+import packageJson from '../../../../package.json'
 
 const REPOSITORY_URL = 'https://github.com/vfanlee/vfan-tv'
 const RELEASE_DOWNLOAD_BASE_URL = `${REPOSITORY_URL}/releases/latest/download/`

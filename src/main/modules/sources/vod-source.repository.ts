@@ -1,7 +1,7 @@
 import { asc, eq } from 'drizzle-orm'
 import type { VodSourceConfig } from '@shared/types'
-import type { AppDatabase } from '../db/client'
-import { vodSourcesTable } from '../db/schema'
+import type { AppDatabase } from '../../infrastructure/database/client'
+import { vodSourcesTable } from '../../infrastructure/database/schema'
 
 type VodSourceRow = typeof vodSourcesTable.$inferSelect
 
