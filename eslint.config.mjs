@@ -13,7 +13,7 @@ export default defineConfig(
       '**/out',
       'components.json',
       'src/renderer/src/styles/main.css',
-      'src/renderer/src/components/ui/**',
+      'src/renderer/src/ui/**',
       'src/renderer/src/lib/utils.ts',
     ],
   },

@@ -1,4 +1,4 @@
-import { requireRuntimeApi } from '@renderer/services/api/client'
+import { requireRuntimeApi } from '@renderer/services/api'
 import { toast } from 'sonner'
 
 export async function openExternalUrl(url: string): Promise<void> {

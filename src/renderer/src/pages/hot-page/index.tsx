@@ -2,8 +2,8 @@ import { useEffect, useRef } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
 import type { HotRecommendationType, RecommendationItem } from '@shared/types'
 import { MediaPoster, PosterCardSkeleton } from '@renderer/components'
-import { categorySections, getHotCacheKey, getHotCategorySection } from '@renderer/services/api'
-import { categoryIcons, cn } from '@/utils'
+import { categoryIcons, categorySections } from '@renderer/constants'
+import { getHotCacheKey, getHotCategorySection, cn } from '@/utils'
 import { useAppDataStore } from '@/stores'
 
 export function HotPage(): React.JSX.Element {

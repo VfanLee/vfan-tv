@@ -3,7 +3,8 @@ import { NavLink, Outlet, useLocation, useMatches, useNavigate, useSearchParams 
 import { ChevronLeft, ChevronRight, Clock3, Heart, Home, Info, Link, Search, Settings, Tv } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { SIDEBAR_COLLAPSED_STORAGE_KEY } from '@shared/constants'
-import { categoryIcons, cn } from '@/utils'
+import { categoryIcons } from '@renderer/constants'
+import { cn } from '@/utils'
 import logoMarkUrl from '@renderer/assets/logo-mark.svg'
 
 const primaryNavItems: Array<{ to: string; label: string; icon: LucideIcon }> = [

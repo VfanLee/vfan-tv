@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import type { HomeData, HotRecommendationType, HotRecommendationsPage, RecommendationItem } from '@shared/types'
-import { categorySections, getHomeData, getHotCacheKey, getHotRecommendationsPage } from '@renderer/services/api'
+import { categorySections } from '@renderer/constants'
+import { getHomeData, getHotRecommendationsPage } from '@renderer/services/api'
+import { getHotCacheKey } from '@/utils'
 
 const hotPageSize = 24
 

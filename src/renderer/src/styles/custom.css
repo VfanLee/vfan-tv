@@ -46,3 +46,11 @@
   --sidebar-accent-foreground: var(--brand-accent-foreground);
   --sidebar-ring: var(--brand-ring);
 }
+
+/* Keep interactive controls aligned with the desktop app's pointer affordance. */
+@layer base {
+  button:not(:disabled),
+  [role='button']:not(:disabled) {
+    cursor: pointer;
+  }
+}

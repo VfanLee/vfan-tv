@@ -4,11 +4,10 @@ import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import type { RecentPlayItem, RecommendationItem } from '@shared/types'
 import { ConfirmDialog } from '@renderer/components'
+import { categoryIcons, categorySections } from '@renderer/constants'
 import { useRecentPlays } from '@renderer/hooks'
-import { categorySections } from '@renderer/services/api'
 import { recentPlayToVodSearchResult } from '@renderer/services/playback'
 import { useAppDataStore, useSearchContextStore } from '@/stores'
-import { categoryIcons } from '@/utils'
 import {
   EmptyShelf,
   HomeShelfSkeleton,
