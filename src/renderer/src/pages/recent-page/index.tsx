@@ -6,7 +6,7 @@ import type { RecentPlayItem } from '@shared/types'
 import { ConfirmDialog, MediaPoster, PosterPlayOverlay } from '@renderer/components'
 import { useRecentPlays } from '@renderer/hooks'
 import { recentPlayToVodSearchResult } from '@renderer/services/playback'
-import { useSearchContextStore } from '@renderer/stores/search-context'
+import { useSearchContextStore } from '@/stores'
 
 export function RecentPage(): React.JSX.Element {
   const navigate = useNavigate()

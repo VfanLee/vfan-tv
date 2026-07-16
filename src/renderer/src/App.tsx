@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Toaster } from 'sonner'
 import { setMediaProxyBaseUrl } from '@shared/utils/media-image'
-import { ThemeProvider } from './components/layout/theme-provider'
+import { ThemeProvider } from './components/theme-provider'
 import { AppRouter } from './routes/AppRouter'
 import { getMediaProxyBaseUrl } from './services/api'
-import { useThemeStore } from './stores/theme'
-import { useAppDataStore } from './stores/app-data'
+import { useAppDataStore, useThemeStore } from '@/stores'
 
 function App(): React.JSX.Element {
   const mode = useThemeStore((state) => state.mode)

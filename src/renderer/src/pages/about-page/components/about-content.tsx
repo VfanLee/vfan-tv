@@ -2,9 +2,8 @@ import { Download, RefreshCw, Rocket, SquareArrowOutUpRight } from 'lucide-react
 import type { LucideIcon } from 'lucide-react'
 import { FaGithub } from 'react-icons/fa'
 import type { UpdateCheckResult, UpdateDownloadProgress } from '@shared/types'
-import { Button } from '@renderer/components/ui/button'
-import { cn } from '@renderer/utils/cn'
-import { openExternalUrl } from '@renderer/utils/open-external'
+import { Button } from '@/ui/button'
+import { cn, openExternalUrl } from '@/utils'
 import { formatBytesPerSecond, formatPercent } from '../utils'
 
 export function UpdateOptions({

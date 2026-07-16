@@ -1,47 +1,33 @@
 # AGENTS.md
 
-## 介绍
+## 项目概览
 
-跨平台桌面影视聚合播放器。
+**Vfan TV** 是一款免费开源、开箱即用的跨平台桌面端影视聚合播放器，基于 Electron 构建。项目由 main、preload、renderer 三个进程层以及 shared 共享层组成：main 负责应用生命周期、本地数据与业务能力，preload 负责安全地桥接进程能力，renderer 提供 React 用户界面，shared 维护跨层通用的类型、schema、常量与工具。
 
 ## 技术栈
 
-- Node.js、pnpm
 - TypeScript
 - Electron、electron-vite、electron-builder
+- better-sqlite3、Drizzle ORM
 - React、React Router、Zustand
-- Tailwind CSS、shadcn、radix-ui
-- SQLite：better-sqlite3、Drizzle ORM
-- ArtPlayer、HLS.js、mpegts.js、file-type
+- Tailwind CSS、shadcn-ui
+- ArtPlayer、HLS.js、mpegts.js
 
-版本以 `package.json` 为准。
+实际以 package.json 为准。
 
-## 项目目录
+## 项目环境
+
+- Node.js 22
+- pnpm 11
+
+## 项目结构
 
 ```text
-.
 ├── src
-│   ├── main                 # Electron main 进程、IPC、数据库、服务与仓储
-│   ├── preload              # Electron preload 与 renderer 暴露类型
-│   ├── renderer             # React renderer 应用
+│   ├── main                 # Electron main
+│   ├── preload              # Electron preload
+│   ├── renderer             # Electron renderer
 │   └── shared               # main 与 renderer 共享的类型、schema、常量和工具
-├── docs                     # 项目维护文档与分域 agent 规范
 ├── components.json          # shadcn 配置
 └── electron-builder.yml     # Electron Builder 配置
 ```
-
-## 分域规则
-
-必须按本次改动涉及的范围读取对应文档；跨域改动必须同时读取所有相关文档。
-
-- 修改 `src/main`：读取 `docs/agents-main.md`
-- 修改 `src/preload`：读取 `docs/agents-preload.md`
-- 修改 `src/renderer`、`components.json` 或 shadcn 组件：读取 `docs/agents-renderer.md`
-- 修改 `src/shared`：同时检查 main 与 renderer 影响，并执行 `pnpm typecheck`
-
-## 通用规则
-
-- 执行终端命令时应当优先使用 `zsh`。
-- 实现时应当优先使用 `pnpm`、TypeScript 和项目既有技术栈。
-- 涉及多种实现路径时应当先说明取舍；用户已给出具体方案时应当先评估方案合理性。
-- 高风险操作必须先确认：`rm -rf`、系统配置修改、Shell 配置修改、删除数据库/数据文件、Git force push。

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { VodSearchResult } from '@shared/types'
 import { cancelVodSearch, isApiAvailable, onVodSearchEvent, probeMediaSource, searchVod } from '@renderer/services/api'
-import { useSearchContextStore } from '@renderer/stores/search-context'
+import { useSearchContextStore } from '@/stores'
 import type {
   EpisodeSelection,
   PlayerLocationState,

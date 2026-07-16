@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import type { LiveSourceInput, VodSourceInput } from '@shared/types'
-import { Button } from '@renderer/components/ui/button'
-import { Input } from '@renderer/components/ui/input'
-import { Switch } from '@renderer/components/ui/switch'
+import { Button } from '@/ui/button'
+import { Input } from '@/ui/input'
+import { Switch } from '@/ui/switch'
 import { createLiveSource, createSource, isApiAvailable, updateLiveSource, updateSource } from '@renderer/services/api'
 import type { LiveSourceDialogState, SourceDialogState } from '../types'
 

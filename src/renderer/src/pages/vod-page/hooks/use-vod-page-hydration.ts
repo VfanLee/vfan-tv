@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { isApiAvailable, listFavorites, listRecentPlays } from '@renderer/services/api'
 import { favoriteToVodSearchResult, recentPlayToVodSearchResult } from '@renderer/services/playback'
-import { useSearchContextStore } from '@renderer/stores/search-context'
+import { useSearchContextStore } from '@/stores'
 import type { PlayerLocationState } from '../types'
 
 interface VodPageHydrationState {

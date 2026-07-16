@@ -3,19 +3,12 @@ import { DEFAULT_GITHUB_PROXY_ROUTE_ID, GITHUB_PROXY_ROUTES } from '@shared/cons
 import type { GitHubProxyRouteId } from '@shared/types'
 import { SettingsCard } from '@renderer/components'
 import { Tooltip as TooltipPrimitive } from 'radix-ui'
-import { Alert, AlertDescription } from '@renderer/components/ui/alert'
-import { Badge } from '@renderer/components/ui/badge'
-import { Button } from '@renderer/components/ui/button'
-import { Input } from '@renderer/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@renderer/components/ui/select'
-import { cn } from '@renderer/utils/cn'
+import { Alert, AlertDescription } from '@/ui/alert'
+import { Badge } from '@/ui/badge'
+import { Button } from '@/ui/button'
+import { Input } from '@/ui/input'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/ui/select'
+import { cn } from '@/utils'
 import type { GitHubProxySpeedState } from '../types'
 import { formatSpeedResult, getSpeedResultTagClassName } from '../utils'
 

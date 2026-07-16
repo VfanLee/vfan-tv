@@ -1,5 +1,5 @@
 import { BasicPlayer } from '@renderer/components'
-import { cn } from '@renderer/utils/cn'
+import { cn } from '@/utils'
 import { LiveSidebar, NowPlayingTitle } from './components/live-sidebar'
 import { useLivePlayer } from './hooks/use-live-player'
 

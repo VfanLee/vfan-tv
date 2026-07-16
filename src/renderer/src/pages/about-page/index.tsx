@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { CircleUserRound, Lightbulb, MessageCircle, SquareArrowOutUpRight } from 'lucide-react'
 import { toast } from 'sonner'
 import type { UpdateCheckResult, UpdateDownloadProgress } from '@shared/types'
-import { Badge } from '@renderer/components/ui/badge'
-import { Button } from '@renderer/components/ui/button'
-import { Card } from '@renderer/components/ui/card'
+import { Badge } from '@/ui/badge'
+import { Button } from '@/ui/button'
+import { Card } from '@/ui/card'
 import logoMarkUrl from '@renderer/assets/logo-mark.svg'
 import {
   checkForUpdates,
@@ -14,7 +14,7 @@ import {
   isApiAvailable,
   onUpdateEvent,
 } from '@renderer/services/api'
-import { openExternalUrl } from '@renderer/utils/open-external'
+import { openExternalUrl } from '@/utils'
 import { ExternalLink, LinkCard, UpdateOptions, VersionItem } from './components/about-content'
 import { formatLastCheckedAt, getDisplayErrorMessage, getUpdateHint } from './utils'
 

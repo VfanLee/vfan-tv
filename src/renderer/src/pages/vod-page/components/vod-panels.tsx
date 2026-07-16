@@ -1,6 +1,6 @@
 import { ArrowUpDown, CheckCircle2, ListVideo, Loader2, Radio, RefreshCw } from 'lucide-react'
 import type { PlayLine, VodSearchResult } from '@shared/types'
-import { cn } from '@renderer/utils/cn'
+import { cn } from '@/utils'
 import type { EpisodeSelection, SourceProbeState, SourceRefreshState } from '../types'
 import { getCandidateKey } from '../utils'
 

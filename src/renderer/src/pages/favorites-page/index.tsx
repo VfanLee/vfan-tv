@@ -6,7 +6,7 @@ import type { FavoriteItem } from '@shared/types'
 import { ConfirmDialog, MediaPoster, PosterPlayOverlay } from '@renderer/components'
 import { listFavorites, removeFavorite } from '@renderer/services/api'
 import { favoriteToVodSearchResult } from '@renderer/services/playback'
-import { useSearchContextStore } from '@renderer/stores/search-context'
+import { useSearchContextStore } from '@/stores'
 
 export function FavoritesPage(): React.JSX.Element {
   const navigate = useNavigate()

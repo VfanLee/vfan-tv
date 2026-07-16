@@ -1,7 +1,7 @@
 import { AlertCircle, CheckCircle2, ChevronRight, Loader2, MinusCircle, Play, Search } from 'lucide-react'
 import type { SearchSourceStatus, VodSearchResult } from '@shared/types'
 import { MediaPoster } from '@renderer/components'
-import { cn } from '@renderer/utils/cn'
+import { cn } from '@/utils'
 import type { GroupedSearchResult, ResultViewMode, SearchSourceStats, SourceSearchState } from '../types'
 import { formatMeta, getStatusTone } from '../utils'
 

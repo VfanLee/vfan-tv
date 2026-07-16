@@ -1,16 +1,9 @@
 import { ChevronDown, Loader2, Play, Radio, RefreshCw, Search, Tv } from 'lucide-react'
 import type { LiveChannel } from '@shared/types'
-import { Button } from '@renderer/components/ui/button'
-import { Input } from '@renderer/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@renderer/components/ui/select'
-import { cn } from '@renderer/utils/cn'
+import { Button } from '@/ui/button'
+import { Input } from '@/ui/input'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/ui/select'
+import { cn } from '@/utils'
 import type { useLivePlayer } from '../hooks/use-live-player'
 
 type LivePlayerState = ReturnType<typeof useLivePlayer>

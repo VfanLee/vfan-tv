@@ -7,9 +7,8 @@ import { ConfirmDialog } from '@renderer/components'
 import { useRecentPlays } from '@renderer/hooks'
 import { categorySections } from '@renderer/services/api'
 import { recentPlayToVodSearchResult } from '@renderer/services/playback'
-import { useAppDataStore } from '@renderer/stores/app-data'
-import { useSearchContextStore } from '@renderer/stores/search-context'
-import { categoryIcons } from '@renderer/utils/category-icons'
+import { useAppDataStore, useSearchContextStore } from '@/stores'
+import { categoryIcons } from '@/utils'
 import {
   EmptyShelf,
   HomeShelfSkeleton,

@@ -1,17 +1,10 @@
 import { useState } from 'react'
 import { Link, Play, Sparkles } from 'lucide-react'
 import type { MediaStreamType } from '@shared/types'
-import { BasicPlayer } from '@renderer/components/media/basic-player'
-import { Button } from '@renderer/components/ui/button'
-import { Input } from '@renderer/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@renderer/components/ui/select'
+import { BasicPlayer } from '@renderer/components/basic-player'
+import { Button } from '@/ui/button'
+import { Input } from '@/ui/input'
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/ui/select'
 import { detectMediaStreamType, getMediaProxyBaseUrl } from '@renderer/services/api/media'
 
 type LinkPlaybackVariant = 'vod' | 'live'

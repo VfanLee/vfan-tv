@@ -1,6 +1,6 @@
 import { useNavigate, useSearchParams } from 'react-router'
 import type { VodSearchResult } from '@shared/types'
-import { useSearchContextStore } from '@renderer/stores/search-context'
+import { useSearchContextStore } from '@/stores'
 import { SearchHistory } from './components/search-history'
 import {
   GroupedResults,

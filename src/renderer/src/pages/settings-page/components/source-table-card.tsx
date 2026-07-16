@@ -1,10 +1,10 @@
 import { Check, Download, GripVertical, Pencil, Plus, Trash2, Upload } from 'lucide-react'
 import type { LiveSourceConfig, VodSourceConfig } from '@shared/types'
 import { SettingsCard } from '@renderer/components'
-import { Badge } from '@renderer/components/ui/badge'
-import { Button } from '@renderer/components/ui/button'
-import { Switch } from '@renderer/components/ui/switch'
-import { cn } from '@renderer/utils/cn'
+import { Badge } from '@/ui/badge'
+import { Button } from '@/ui/button'
+import { Switch } from '@/ui/switch'
+import { cn } from '@/utils'
 
 type SourceConfig = VodSourceConfig | LiveSourceConfig
 
