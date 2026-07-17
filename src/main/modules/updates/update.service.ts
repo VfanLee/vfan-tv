@@ -73,7 +73,7 @@ export class UpdateService {
       throw new Error('当前平台不支持自动下载更新')
     }
 
-    await this.configureUpdater().downloadUpdate()
+    await this.configureUpdater(true).downloadUpdate()
   }
 
   install(): void {
@@ -88,9 +88,9 @@ export class UpdateService {
     return process.platform === 'win32' && !process.env.PORTABLE_EXECUTABLE_DIR
   }
 
-  private configureUpdater(): NsisUpdater {
+  private configureUpdater(useGitHubProxy = false): NsisUpdater {
     const settings = this.settingsService.get()
-    const feedUrl = resolveGitHubUrl(RELEASE_DOWNLOAD_BASE_URL, settings)
+    const feedUrl = useGitHubProxy ? resolveGitHubUrl(RELEASE_DOWNLOAD_BASE_URL, settings) : RELEASE_DOWNLOAD_BASE_URL
     const updater = this.getUpdater()
 
     updater.setFeedURL({ provider: 'generic', url: feedUrl })

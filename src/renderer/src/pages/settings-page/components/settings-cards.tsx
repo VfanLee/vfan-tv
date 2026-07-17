@@ -49,7 +49,7 @@ export function NetworkSettingsCard({
                   <TooltipPrimitive.Root>
                     <TooltipPrimitive.Trigger asChild>
                       <button
-                        aria-label="查看 GitHub 加速支持的资源"
+                        aria-label="查看 GitHub 加速适用范围"
                         className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 rounded-sm transition-colors outline-none focus-visible:ring-2"
                         type="button"
                       >
@@ -62,15 +62,10 @@ export function NetworkSettingsCard({
                         side="top"
                         sideOffset={6}
                       >
-                        <p className="text-sm font-medium">支持的 GitHub 资源</p>
+                        <p className="text-sm font-medium">GitHub 加速适用范围</p>
                         <ul className="mt-1.5 list-disc space-y-0.5 pl-4 text-xs leading-5">
-                          <li>Releases 附件下载 (release assets)</li>
-                          <li>Raw 文件内容访问</li>
-                          <li>仓库打包下载 (archive)</li>
-                          <li>Git Clone 操作 (部分支持)</li>
-                          <li>Gist 原始文件</li>
-                          <li>项目文件直接下载</li>
-                          <li>Git api 接口支持</li>
+                          <li>仅用于下载 Vfan TV 的安装包</li>
+                          <li>更新检查与外部 GitHub 链接始终直连</li>
                         </ul>
                         <TooltipPrimitive.Arrow className="fill-popover" />
                       </TooltipPrimitive.Content>
@@ -78,7 +73,7 @@ export function NetworkSettingsCard({
                   </TooltipPrimitive.Root>
                 </TooltipPrimitive.Provider>
               </div>
-              <p className="text-muted-foreground mt-1 text-sm">用于 GitHub 更新检查与安装包下载。</p>
+              <p className="text-muted-foreground mt-1 text-sm">仅用于下载 Vfan TV 安装包。</p>
             </div>
             <Button disabled={!apiAvailable || isSaving || isTestingAll} variant="outline" onClick={onTestAll}>
               {isTestingAll ? (

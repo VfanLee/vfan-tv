@@ -1,5 +1,5 @@
 import { DOMParser } from '@xmldom/xmldom'
-import { GITHUB_PROXY_ROUTES, resolveGitHubUrl } from '@shared/constants'
+import { resolveGitHubUrl } from '@shared/constants'
 import type { AppSettings, UpdateCheckResult } from '@shared/types'
 
 const REPOSITORY_URL = 'https://github.com/vfanlee/vfan-tv'
@@ -8,7 +8,6 @@ const RELEASES_FEED_PATH = `${REPOSITORY_URL}/releases.atom`
 const LATEST_RELEASE_PATH = `${REPOSITORY_URL}/releases/latest`
 const REQUEST_HEADERS = { 'User-Agent': 'vfan-tv-update-checker' }
 const REQUEST_TIMEOUT_MS = 10_000
-const GITHUB_RELEASE_UNAVAILABLE_MESSAGE = '无法连接 GitHub Release。请在设置中切换 GitHub 加速线路，或稍后重试。'
 const DEFAULT_GITHUB_PROXY_SETTINGS: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'> = {
   githubProxyCustomPrefix: '',
   githubProxyRoute: 'gh-proxy',
@@ -26,11 +25,6 @@ interface LatestRelease {
 interface DownloadAsset {
   name: string
   url: string
-}
-
-interface ReleaseFetchAttempt {
-  label: string
-  settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'>
 }
 
 interface GitHubReleaseAssetPayload {
@@ -114,10 +108,8 @@ function parseLatestReleasePayload(payload: GitHubReleasePayload): LatestRelease
   }
 }
 
-async function fetchLatestReleaseFromApi(
-  settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'>,
-): Promise<LatestRelease> {
-  const response = await fetch(resolveGitHubUrl(LATEST_RELEASE_API_PATH, settings), {
+async function fetchLatestReleaseFromApi(): Promise<LatestRelease> {
+  const response = await fetch(LATEST_RELEASE_API_PATH, {
     headers: {
       ...REQUEST_HEADERS,
       'Accept': 'application/vnd.github+json',
@@ -159,10 +151,8 @@ function parseReleaseFeed(xml: string): LatestRelease {
   }
 }
 
-async function fetchLatestReleaseFromFeed(
-  settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'>,
-): Promise<LatestRelease> {
-  const response = await fetch(resolveGitHubUrl(RELEASES_FEED_PATH, settings), {
+async function fetchLatestReleaseFromFeed(): Promise<LatestRelease> {
+  const response = await fetch(RELEASES_FEED_PATH, {
     headers: {
       ...REQUEST_HEADERS,
       Accept: 'application/atom+xml',
@@ -177,10 +167,8 @@ async function fetchLatestReleaseFromFeed(
   return parseReleaseFeed(await response.text())
 }
 
-async function fetchLatestReleaseFromRedirect(
-  settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'>,
-): Promise<LatestRelease> {
-  const response = await fetch(resolveGitHubUrl(LATEST_RELEASE_PATH, settings), {
+async function fetchLatestReleaseFromRedirect(): Promise<LatestRelease> {
+  const response = await fetch(LATEST_RELEASE_PATH, {
     headers: REQUEST_HEADERS,
     redirect: 'manual',
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -200,67 +188,20 @@ async function fetchLatestReleaseFromRedirect(
   }
 }
 
-async function fetchLatestReleaseViaRoute(
-  settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'>,
-): Promise<LatestRelease> {
+async function fetchLatestRelease(): Promise<LatestRelease> {
   try {
-    return await fetchLatestReleaseFromApi(settings)
+    return await fetchLatestReleaseFromApi()
   } catch (apiError) {
     try {
-      return await fetchLatestReleaseFromFeed(settings)
+      return await fetchLatestReleaseFromFeed()
     } catch (feedError) {
       try {
-        return await fetchLatestReleaseFromRedirect(settings)
+        return await fetchLatestReleaseFromRedirect()
       } catch (redirectError) {
         throw new Error(formatReleaseFetchErrors([apiError, feedError, redirectError]))
       }
     }
   }
-}
-
-async function fetchLatestRelease(
-  settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'>,
-): Promise<LatestRelease> {
-  const errors: string[] = []
-
-  for (const attempt of getReleaseFetchAttempts(settings)) {
-    try {
-      return await fetchLatestReleaseViaRoute(attempt.settings)
-    } catch (error) {
-      errors.push(`${attempt.label}: ${getErrorMessage(error)}`)
-    }
-  }
-
-  console.warn(`[updates] ${GITHUB_RELEASE_UNAVAILABLE_MESSAGE}\n${errors.join('\n')}`)
-  throw new Error(GITHUB_RELEASE_UNAVAILABLE_MESSAGE)
-}
-
-function getReleaseFetchAttempts(
-  settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'>,
-): ReleaseFetchAttempt[] {
-  const attempts: ReleaseFetchAttempt[] = [{ label: '当前线路', settings }]
-  const seen = new Set([getReleaseFetchAttemptKey(settings)])
-
-  for (const route of GITHUB_PROXY_ROUTES) {
-    const routeSettings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'> = {
-      githubProxyCustomPrefix: '',
-      githubProxyRoute: route.id,
-    }
-    const key = getReleaseFetchAttemptKey(routeSettings)
-
-    if (seen.has(key)) continue
-
-    seen.add(key)
-    attempts.push({ label: route.label, settings: routeSettings })
-  }
-
-  return attempts
-}
-
-function getReleaseFetchAttemptKey(
-  settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'>,
-): string {
-  return `${settings.githubProxyRoute}:${settings.githubProxyCustomPrefix.trim()}`
 }
 
 function getAssetNames(version: string, platform: NodeJS.Platform, arch: string): string[] {
@@ -335,7 +276,7 @@ export async function checkLatestRelease(
   platform: NodeJS.Platform = process.platform,
   arch: string = process.arch,
 ): Promise<UpdateCheckResult> {
-  const release = await fetchLatestRelease(settings)
+  const release = await fetchLatestRelease()
   const latestVersion = release.tag.replace(/^v/, '')
   const downloadAsset = await resolveDownloadAsset(release.tag, latestVersion, platform, arch, settings, release.assets)
   const updateAvailable = isNewerVersion(latestVersion, currentVersion)
@@ -345,10 +286,10 @@ export async function checkLatestRelease(
     canAutoUpdate: false,
     currentVersion,
     downloadName: downloadAsset?.name,
-    downloadUrl: downloadAsset?.url,
+    downloadUrl: downloadAsset && resolveGitHubUrl(downloadAsset.url, settings),
     latestVersion,
     manualDownloadName: downloadAsset?.name,
-    manualDownloadUrl: downloadAsset?.url,
+    manualDownloadUrl: downloadAsset && resolveGitHubUrl(downloadAsset.url, settings),
     platform,
     releaseName: release.name,
     releaseNotes: release.notes,
