@@ -6,6 +6,7 @@ import { join } from 'path'
 import * as schema from './schema'
 import { DB_FILE_NAME } from '@shared/constants'
 
+// SQLite 的初始化与重建入口。表结构在运行时创建，因此重置必须复用同一份 SQL。
 export type AppDatabase = ReturnType<typeof drizzle<typeof schema>>
 
 const createSchemaSql = `
@@ -94,6 +95,7 @@ export function createDatabase(): AppDatabase {
   const databasePath = join(dbDir, DB_FILE_NAME)
 
   const sqlite = new Database(databasePath)
+  // WAL 允许读取与写入并行，降低播放记录等频繁小写入对 UI 的影响。
   sqlite.pragma('journal_mode = WAL')
   sqlite.exec(createSchemaSql)
 
@@ -101,6 +103,7 @@ export function createDatabase(): AppDatabase {
 }
 
 export function resetAppDatabase(db: AppDatabase): void {
+  // 此操作不可逆；调用方须先完成用户确认与必要的备份流程。
   db.$client.exec(dropAppTablesSql)
   db.$client.exec(createSchemaSql)
 }

@@ -12,6 +12,7 @@ import type {
 } from '@shared/types'
 import type { VodSourceRepository } from './vod-source.repository'
 
+// 点播源领域服务：将外部导入数据校验为可持久化的源配置，并维护排序与唯一性约束。
 function toImportItems(payload: unknown): {
   validItems: VodSourceImportItem[]
   invalidItems: VodSourceImportPreview['invalidItems']
@@ -74,6 +75,7 @@ export class SourceService {
       throw new Error('数据源不存在')
     }
 
+    // URL 是源的业务唯一键，编辑时允许保留当前记录自身的 URL。
     const duplicated = this.repository.findByUrl(data.url)
 
     if (duplicated && duplicated.id !== id) {

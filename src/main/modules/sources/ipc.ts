@@ -7,6 +7,7 @@ import type { AppApi } from '@shared/types'
 import type { ApplicationContext } from '../../app/composition-root'
 import { formatZodError, isZodError } from '../../ipc/utils'
 
+// 点播源 IPC：文件导入导出留在 main，以避免 renderer 获得任意文件系统权限。
 export function registerSourcesIpc(context: ApplicationContext): void {
   const { source, liveSource } = context.services
   const { httpClient, decodeBase58String } = context.utilities
@@ -58,6 +59,7 @@ export function registerSourcesIpc(context: ApplicationContext): void {
         maxContentLength: 2 * 1024 * 1024,
       })
       try {
+        // 订阅内容在解码后仍需 schema 校验，远程输入不能直接写入本地数据库。
         const subscription = sourceSubscriptionSchema.parse(JSON.parse(decodeBase58String(encoded)))
         return {
           vod: source.syncSubscription(subscription.vod),

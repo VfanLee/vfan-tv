@@ -1,5 +1,6 @@
 const DOUBAN_IMAGE_REFERER = 'https://movie.douban.com/explore'
 
+// 图片代理基地址由应用启动后注入，避免 shared 层依赖 Electron 运行时。
 let mediaProxyBaseUrl = ''
 
 export function setMediaProxyBaseUrl(baseUrl: string): void {

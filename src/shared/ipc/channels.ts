@@ -1,3 +1,4 @@
+// main 注册器与 preload 调用方共用的唯一 channel 来源，避免字符串漂移。
 export const IPC_CHANNELS = {
   sources: {
     list: 'sources:list',

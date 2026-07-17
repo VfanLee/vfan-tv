@@ -3,6 +3,7 @@ import type { IpcRendererEvent } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc'
 import type { AppApi, UpdateEvent } from '@shared/types'
 
+// 系统能力按白名单暴露，不向 renderer 透传 ipcRenderer 或任意 channel 调用权。
 export function createSystemApi(): Pick<AppApi, 'settings' | 'updates' | 'window' | 'shell'> {
   return {
     settings: {

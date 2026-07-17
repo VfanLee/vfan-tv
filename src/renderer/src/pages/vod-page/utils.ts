@@ -2,6 +2,7 @@ import type { FavoriteInput, PlayLine, RecentPlayInput, VodSearchResult } from '
 import { parseVodPlayUrl } from '@shared/utils/vod-play-url'
 import type { EpisodeSelection, PlayerLocationState } from './types'
 
+// 点播详情页的纯数据转换：将不同来源的原始字段规整为选集、收藏和播放记录模型。
 export function getPlayLines(item: VodSearchResult | undefined): PlayLine[] {
   if (!item || !isRecord(item.raw)) return []
   return parseVodPlayUrl(getString(item.raw.vod_play_url), getString(item.raw.vod_play_from))
@@ -86,6 +87,7 @@ export async function runWithConcurrency<T>(
   concurrency: number,
   task: (item: T) => Promise<void>,
 ): Promise<void> {
+  // 共享索引由单线程 JavaScript 事件循环递增，worker 不会处理同一个条目。
   let nextIndex = 0
   const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
     while (nextIndex < items.length) {

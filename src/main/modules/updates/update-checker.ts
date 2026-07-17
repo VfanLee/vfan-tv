@@ -14,6 +14,7 @@ const DEFAULT_GITHUB_PROXY_SETTINGS: Pick<AppSettings, 'githubProxyCustomPrefix'
   githubProxyRoute: 'gh-proxy',
 }
 
+// 独立于 electron-updater 的 Release 检查，保证 macOS/Linux 也能展示可下载的新版本。
 interface LatestRelease {
   assets?: DownloadAsset[]
   name: string

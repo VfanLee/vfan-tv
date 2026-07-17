@@ -6,6 +6,7 @@ import { categoryIcons, categorySections } from '@renderer/constants'
 import { getHotCacheKey, getHotCategorySection, cn } from '@/utils'
 import { useAppDataStore } from '@/stores'
 
+// 热门页从共享分页缓存读取数据，并用观察哨兵触发下一页加载。
 export function HotPage(): React.JSX.Element {
   const navigate = useNavigate()
   const { category } = useParams()

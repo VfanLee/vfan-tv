@@ -18,6 +18,7 @@ import {
   runWithConcurrency,
 } from '../utils'
 
+// 当前片源不可用时的补源与测速流程：搜索事件先合并候选，再按有限并发探测对应剧集。
 interface SourceDiscoveryOptions {
   activeSelection: EpisodeSelection
   current?: VodSearchResult
@@ -57,6 +58,7 @@ export function useVodSourceDiscovery({
   const refreshSources = useCallback(
     async (shouldProbe = false): Promise<void> => {
       if (!isApiAvailable() || !current?.title || isRefreshingSources) return
+      // 同一页面只允许一个补源搜索，先取消旧任务以免事件混入新结果。
       if (refreshSearchIdRef.current) await cancelVodSearch(refreshSearchIdRef.current)
       setRefreshState({ found: 0, failed: 0, finished: 0 })
       setSourceProbeRequest(undefined)
@@ -180,6 +182,7 @@ export function useVodSourceDiscovery({
       item,
       url: getCorrespondingEpisodeUrl(item, sourceProbeRequest.lineIndex, sourceProbeRequest.episodeIndex),
     }))
+    // 探测会触发真实媒体请求，限制并发以降低对源站和本地代理的压力。
     void runWithConcurrency(targets, 4, async ({ item, url }) => {
       const result = url ? await probeMediaSource({ url, referer: item.sourceUrl }) : undefined
       if (!active) return

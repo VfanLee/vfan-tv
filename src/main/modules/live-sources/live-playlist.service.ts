@@ -23,6 +23,7 @@ interface ParsedPlaylistItem extends ParsedExtInf {
   url: string
 }
 
+// 将远程 M3U/M3U8 内容解析为统一频道模型，并保留源站要求的请求头供播放器使用。
 export class LivePlaylistService {
   constructor(private readonly httpClient: HttpClient) {}
 

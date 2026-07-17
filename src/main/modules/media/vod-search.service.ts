@@ -9,6 +9,7 @@ import { buildVodSearchUrl, normalizeVodApiResponse } from './vod-api'
 const SEARCH_CONCURRENCY = 6
 const SOURCE_TIMEOUT_MS = 15_000
 
+// 将多数据源搜索转换为增量 IPC 事件；结果不等待所有源完成才返回 renderer。
 export class VodSearchService {
   constructor(
     private readonly sourceService: SourceService,
@@ -41,6 +42,7 @@ export class VodSearchService {
     sources: ReturnType<SourceService['list']>,
   ): Promise<void> {
     const pendingSources = [...sources]
+    // 多 worker 共享队列，限制并发避免大量源同时请求导致网络与 UI 事件拥塞。
     const workers = Array.from({ length: Math.min(SEARCH_CONCURRENCY, pendingSources.length) }, async () => {
       while (pendingSources.length > 0 && !signal.aborted) {
         const source = pendingSources.shift()

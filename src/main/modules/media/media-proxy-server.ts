@@ -4,6 +4,7 @@ import { Readable } from 'stream'
 
 const PLAYLIST_CONTENT_TYPES = ['application/vnd.apple.mpegurl', 'application/x-mpegurl', 'audio/mpegurl']
 
+// 本地回环代理：补齐请求头、重写 HLS 子资源，并避免 renderer 直接跨域请求第三方媒体。
 export class MediaProxyServer {
   private server?: Server
   private baseUrl?: string
@@ -14,6 +15,7 @@ export class MediaProxyServer {
       return Promise.resolve(this.baseUrl)
     }
 
+    // 并发请求共享同一次启动，避免同时监听多个随机端口。
     if (!this.startPromise) {
       this.startPromise = this.start()
     }
@@ -50,6 +52,7 @@ export class MediaProxyServer {
     }
 
     const requestUrl = new URL(request.url ?? '/', 'http://127.0.0.1')
+    // 仅暴露固定路径，代理本身不能成为任意本地 HTTP 服务。
     if (!['/media', '/image', '/resolve'].includes(requestUrl.pathname)) {
       response.writeHead(404)
       response.end('Not found')

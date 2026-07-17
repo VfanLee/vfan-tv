@@ -6,6 +6,7 @@ import { getHotCacheKey } from '@/utils'
 
 const hotPageSize = 24
 
+// 首页数据按分类独立缓存，避免切换标签时重复请求已加载的分页结果。
 interface HotCategoryCache {
   errorMessage: string
   hasMore: boolean
@@ -52,6 +53,7 @@ export const useAppDataStore = create<AppDataState>((set, get) => ({
   },
   loadHome: async () => {
     if (get().homeInitialized) return
+    // 组件并发挂载时复用同一请求，避免首页接口被重复调用。
     if (homeRequest) return homeRequest
 
     set({ homeLoading: true, homeErrorMessage: '' })
@@ -112,6 +114,7 @@ function createHotCache(): Record<string, HotCategoryCache> {
 }
 
 function mergeHotPage(current: HotCategoryCache, page: HotRecommendationsPage): HotCategoryCache {
+  // 接口分页可能有重叠，合并前以分类和条目 ID 去重。
   const seen = new Set(current.items.map((item) => `${item.category}-${item.id}`))
   const items = [...current.items]
 

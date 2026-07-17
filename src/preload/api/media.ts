@@ -3,6 +3,7 @@ import type { IpcRendererEvent } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc'
 import type { AppApi, SearchEvent } from '@shared/types'
 
+// 媒体 API 除请求方法外还包含事件订阅；订阅必须返回清理函数以防页面切换后重复监听。
 export function createMediaApi(): Pick<AppApi, 'vod' | 'live' | 'media'> {
   return {
     vod: {

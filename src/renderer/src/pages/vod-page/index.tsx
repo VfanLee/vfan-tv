@@ -25,6 +25,7 @@ import {
   shouldApplyLocationInitialTime,
 } from './utils'
 
+// 点播详情页将路由、搜索上下文、播放进度和补源流程汇聚为同一份播放选择状态。
 export function VodPage(): React.JSX.Element {
   const navigate = useNavigate()
   const location = useLocation()

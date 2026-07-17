@@ -1,3 +1,4 @@
+// 每次搜索拥有独立 AbortController，新的搜索或用户取消不会影响其他任务。
 export class SearchTaskManager {
   private readonly controllers = new Map<string, AbortController>()
 

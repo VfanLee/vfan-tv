@@ -11,6 +11,7 @@ import type {
 } from '@shared/types'
 import type { LiveSourceRepository } from './live-source.repository'
 
+// 直播源与点播源共用导入语义，但保持独立模型，避免将播放列表能力耦合到点播源。
 function toImportItems(payload: unknown): {
   validItems: LiveSourceImportItem[]
   invalidItems: LiveSourceImportPreview['invalidItems']

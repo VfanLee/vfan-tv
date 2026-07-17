@@ -1,5 +1,6 @@
 import type { VodApiItem, VodApiResponse, VodSearchResult, VodSourceConfig } from '@shared/types'
 
+// 兼容不同 CMS 返回形态：本模块只做协议归一化，不承担网络请求和业务筛选。
 export function buildVodSearchUrl(sourceUrl: string, keyword: string): string {
   const url = new URL(sourceUrl)
   url.searchParams.set('ac', 'detail')

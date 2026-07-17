@@ -3,6 +3,7 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 import { SEARCH_CONTEXT_STORAGE_KEY } from '@shared/constants'
 import type { VodSearchResult } from '@shared/types'
 
+// 搜索候选写入 sessionStorage，使刷新或从列表跳转到详情页时仍可恢复上下文。
 interface SearchContextState {
   keyword: string
   candidates: VodSearchResult[]

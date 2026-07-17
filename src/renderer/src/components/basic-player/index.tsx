@@ -18,6 +18,7 @@ import { CustomOptionsDialog, CustomSliderDialog, DisplaySettingsMenu } from './
 import { createSettingsPositionTracker } from './utils/settings-position'
 import type { BasicPlayerProps, CustomOptionsInput, CustomSliderInput, DisplaySettingsState } from './types'
 
+// 播放器适配层：统一 ArtPlayer、HLS.js 与 mpegts.js 的生命周期及持久化播放设置。
 export type { BasicPlayerProps, PlayerNavigationLabels, PlayerVariant } from './types'
 
 interface BasicPlayerCallbacks {

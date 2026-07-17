@@ -5,6 +5,7 @@ import type { AppSettings } from '@shared/types'
 import { APP_DISPLAY_NAME } from '@shared/constants'
 import { isAllowedExternalUrl, openExternalUrl } from '../infrastructure/external/external-link'
 
+// 主窗口及其导航边界。窗口创建后通过回调登记，避免 IPC 层保存全局窗口引用。
 interface CreateMainWindowOptions {
   icon: string
   getSettings: () => AppSettings
@@ -26,6 +27,7 @@ export function createMainWindow({ icon, getSettings, onCreated }: CreateMainWin
     mainWindow.maximize()
     mainWindow.show()
   })
+  // 阻止渲染页自行打开新窗口；合法外链仍需显式确认后交给系统浏览器。
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (isAllowedExternalUrl(url))
       void openExternalUrl(url, getSettings()).catch((error: unknown) =>
@@ -33,6 +35,7 @@ export function createMainWindow({ icon, getSettings, onCreated }: CreateMainWin
       )
     return { action: 'deny' }
   })
+  // 只允许应用自身源内导航，防止远程页面接管 Electron 渲染进程。
   mainWindow.webContents.on('will-navigate', (event, url) => {
     if (isSameAppOrigin(mainWindow, url)) return
     if (isAllowedExternalUrl(url)) {

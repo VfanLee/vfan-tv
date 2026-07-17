@@ -11,6 +11,7 @@ import { useVodSources } from './hooks/use-vod-sources'
 import type { ConfirmState, LiveSourceDialogState, SourceDialogState } from './types'
 import { getConfirmDescription, getConfirmTitle } from './utils'
 
+// 设置页负责协调各设置领域 hook；具体数据读写仍由对应 hook 和 main IPC 完成。
 export function SettingsPage(): React.JSX.Element {
   const apiAvailable = isApiAvailable()
   const vod = useVodSources(apiAvailable)

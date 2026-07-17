@@ -5,6 +5,7 @@ import { IPC_CHANNELS } from '@shared/ipc'
 import type { AppApi } from '@shared/types'
 import type { ApplicationContext } from '../../app/composition-root'
 
+// 直播源的文件读写与播放列表读取均留在 main 进程执行。
 export function registerLiveSourcesIpc(context: ApplicationContext): void {
   const { liveSource, livePlaylist } = context.services
   ipcMain.handle(IPC_CHANNELS.liveSources.list, () => liveSource.list())

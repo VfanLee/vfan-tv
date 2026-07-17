@@ -22,6 +22,7 @@ import { SettingsRepository } from '../modules/settings/settings.repository'
 import { SettingsService } from '../modules/settings/settings.service'
 import { UpdateService } from '../modules/updates/update.service'
 
+// main 进程唯一的组合根：在此处集中装配依赖，领域模块不得自行创建全局实例。
 export interface ApplicationContext {
   db: ReturnType<typeof createDatabase>
   getMainWindow: () => BrowserWindow | null
@@ -59,6 +60,7 @@ export function createApplicationContext(): ApplicationContext {
   const favorite = new FavoriteRepository(db)
   const settings = new SettingsService(new SettingsRepository(db))
   const httpClient = new HttpClient()
+  // IPC 事件只投递给当前主窗口，避免业务服务直接持有 BrowserWindow。
   let mainWindow: BrowserWindow | null = null
   const getMainWindow = (): BrowserWindow | null => mainWindow
   const emitSearchEvent = (event: SearchEvent): void =>

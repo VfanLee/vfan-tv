@@ -13,6 +13,7 @@ import {
   saveHistories,
 } from '../utils'
 
+// 搜索页维护单个活动搜索 ID，并将 main 推送的增量事件归约为可渲染的源状态。
 export interface VodSearchState {
   allItems: VodSearchResult[]
   groupedResults: GroupedSearchResult[]
@@ -57,6 +58,7 @@ export function useVodSearch(initialKeyword: string): VodSearchState {
     async (nextKeyword?: string): Promise<void> => {
       const trimmedKeyword = (nextKeyword ?? keyword).trim()
       if (!trimmedKeyword || !isApiAvailable()) return
+      // 新请求开始前取消旧搜索，避免旧事件覆盖新关键词的结果。
       if (activeSearchIdRef.current) await cancelVodSearch(activeSearchIdRef.current)
       setKeyword(trimmedKeyword)
       updateHistories((current) => moveToHistoryTop(current, trimmedKeyword))

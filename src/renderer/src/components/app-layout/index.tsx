@@ -7,6 +7,7 @@ import { categoryIcons } from '@renderer/constants'
 import { cn } from '@/utils'
 import logoMarkUrl from '@renderer/assets/logo-mark.svg'
 
+// 应用级壳层维护导航、顶部栏与主内容滚动状态，不承载页面业务数据。
 const primaryNavItems: Array<{ to: string; label: string; icon: LucideIcon }> = [
   { to: '/', label: '首页', icon: Home },
   { to: '/live', label: '直播', icon: Tv },

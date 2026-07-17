@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { isApiAvailable, listFavorites, listRecentPlays } from '@renderer/services/api'
 import { favoriteToVodSearchResult, recentPlayToVodSearchResult } from '@renderer/services/playback'
 import { useSearchContextStore } from '@/stores'
@@ -7,6 +7,11 @@ import type { PlayerLocationState } from '../types'
 interface VodPageHydrationState {
   isHydrating: boolean
   restoredLocationState: PlayerLocationState | null
+}
+
+interface RestoredLocationState {
+  key: string
+  value: PlayerLocationState
 }
 
 /**
@@ -24,38 +29,26 @@ export function useVodPageHydration(
   const mergeCandidates = useSearchContextStore((state) => state.mergeCandidates)
   const setContext = useSearchContextStore((state) => state.setContext)
   const keyword = useSearchContextStore((state) => state.keyword)
-  const [storeReady, setStoreReady] = useState(() => useSearchContextStore.persist.hasHydrated())
-  const [isHydratingLocal, setIsHydratingLocal] = useState(false)
-  const [restoredLocationState, setRestoredLocationState] = useState<PlayerLocationState | null>(null)
+  // 将外部 Zustand 持久化状态接入 React，避免 effect 内同步 setState 造成额外渲染。
+  const storeReady = useSyncExternalStore(
+    (onStoreChange) => useSearchContextStore.persist.onFinishHydration(onStoreChange),
+    () => useSearchContextStore.persist.hasHydrated(),
+    () => false,
+  )
+  const [completedHydrationKey, setCompletedHydrationKey] = useState<string>()
+  const [restoredLocation, setRestoredLocation] = useState<RestoredLocationState>()
   const attemptedKeyRef = useRef<string>('')
+  const hydrationKey = sourceId && vodId ? `${sourceId}:${vodId}` : undefined
 
   useEffect(() => {
-    attemptedKeyRef.current = ''
-    setRestoredLocationState(null)
-  }, [sourceId, vodId])
-
-  useEffect(() => {
-    setStoreReady(useSearchContextStore.persist.hasHydrated())
-    return useSearchContextStore.persist.onFinishHydration(() => {
-      setStoreReady(true)
-    })
-  }, [])
-
-  useEffect(() => {
-    if (!storeReady || !sourceId || !vodId || !isApiAvailable()) {
-      setIsHydratingLocal(false)
-      return
-    }
+    if (!storeReady || !sourceId || !vodId || !isApiAvailable()) return
 
     const attemptKey = `${sourceId}:${vodId}`
     const needsCandidate = !hasCurrentCandidate
     const needsPlaybackState =
       !locationState?.episodeUrl && !(locationState?.initialTime && locationState.initialTime > 0)
 
-    if (!needsCandidate && !needsPlaybackState) {
-      setIsHydratingLocal(false)
-      return
-    }
+    if (!needsCandidate && !needsPlaybackState) return
 
     if (attemptedKeyRef.current === attemptKey) {
       return
@@ -63,8 +56,6 @@ export function useVodPageHydration(
     attemptedKeyRef.current = attemptKey
 
     let active = true
-    setIsHydratingLocal(needsCandidate)
-
     void (async () => {
       try {
         const [favorites, recentPlays] = await Promise.all([listFavorites(), listRecentPlays(50)])
@@ -92,15 +83,16 @@ export function useVodPageHydration(
         }
 
         if (needsPlaybackState && matchedRecent) {
-          setRestoredLocationState({
-            episodeUrl: matchedRecent.episodeUrl,
-            initialTime: matchedRecent.currentTime > 0 ? matchedRecent.currentTime : undefined,
+          setRestoredLocation({
+            key: attemptKey,
+            value: {
+              episodeUrl: matchedRecent.episodeUrl,
+              initialTime: matchedRecent.currentTime > 0 ? matchedRecent.currentTime : undefined,
+            },
           })
         }
       } finally {
-        if (active) {
-          setIsHydratingLocal(false)
-        }
+        if (active) setCompletedHydrationKey(attemptKey)
       }
     })()
 
@@ -120,9 +112,14 @@ export function useVodPageHydration(
   ])
 
   const waitingForStore = Boolean(sourceId && vodId && !storeReady && !hasCurrentCandidate)
+  const restoredLocationState =
+    restoredLocation && restoredLocation.key === hydrationKey ? restoredLocation.value : null
+  const isCandidateHydrationPending = Boolean(
+    hydrationKey && storeReady && isApiAvailable() && !hasCurrentCandidate && completedHydrationKey !== hydrationKey,
+  )
 
   return {
-    isHydrating: waitingForStore || isHydratingLocal,
+    isHydrating: waitingForStore || isCandidateHydrationPending,
     restoredLocationState: locationState ?? restoredLocationState,
   }
 }

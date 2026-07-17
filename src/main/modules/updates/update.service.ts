@@ -12,6 +12,7 @@ const RELEASE_DOWNLOAD_BASE_URL = `${REPOSITORY_URL}/releases/latest/download/`
 
 type UpdateEventEmitter = (event: UpdateEvent) => void
 
+// 手动 Release 检查适用于所有平台；Windows 才额外尝试 electron-updater 的下载安装流程。
 export class UpdateService {
   private lastResult?: UpdateCheckResult
   private suppressUpdaterErrorEvent = false
@@ -168,6 +169,7 @@ export class UpdateService {
   }
 
   private async checkForUpdatesSilently(): ReturnType<NsisUpdater['checkForUpdates']> {
+    // 手动检查失败后用于补充元数据的自动检查不应重复向 UI 报错。
     this.suppressUpdaterErrorEvent = true
     try {
       return await this.configureUpdater().checkForUpdates()

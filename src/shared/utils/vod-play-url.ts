@@ -1,5 +1,6 @@
 import type { PlayEpisode, PlayLine } from '../types/vod'
 
+// 兼容 CMS 常见的 “线路$$$线路 / 集名$url#集名$url” 播放字段编码。
 const lineSeparator = '$$$'
 const episodeSeparator = '#'
 const nameUrlSeparator = '$'
