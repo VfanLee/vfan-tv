@@ -38,7 +38,7 @@ export function NetworkSettingsCard({
   const selectedRoutePrefix = selectedRoute?.prefix ? new URL(selectedRoute.prefix).hostname : '直连'
 
   return (
-    <SettingsCard description="管理应用内网络访问、代理与连接探测。" title="网络">
+    <SettingsCard description="管理应用内网络访问。" title="网络">
       <div className="flex flex-col gap-5 px-5 py-5">
         <section className="flex flex-col gap-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -73,7 +73,7 @@ export function NetworkSettingsCard({
                   </TooltipPrimitive.Root>
                 </TooltipPrimitive.Provider>
               </div>
-              <p className="text-muted-foreground mt-1 text-sm">仅用于下载 Vfan TV 安装包。</p>
+              <p className="text-muted-foreground mt-1 text-sm">仅用于下载安装包。</p>
             </div>
             <Button disabled={!apiAvailable || isSaving || isTestingAll} variant="outline" onClick={onTestAll}>
               {isTestingAll ? (

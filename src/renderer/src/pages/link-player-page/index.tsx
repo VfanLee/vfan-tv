@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, Play, Sparkles } from 'lucide-react'
+import { Link, Play } from 'lucide-react'
 import type { MediaStreamType } from '@shared/types'
 import { BasicPlayer } from '@renderer/components'
 import { Button } from '@/ui/button'
@@ -9,6 +9,8 @@ import { detectMediaStreamType, getMediaProxyBaseUrl } from '@renderer/services/
 
 type LinkPlaybackVariant = 'vod' | 'live'
 
+const DEFAULT_LINK_PLAYBACK_URL = 'https://artplayer.org/assets/sample/video.mp4'
+
 interface PlaybackSource {
   displayUrl: string
   sourceType: MediaStreamType
@@ -16,17 +18,22 @@ interface PlaybackSource {
   variant: LinkPlaybackVariant
 }
 
+const DEFAULT_PLAYBACK_SOURCE: PlaybackSource = {
+  displayUrl: DEFAULT_LINK_PLAYBACK_URL,
+  sourceType: 'native',
+  url: DEFAULT_LINK_PLAYBACK_URL,
+  variant: 'vod',
+}
+
 export function LinkPlayerPage(): React.JSX.Element {
-  const [inputUrl, setInputUrl] = useState('')
+  const [inputUrl, setInputUrl] = useState(DEFAULT_LINK_PLAYBACK_URL)
   const [playbackVariant, setPlaybackVariant] = useState<LinkPlaybackVariant>('vod')
-  const [playbackSource, setPlaybackSource] = useState<PlaybackSource>()
+  const [playbackSource, setPlaybackSource] = useState<PlaybackSource>(DEFAULT_PLAYBACK_SOURCE)
   const [errorMessage, setErrorMessage] = useState('')
   const [isResolving, setIsResolving] = useState(false)
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault()
-
-    const displayUrl = normalizeHttpUrl(inputUrl)
+  const resolvePlayback = async (rawUrl: string, variant: LinkPlaybackVariant): Promise<void> => {
+    const displayUrl = normalizeHttpUrl(rawUrl)
     if (!displayUrl) {
       setErrorMessage('请输入有效的 http 或 https 播放链接。')
       return
@@ -46,7 +53,7 @@ export function LinkPlayerPage(): React.JSX.Element {
         displayUrl,
         sourceType: knownType ?? detection?.type ?? 'native',
         url: createMediaProxyUrl(proxyBaseUrl, displayUrl),
-        variant: playbackVariant,
+        variant,
       })
     } catch {
       setErrorMessage('链接解析失败，请检查地址后重试。')
@@ -55,19 +62,23 @@ export function LinkPlayerPage(): React.JSX.Element {
     }
   }
 
+  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
+    event.preventDefault()
+    await resolvePlayback(inputUrl, playbackVariant)
+  }
+
   return (
-    <div className="bg-background text-foreground min-h-screen px-5 py-6 sm:px-8 sm:py-8">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-5">
-        <header>
-          <div className="text-primary flex items-center gap-2">
-            <Sparkles className="size-4" aria-hidden />
-            <span className="text-xs font-semibold tracking-[0.16em]">DIRECT LINK</span>
+    <div className="bg-background text-foreground h-screen overflow-hidden px-5 py-6 sm:px-8 sm:py-8">
+      <div className="flex h-full min-h-0 w-full flex-col gap-5">
+        <header className="shrink-0">
+          <div className="flex items-center gap-2">
+            <Link className="text-primary size-5" aria-hidden />
+            <h1 className="text-2xl font-semibold tracking-tight">直链播放</h1>
           </div>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight">直链播放</h1>
           <p className="text-muted-foreground mt-1.5 text-sm">粘贴媒体地址，解析后立即播放。</p>
         </header>
 
-        <form className="flex flex-col gap-2" onSubmit={handleSubmit}>
+        <form className="flex shrink-0 flex-col gap-2" onSubmit={handleSubmit}>
           <label className="sr-only" htmlFor="playback-url">
             播放链接
           </label>
@@ -82,7 +93,7 @@ export function LinkPlayerPage(): React.JSX.Element {
                 className="h-11 pl-9"
                 placeholder="输入或粘贴 http(s) 播放链接"
                 value={inputUrl}
-                onChange={(event) => setInputUrl(event.target.value)}
+                onChange={(event) => setInputUrl(event.target.value.trim())}
               />
             </div>
             <Select value={playbackVariant} onValueChange={(value) => setPlaybackVariant(value as LinkPlaybackVariant)}>
@@ -104,7 +115,7 @@ export function LinkPlayerPage(): React.JSX.Element {
           {errorMessage ? <p className="text-destructive px-1 text-xs">{errorMessage}</p> : null}
         </form>
 
-        <section className="aspect-video overflow-hidden rounded-xl bg-black shadow-sm">
+        <section className="min-h-0 flex-1 overflow-hidden rounded-xl bg-black shadow-sm">
           <BasicPlayer
             key={`${playbackSource?.url}-${playbackSource?.variant}`}
             autoPlay

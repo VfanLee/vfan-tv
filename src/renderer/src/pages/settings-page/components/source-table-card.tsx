@@ -9,6 +9,7 @@ import {
   RefreshCw,
   Trash2,
   Upload,
+  X,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import type { LiveSourceConfig, VodSourceConfig } from '@shared/types'
@@ -16,6 +17,7 @@ import { SettingsCard } from '@renderer/components'
 import { Badge } from '@/ui/badge'
 import { Button } from '@/ui/button'
 import { Checkbox } from '@/ui/checkbox'
+import { Input } from '@/ui/input'
 import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from '@/ui/popover'
 import { RadioGroup, RadioGroupItem } from '@/ui/radio-group'
 import { Switch } from '@/ui/switch'
@@ -89,8 +91,9 @@ export function SourceTableCard<T extends SourceConfig>({
   onToggleSelection,
 }: SourceTableCardProps<T>): React.JSX.Element {
   const [speedSortOrder, setSpeedSortOrder] = useState<SpeedSortOrder>('default')
+  const [filterKeyword, setFilterKeyword] = useState('')
   const showBackups = Boolean(onSwitchBackup)
-  const displayedSources = useMemo(() => {
+  const sortedSources = useMemo(() => {
     if (!onTestSingle || speedSortOrder === 'default') return sources
     return sources
       .map((source, index) => ({ source, index, result: speedResults?.[source.id] }))
@@ -106,6 +109,11 @@ export function SourceTableCard<T extends SourceConfig>({
       })
       .map(({ source }) => source)
   }, [onTestSingle, sources, speedResults, speedSortOrder])
+  const displayedSources = useMemo(() => {
+    const keyword = filterKeyword.trim().toLowerCase()
+    if (!keyword) return sortedSources
+    return sortedSources.filter((source) => `${source.name} ${source.url}`.toLowerCase().includes(keyword))
+  }, [filterKeyword, sortedSources])
 
   const cycleSpeedSortOrder = (): void => {
     setSpeedSortOrder((current) => (current === 'default' ? 'asc' : current === 'asc' ? 'desc' : 'default'))
@@ -129,12 +137,14 @@ export function SourceTableCard<T extends SourceConfig>({
         hasItems={sources.length > 0}
         isBatchUpdating={isBatchUpdating}
         isTestingAll={isTestingAll}
+        filterKeyword={filterKeyword}
         selectedCount={selectedSourceIds.size}
         onAdd={onAdd}
         onBatchToggle={onBatchToggle}
         onClear={onClear}
         onExport={onExport}
         onImport={onImport}
+        onFilterKeywordChange={setFilterKeyword}
         onTestAll={onTestAll}
       />
 
@@ -149,41 +159,45 @@ export function SourceTableCard<T extends SourceConfig>({
               onSpeedSort={cycleSpeedSortOrder}
               onToggleAll={onToggleAll}
             />
-            {displayedSources.map((source) => (
-              <div
-                key={source.id}
-                className={cn(
-                  'border-border hover:bg-muted/30 grid items-center border-b px-5 py-3 transition-colors',
-                  getTableGridClassName(Boolean(onTestSingle), showBackups),
-                )}
-              >
-                <SelectionCheckbox
-                  checked={selectedSourceIds.has(source.id)}
-                  label={`选择 ${source.name}`}
-                  onChange={() => onToggleSelection(source.id)}
-                />
-                <StatusCell checked={source.enabled} onCheckedChange={(checked) => onToggle(source, checked)} />
-                <OriginCell origin={source.origin} />
-                <NameCell name={source.name} />
-                <div className="text-muted-foreground min-w-0 truncate font-mono text-xs" title={source.url}>
-                  {source.url}
+            {displayedSources.length > 0 ? (
+              displayedSources.map((source) => (
+                <div
+                  key={source.id}
+                  className={cn(
+                    'border-border hover:bg-muted/30 grid items-center border-b px-5 py-3 transition-colors',
+                    getTableGridClassName(Boolean(onTestSingle), showBackups),
+                  )}
+                >
+                  <SelectionCheckbox
+                    checked={selectedSourceIds.has(source.id)}
+                    label={`选择 ${source.name}`}
+                    onChange={() => onToggleSelection(source.id)}
+                  />
+                  <StatusCell checked={source.enabled} onCheckedChange={(checked) => onToggle(source, checked)} />
+                  <OriginCell origin={source.origin} />
+                  <NameCell name={source.name} />
+                  <div className="text-muted-foreground min-w-0 truncate font-mono text-xs" title={source.url}>
+                    {source.url}
+                  </div>
+                  {isVodSource(source) && onSwitchBackup ? (
+                    <BackupCell source={source} onSwitchBackup={onSwitchBackup} />
+                  ) : null}
+                  {isVodSource(source) && onTestSingle ? (
+                    <SpeedCell result={speedResults?.[source.id]} onTest={() => onTestSingle(source.id)} />
+                  ) : null}
+                  <ActionCell
+                    disabled={isReordering}
+                    isFirst={sources[0]?.id === source.id}
+                    isLast={sources.at(-1)?.id === source.id}
+                    onDelete={() => onDelete(source)}
+                    onEdit={() => onEdit(source)}
+                    onMoveToEdge={(edge) => onMoveToEdge(source.id, edge)}
+                  />
                 </div>
-                {isVodSource(source) && onSwitchBackup ? (
-                  <BackupCell source={source} onSwitchBackup={onSwitchBackup} />
-                ) : null}
-                {isVodSource(source) && onTestSingle ? (
-                  <SpeedCell result={speedResults?.[source.id]} onTest={() => onTestSingle(source.id)} />
-                ) : null}
-                <ActionCell
-                  disabled={isReordering}
-                  isFirst={sources[0]?.id === source.id}
-                  isLast={sources.at(-1)?.id === source.id}
-                  onDelete={() => onDelete(source)}
-                  onEdit={() => onEdit(source)}
-                  onMoveToEdge={(edge) => onMoveToEdge(source.id, edge)}
-                />
-              </div>
-            ))}
+              ))
+            ) : (
+              <EmptyTableState text="未找到匹配的源" />
+            )}
           </div>
         </div>
       ) : (
@@ -300,12 +314,14 @@ function SourceToolbar({
   hasItems,
   isBatchUpdating,
   isTestingAll,
+  filterKeyword,
   selectedCount,
   onAdd,
   onBatchToggle,
   onClear,
   onExport,
   onImport,
+  onFilterKeywordChange,
   onTestAll,
 }: {
   addText: string
@@ -314,57 +330,84 @@ function SourceToolbar({
   hasItems: boolean
   isBatchUpdating: boolean
   isTestingAll: boolean
+  filterKeyword: string
   selectedCount: number
   onAdd: () => void
   onBatchToggle: (enabled: boolean) => void
   onClear: () => void
   onExport: () => void
   onImport: () => void
+  onFilterKeywordChange: (keyword: string) => void
   onTestAll?: () => void
 }): React.JSX.Element {
   return (
-    <div className="border-border flex flex-wrap gap-2 border-b px-5 py-5">
-      <Button
-        disabled={!apiAvailable || selectedCount === 0 || isBatchUpdating}
-        variant="outline"
-        onClick={() => onBatchToggle(true)}
-      >
-        批量开启{selectedCount > 0 ? ` (${selectedCount})` : ''}
-      </Button>
-      <Button
-        disabled={!apiAvailable || selectedCount === 0 || isBatchUpdating}
-        variant="outline"
-        onClick={() => onBatchToggle(false)}
-      >
-        批量关闭{selectedCount > 0 ? ` (${selectedCount})` : ''}
-      </Button>
-      <div className="ml-auto" />
-      <Button disabled={!apiAvailable} variant="outline" onClick={onImport}>
-        <Upload data-icon="inline-start" />
-        批量导入
-      </Button>
-      <Button disabled={!apiAvailable} variant="outline" onClick={onExport}>
-        <Download data-icon="inline-start" />
-        批量导出
-      </Button>
-      <Button disabled={!apiAvailable} onClick={onAdd}>
-        <Plus data-icon="inline-start" />
-        {addText}
-      </Button>
-      <Button disabled={!apiAvailable || !hasItems || clearText === '清空中'} variant="destructive" onClick={onClear}>
-        <Trash2 data-icon="inline-start" />
-        {clearText}
-      </Button>
-      {onTestAll ? (
-        <Button disabled={!apiAvailable || !hasItems || isTestingAll} variant="outline" onClick={onTestAll}>
-          {isTestingAll ? (
-            <RefreshCw className="animate-spin" data-icon="inline-start" />
-          ) : (
-            <Gauge data-icon="inline-start" />
-          )}
-          {isTestingAll ? '测速中' : '测速'}
+    <div className="border-border border-b px-5 py-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          disabled={!apiAvailable || selectedCount === 0 || isBatchUpdating}
+          variant="outline"
+          onClick={() => onBatchToggle(true)}
+        >
+          批量开启{selectedCount > 0 ? ` (${selectedCount})` : ''}
         </Button>
-      ) : null}
+        <Button
+          disabled={!apiAvailable || selectedCount === 0 || isBatchUpdating}
+          variant="outline"
+          onClick={() => onBatchToggle(false)}
+        >
+          批量关闭{selectedCount > 0 ? ` (${selectedCount})` : ''}
+        </Button>
+        <div className="relative w-full sm:ml-auto sm:w-72">
+          <Input
+            aria-label="筛选名称或 URL"
+            className={filterKeyword ? 'h-10 pr-10' : 'h-10'}
+            placeholder="筛选名称或 URL"
+            value={filterKeyword}
+            onChange={(event) => onFilterKeywordChange(event.target.value)}
+          />
+          {filterKeyword ? (
+            <Button
+              className="absolute top-1/2 right-1 size-8 -translate-y-1/2"
+              size="icon"
+              title="清空筛选"
+              type="button"
+              variant="ghost"
+              onClick={() => onFilterKeywordChange('')}
+            >
+              <X />
+            </Button>
+          ) : null}
+        </div>
+      </div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        <Button disabled={!apiAvailable} onClick={onAdd}>
+          <Plus data-icon="inline-start" />
+          {addText}
+        </Button>
+        <Button disabled={!apiAvailable} variant="outline" onClick={onImport}>
+          <Upload data-icon="inline-start" />
+          批量导入
+        </Button>
+        <Button disabled={!apiAvailable} variant="outline" onClick={onExport}>
+          <Download data-icon="inline-start" />
+          批量导出
+        </Button>
+        <div className="ml-auto" />
+        <Button disabled={!apiAvailable || !hasItems || clearText === '清空中'} variant="destructive" onClick={onClear}>
+          <Trash2 data-icon="inline-start" />
+          {clearText}
+        </Button>
+        {onTestAll ? (
+          <Button disabled={!apiAvailable || !hasItems || isTestingAll} variant="outline" onClick={onTestAll}>
+            {isTestingAll ? (
+              <RefreshCw className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <Gauge data-icon="inline-start" />
+            )}
+            {isTestingAll ? '测速中' : '测速'}
+          </Button>
+        ) : null}
+      </div>
     </div>
   )
 }
@@ -396,7 +439,7 @@ function TableHeader({
       <div>来源</div>
       <div>名称</div>
       <div>URL</div>
-      {showBackups ? <div>备用</div> : null}
+      {showBackups ? <div>备用地址</div> : null}
       {showSpeed ? (
         <div>
           <button
@@ -405,7 +448,7 @@ function TableHeader({
             type="button"
             onClick={onSpeedSort}
           >
-            测速
+            API 延迟
             {speedSortOrder === 'asc' ? <ArrowUpToLine size={15} /> : null}
             {speedSortOrder === 'desc' ? <ArrowDownToLine size={15} /> : null}
           </button>

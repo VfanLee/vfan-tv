@@ -576,10 +576,10 @@ export function BasicPlayer({
       event.stopPropagation()
       if (event.key === 'ArrowRight') {
         art.forward = seekStep
-        art.notice.show = `向前跳转 ${seekStep} 秒`
+        art.notice.show = `快进 ${seekStep} 秒`
       } else {
         art.backward = seekStep
-        art.notice.show = `向后跳转 ${seekStep} 秒`
+        art.notice.show = `回退 ${seekStep} 秒`
       }
     }
     art.template.$player.addEventListener('pointerdown', focusPlayer)
