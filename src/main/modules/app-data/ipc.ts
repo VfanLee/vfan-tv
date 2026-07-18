@@ -24,9 +24,15 @@ export function registerAppDataIpc(context: ApplicationContext): void {
         schemaVersion: 1,
         exportedAt: Date.now(),
         subscription: { url: appSettings.subscriptionUrl, updatedAt: appSettings.subscriptionUpdatedAt },
-        vod: source
-          .list()
-          .map(({ name, url, referer, enabled, origin, sort }) => ({ name, url, referer, enabled, origin, sort })),
+        vod: source.list().map(({ name, url, referer, enabled, backups, origin, sort }) => ({
+          name,
+          url,
+          referer,
+          enabled,
+          backups,
+          origin,
+          sort,
+        })),
         live: liveSource.list().map(({ name, url, enabled, origin, sort }) => ({ name, url, enabled, origin, sort })),
         recent: recentPlay.list(Number.MAX_SAFE_INTEGER),
         favorites: favorite.list(),
@@ -53,6 +59,7 @@ export function registerAppDataIpc(context: ApplicationContext): void {
       return { cancelled: true, counts: emptyAppDataCounts(), searchHistory: [] }
     const filePath = result.filePaths[0]
     const backup = parseAppDataBackup(await readFile(filePath, 'utf8'))
+    assertUniqueVodEndpointUrls(backup)
     const now = Date.now()
     const { settings } = context.services
     const { source: sourceRepository, liveSource: liveSourceRepository, recentPlay, favorite } = context.repositories
@@ -98,4 +105,15 @@ function getAppDataCounts(backup: AppDataBackup): AppDataOperationCounts {
 
 function emptyAppDataCounts(): AppDataOperationCounts {
   return { vod: 0, live: 0, recent: 0, favorites: 0, searchHistory: 0 }
+}
+
+function assertUniqueVodEndpointUrls(backup: AppDataBackup): void {
+  const owners = new Map<string, string>()
+  for (const source of backup.vod) {
+    for (const url of [source.url, ...source.backups.map((item) => item.url)]) {
+      const owner = owners.get(url)
+      if (owner) throw new Error(`VOD 地址同时存在于「${owner}」和「${source.name}」`)
+      owners.set(url, source.name)
+    }
+  }
 }

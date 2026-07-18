@@ -68,6 +68,7 @@ export function SettingsPage(): React.JSX.Element {
           apiAvailable={apiAvailable}
           isSyncing={general.isSyncingSubscription}
           subscriptionUrl={general.subscriptionUrl}
+          subscriptionUpdatedAt={general.subscriptionUpdatedAt}
           onChange={general.setSubscriptionUrl}
           onSync={() => void general.syncSubscription()}
         />
@@ -99,6 +100,7 @@ export function SettingsPage(): React.JSX.Element {
           onEdit={(source) => setDialog({ mode: 'edit', source })}
           onExport={() => void vod.exportItems()}
           onImport={() => void vod.importItems()}
+          onSwitchBackup={(source, backupUrl) => vod.switchBackup(source, backupUrl)}
           onToggle={(source, enabled) => void vod.toggle(source, enabled)}
           onToggleAll={vod.toggleAll}
           onToggleSelection={vod.toggleSelection}

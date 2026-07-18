@@ -4,6 +4,7 @@ export const IPC_CHANNELS = {
     list: 'sources:list',
     create: 'sources:create',
     update: 'sources:update',
+    switchBackup: 'sources:switch-backup',
     reorder: 'sources:reorder',
     delete: 'sources:delete',
     clear: 'sources:clear',

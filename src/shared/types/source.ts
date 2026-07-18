@@ -1,8 +1,14 @@
+export interface VodSourceBackup {
+  url: string
+  referer?: string
+}
+
 export interface VodSourceImportItem {
   name: string
   url: string
   referer?: string
   enabled?: boolean
+  backups?: VodSourceBackup[]
 }
 
 export interface VodSourceExportItem {
@@ -10,6 +16,7 @@ export interface VodSourceExportItem {
   url: string
   referer?: string
   enabled: boolean
+  backups: VodSourceBackup[]
 }
 
 export type VodSourceOrigin = 'manual' | 'subscription'
@@ -19,6 +26,7 @@ export interface VodSourceSubscriptionItem {
   url: string
   referer?: string
   enabled?: boolean
+  backups?: VodSourceBackup[]
 }
 
 export interface VodSourceConfig {
@@ -27,6 +35,7 @@ export interface VodSourceConfig {
   url: string
   referer?: string
   enabled: boolean
+  backups: VodSourceBackup[]
   sort: number
   origin: VodSourceOrigin
   remark?: string
@@ -39,6 +48,7 @@ export interface VodSourceInput {
   url: string
   referer?: string
   enabled?: boolean
+  backups?: VodSourceBackup[]
 }
 
 export interface VodSourceImportPreview {

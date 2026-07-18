@@ -1,4 +1,5 @@
 import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
+import type { VodSourceBackup } from '@shared/types'
 
 export const settingsTable = sqliteTable('settings', {
   key: text('key').primaryKey(),
@@ -13,6 +14,7 @@ export const vodSourcesTable = sqliteTable(
     name: text('name').notNull(),
     url: text('url').notNull(),
     referer: text('referer'),
+    backups: text('backups', { mode: 'json' }).$type<VodSourceBackup[]>().notNull().default([]),
     enabled: integer('enabled', { mode: 'boolean' }).notNull(),
     sort: integer('sort').notNull(),
     origin: text('origin', { enum: ['manual', 'subscription'] })

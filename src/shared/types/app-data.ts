@@ -1,7 +1,7 @@
 import type { FavoriteItem } from './favorite'
 import type { LiveSourceOrigin } from './live'
 import type { RecentPlayItem } from './recent'
-import type { VodSourceOrigin } from './source'
+import type { VodSourceBackup, VodSourceOrigin } from './source'
 
 export interface AppDataSubscription {
   url: string
@@ -13,6 +13,7 @@ export interface AppDataVodSource {
   url: string
   referer?: string
   enabled: boolean
+  backups: VodSourceBackup[]
   origin: VodSourceOrigin
   sort?: number
 }

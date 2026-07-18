@@ -15,8 +15,19 @@ export {
 } from './alert-dialog'
 export { Badge, badgeVariants } from './badge'
 export { Button, buttonVariants } from './button'
+export { Checkbox } from './checkbox'
 export { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './card'
 export { Input } from './input'
+export {
+  Popover,
+  PopoverAnchor,
+  PopoverContent,
+  PopoverDescription,
+  PopoverHeader,
+  PopoverTitle,
+  PopoverTrigger,
+} from './popover'
+export { RadioGroup, RadioGroupItem } from './radio-group'
 export { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from './empty'
 export {
   Select,

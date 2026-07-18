@@ -117,9 +117,14 @@ export function useVodSourceDiscovery({
 
   useEffect(() => {
     if (!current || !isApiAvailable() || isRefreshingSources) return
-    if (locationState?.episodeUrl != null || (locationState?.initialTime ?? 0) > 0) return
+    const isRestoringRecentPlayback = locationState?.episodeUrl != null
     const hydrateKey = `${current.sourceId}:${current.vodId}:${currentTitleKey}`
-    if (getEpisodeCount(current) !== 1 || !currentTitleKey || autoHydratedTitleRef.current.has(hydrateKey)) return
+    if (
+      (!isRestoringRecentPlayback && getEpisodeCount(current) !== 1) ||
+      !currentTitleKey ||
+      autoHydratedTitleRef.current.has(hydrateKey)
+    )
+      return
     autoHydratedTitleRef.current.add(hydrateKey)
     void refreshSources()
   }, [

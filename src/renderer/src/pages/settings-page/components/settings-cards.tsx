@@ -125,12 +125,14 @@ export function SubscriptionSettingsCard({
   apiAvailable,
   isSyncing,
   subscriptionUrl,
+  subscriptionUpdatedAt,
   onChange,
   onSync,
 }: {
   apiAvailable: boolean
   isSyncing: boolean
   subscriptionUrl: string
+  subscriptionUpdatedAt?: number
   onChange: (url: string) => void
   onSync: () => void
 }): React.JSX.Element {
@@ -163,8 +165,23 @@ export function SubscriptionSettingsCard({
           {isSyncing ? '同步中' : '同步'}
         </Button>
       </div>
+      <div className="text-muted-foreground border-border border-t px-5 py-3 text-xs">
+        订阅更新于：{formatSubscriptionUpdatedAt(subscriptionUpdatedAt)}
+      </div>
     </SettingsCard>
   )
+}
+
+function formatSubscriptionUpdatedAt(updatedAt: number | undefined): string {
+  if (!updatedAt) return '订阅源未提供更新时间'
+  const date = new Date(updatedAt)
+  if (Number.isNaN(date.getTime())) return '订阅源更新时间无效'
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const hour = String(date.getHours()).padStart(2, '0')
+  const minute = String(date.getMinutes()).padStart(2, '0')
+  return `${year}-${month}-${day} ${hour}:${minute}`
 }
 
 export function DataManagementCard({

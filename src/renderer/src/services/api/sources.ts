@@ -22,6 +22,10 @@ export async function updateSource(id: string, input: VodSourceInput): Promise<V
   return requireRuntimeApi().sources.update(id, input)
 }
 
+export async function switchSourceBackup(id: string, backupUrl: string): Promise<VodSourceConfig> {
+  return requireRuntimeApi().sources.switchBackup(id, backupUrl)
+}
+
 export async function reorderSources(sourceIds: string[]): Promise<VodSourceConfig[]> {
   return requireRuntimeApi().sources.reorder(sourceIds)
 }

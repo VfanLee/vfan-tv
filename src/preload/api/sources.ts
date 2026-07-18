@@ -8,6 +8,7 @@ export function createSourcesApi(): Pick<AppApi, 'sources' | 'liveSources'> {
       list: () => ipcRenderer.invoke(IPC_CHANNELS.sources.list),
       create: (input) => ipcRenderer.invoke(IPC_CHANNELS.sources.create, input),
       update: (id, input) => ipcRenderer.invoke(IPC_CHANNELS.sources.update, id, input),
+      switchBackup: (id, backupUrl) => ipcRenderer.invoke(IPC_CHANNELS.sources.switchBackup, id, backupUrl),
       reorder: (sourceIds) => ipcRenderer.invoke(IPC_CHANNELS.sources.reorder, sourceIds),
       delete: (id) => ipcRenderer.invoke(IPC_CHANNELS.sources.delete, id),
       clear: () => ipcRenderer.invoke(IPC_CHANNELS.sources.clear),

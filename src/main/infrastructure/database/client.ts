@@ -21,6 +21,7 @@ const createSchemaSql = `
     name TEXT NOT NULL,
     url TEXT NOT NULL UNIQUE,
     referer TEXT,
+    backups TEXT NOT NULL DEFAULT '[]',
     enabled INTEGER NOT NULL,
     sort INTEGER NOT NULL,
     origin TEXT NOT NULL DEFAULT 'manual',
@@ -98,8 +99,16 @@ export function createDatabase(): AppDatabase {
   // WAL 允许读取与写入并行，降低播放记录等频繁小写入对 UI 的影响。
   sqlite.pragma('journal_mode = WAL')
   sqlite.exec(createSchemaSql)
+  ensureVodSourceBackupsColumn(sqlite)
 
   return drizzle(sqlite, { schema })
+}
+
+function ensureVodSourceBackupsColumn(sqlite: Database.Database): void {
+  const columns = sqlite.prepare("PRAGMA table_info('vod_sources')").all() as Array<{ name: string }>
+  if (!columns.some((column) => column.name === 'backups')) {
+    sqlite.exec("ALTER TABLE vod_sources ADD COLUMN backups TEXT NOT NULL DEFAULT '[]'")
+  }
 }
 
 export function resetAppDatabase(db: AppDatabase): void {

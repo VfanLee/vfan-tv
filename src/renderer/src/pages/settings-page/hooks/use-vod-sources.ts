@@ -8,6 +8,7 @@ import {
   importSourcesFromFile,
   listSources,
   reorderSources,
+  switchSourceBackup,
   updateSource,
 } from '@renderer/services/api'
 import { moveItem, toggleId } from '../utils'
@@ -33,6 +34,7 @@ export interface VodSourcesState {
   resetDrag: () => void
   setDraggedSourceId: (sourceId: string | undefined) => void
   setDragOverSourceId: (sourceId: string | undefined) => void
+  switchBackup: (source: VodSourceConfig, backupUrl: string) => Promise<void>
   toggle: (source: VodSourceConfig, enabled: boolean) => Promise<void>
   toggleAll: () => void
   toggleSelection: (sourceId: string) => void
@@ -127,6 +129,7 @@ export function useVodSources(apiAvailable: boolean): VodSourcesState {
         url: source.url,
         referer: source.referer,
         enabled,
+        backups: source.backups,
       })
     } catch (error) {
       setSources(previousSources)
@@ -153,6 +156,7 @@ export function useVodSources(apiAvailable: boolean): VodSourcesState {
           url: source.url,
           referer: source.referer,
           enabled,
+          backups: source.backups,
         }),
       ),
     )
@@ -169,6 +173,18 @@ export function useVodSources(apiAvailable: boolean): VodSourcesState {
   const resetDrag = (): void => {
     setDraggedSourceId(undefined)
     setDragOverSourceId(undefined)
+  }
+
+  const switchBackup = async (source: VodSourceConfig, backupUrl: string): Promise<void> => {
+    if (!apiAvailable) return
+    try {
+      const updated = await switchSourceBackup(source.id, backupUrl)
+      setSources((current) => current.map((item) => (item.id === updated.id ? updated : item)))
+      toast.success('已切换地址', { description: updated.url })
+    } catch (error) {
+      toast.error('切换地址失败', { description: error instanceof Error ? error.message : String(error) })
+      throw error
+    }
   }
 
   const drop = async (targetSourceId: string): Promise<void> => {
@@ -211,6 +227,7 @@ export function useVodSources(apiAvailable: boolean): VodSourcesState {
     resetDrag,
     setDraggedSourceId,
     setDragOverSourceId,
+    switchBackup,
     toggle,
     toggleAll,
     toggleSelection: (sourceId) => setSelectedSourceIds((current) => toggleId(current, sourceId)),

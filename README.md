@@ -70,6 +70,12 @@
       "url": "https://example.com/api.php/provide/vod",
       "referer": "https://example.com",
       "enabled": true,
+      "backups": [
+        {
+          "url": "https://backup.example.com/api.php/provide/vod",
+          "referer": "https://backup.example.com",
+        },
+      ],
     },
   ],
   // 直播源
@@ -89,6 +95,7 @@
 - `url`: 点播源 URL
 - `referer`: 点播源 Referer。可选，默认为空
 - `enabled`: 是否启用。可选，默认为 `false`
+- `backups`: 备用点播地址列表。可选，默认空数组；不能包含当前 `url`，切换时会与当前地址交换。
 
 示例：
 
@@ -98,7 +105,13 @@
     "name": "示例源",
     "url": "https://example.com/api.php/provide/vod",
     "referer": "https://example.com",
-    "enabled": true
+    "enabled": true,
+    "backups": [
+      {
+        "url": "https://backup.example.com/api.php/provide/vod",
+        "referer": "https://backup.example.com"
+      }
+    ]
   }
 ]
 ```

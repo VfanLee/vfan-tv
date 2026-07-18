@@ -23,6 +23,7 @@ export interface GeneralSettingsState {
   isSyncingSubscription: boolean
   speedResults: Record<GitHubProxyRouteId, GitHubProxySpeedState>
   subscriptionUrl: string
+  subscriptionUpdatedAt?: number
   testingRouteId?: GitHubProxyRouteId
   resetSubscription: () => void
   saveGitHubProxy: (routeId?: GitHubProxyRouteId) => Promise<void>
@@ -38,6 +39,7 @@ export function useGeneralSettings({
   refreshVodSources,
 }: GeneralSettingsOptions): GeneralSettingsState {
   const [subscriptionUrl, setSubscriptionUrl] = useState('')
+  const [subscriptionUpdatedAt, setSubscriptionUpdatedAt] = useState<number>()
   const [githubProxyRoute, setGithubProxyRoute] = useState<GitHubProxyRouteId>(DEFAULT_GITHUB_PROXY_ROUTE_ID)
   const [isSavingGitHubProxy, setIsSavingGitHubProxy] = useState(false)
   const [speedResults, setSpeedResults] = useState<Record<GitHubProxyRouteId, GitHubProxySpeedState>>(() =>
@@ -51,6 +53,7 @@ export function useGeneralSettings({
     void getSettings().then((settings) => {
       if (!active) return
       setSubscriptionUrl(settings?.subscriptionUrl ?? '')
+      setSubscriptionUpdatedAt(settings?.subscriptionUpdatedAt)
       setGithubProxyRoute(resolveVisibleGitHubProxyRoute(settings?.githubProxyRoute))
     })
     return () => {
@@ -65,9 +68,10 @@ export function useGeneralSettings({
     try {
       const result = await syncSourceSubscription(url)
       await updateSettings({ subscriptionUrl: url, subscriptionUpdatedAt: result.updatedAt })
+      setSubscriptionUpdatedAt(result.updatedAt)
       await Promise.all([refreshVodSources(), refreshLiveSources()])
       toast.success('订阅同步完成', {
-        description: `VOD 新增 ${result.vod.created}，更新 ${result.vod.updated}；直播新增 ${result.live.created}，更新 ${result.live.updated}`,
+        description: `已替换订阅源：VOD ${result.vod.created} 个，直播 ${result.live.created} 个；手动源已保留。`,
       })
     } catch (error) {
       toast.error('订阅同步失败', { description: error instanceof Error ? error.message : String(error) })
@@ -132,8 +136,12 @@ export function useGeneralSettings({
     isSyncingSubscription,
     speedResults,
     subscriptionUrl,
+    subscriptionUpdatedAt,
     testingRouteId,
-    resetSubscription: () => setSubscriptionUrl(''),
+    resetSubscription: () => {
+      setSubscriptionUrl('')
+      setSubscriptionUpdatedAt(undefined)
+    },
     saveGitHubProxy,
     setSubscriptionUrl,
     syncSubscription,

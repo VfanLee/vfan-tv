@@ -47,11 +47,7 @@ export class SourceService {
 
   create(input: VodSourceInput): VodSourceConfig {
     const data = vodSourceInputSchema.parse(input)
-    const existing = this.repository.findByUrl(data.url)
-
-    if (existing) {
-      throw new Error('源路径已存在')
-    }
+    this.assertEndpointUrlsAvailable(data.url, data.backups)
 
     const now = Date.now()
     return this.repository.upsert({
@@ -59,6 +55,7 @@ export class SourceService {
       name: data.name,
       url: data.url,
       referer: data.referer,
+      backups: data.backups,
       enabled: data.enabled,
       sort: this.repository.list().length,
       origin: 'manual',
@@ -75,18 +72,14 @@ export class SourceService {
       throw new Error('数据源不存在')
     }
 
-    // URL 是源的业务唯一键，编辑时允许保留当前记录自身的 URL。
-    const duplicated = this.repository.findByUrl(data.url)
-
-    if (duplicated && duplicated.id !== id) {
-      throw new Error('源路径已存在')
-    }
+    this.assertEndpointUrlsAvailable(data.url, data.backups, id)
 
     return this.repository.update({
       ...existing,
       name: data.name,
       url: data.url,
       referer: data.referer,
+      backups: data.backups,
       enabled: data.enabled,
       updatedAt: Date.now(),
     })
@@ -118,6 +111,25 @@ export class SourceService {
     this.repository.delete(id)
   }
 
+  switchBackup(id: string, backupUrl: string): VodSourceConfig {
+    const existing = this.repository.findById(id)
+    if (!existing) throw new Error('数据源不存在')
+
+    const backupIndex = existing.backups.findIndex((backup) => backup.url === backupUrl)
+    if (backupIndex === -1) throw new Error('备用地址不存在')
+
+    const next = existing.backups[backupIndex]
+    const backups = [...existing.backups]
+    backups[backupIndex] = { url: existing.url, referer: existing.referer }
+    return this.repository.update({
+      ...existing,
+      url: next.url,
+      referer: next.referer,
+      backups,
+      updatedAt: Date.now(),
+    })
+  }
+
   clear(): void {
     this.repository.clear()
   }
@@ -128,6 +140,7 @@ export class SourceService {
       url: source.url,
       referer: source.referer,
       enabled: source.enabled,
+      backups: source.backups,
     }))
   }
 
@@ -172,11 +185,13 @@ export class SourceService {
 
     for (const [index, item] of [...preview.newItems, ...preview.overwriteItems].entries()) {
       const existing = this.repository.findByUrl(item.url)
+      this.assertEndpointUrlsAvailable(item.url, item.backups ?? [], existing?.id)
       const source: VodSourceConfig = {
         id: existing?.id ?? randomUUID(),
         name: item.name,
         url: item.url,
         referer: item.referer,
+        backups: item.backups ?? [],
         enabled: item.enabled ?? false,
         sort: existing?.sort ?? nextSort + index,
         origin: 'manual',
@@ -202,54 +217,57 @@ export class SourceService {
   }
 
   syncSubscription(items: VodSourceSubscriptionItem[]): SourceSubscriptionSectionResult {
-    const uniqueItems = new Map(items.map((item) => [item.url, item]))
+    const uniqueItems = [...new Map(items.map((item) => [item.name, item])).values()]
     const now = Date.now()
-    let created = 0
-    let updated = 0
-    let unchanged = 0
 
-    for (const item of uniqueItems.values()) {
-      const existing = this.repository.findByUrl(item.url)
-      const enabled = item.enabled ?? false
+    this.assertSubscriptionEndpointUrlsAvailable(uniqueItems)
+    this.repository.clearSubscription()
 
-      if (!existing) {
-        this.repository.upsert({
-          id: randomUUID(),
-          name: item.name,
-          url: item.url,
-          referer: item.referer,
-          enabled,
-          sort: this.repository.list().length,
-          origin: 'subscription',
-          createdAt: now,
-          updatedAt: now,
-        })
-        created += 1
-        continue
-      }
-
-      const changed =
-        existing.name !== item.name ||
-        existing.referer !== item.referer ||
-        existing.enabled !== enabled ||
-        existing.origin !== 'subscription'
-
-      if (!changed) {
-        unchanged += 1
-        continue
-      }
-
-      this.repository.updateFromSubscription({
-        ...existing,
+    for (const item of uniqueItems) {
+      this.repository.upsert({
+        id: randomUUID(),
         name: item.name,
+        url: item.url,
         referer: item.referer,
-        enabled,
+        backups: item.backups ?? [],
+        enabled: item.enabled ?? false,
+        sort: this.repository.list().length,
         origin: 'subscription',
+        createdAt: now,
         updatedAt: now,
       })
-      updated += 1
     }
 
-    return { created, updated, unchanged }
+    return { created: uniqueItems.length, updated: 0, unchanged: 0 }
+  }
+
+  private assertEndpointUrlsAvailable(url: string, backups: Array<{ url: string }>, excludedSourceId?: string): void {
+    for (const endpointUrl of [url, ...backups.map((backup) => backup.url)]) {
+      const owner = this.repository
+        .list()
+        .find(
+          (source) =>
+            source.id !== excludedSourceId &&
+            (source.url === endpointUrl || source.backups.some((backup) => backup.url === endpointUrl)),
+        )
+      if (owner) throw new Error(`源路径已存在于「${owner.name}」`)
+    }
+  }
+
+  private assertSubscriptionEndpointUrlsAvailable(items: VodSourceSubscriptionItem[]): void {
+    const manualSources = this.repository.list().filter((source) => source.origin === 'manual')
+    const endpointUrls = new Set<string>()
+
+    for (const item of items) {
+      for (const endpointUrl of [item.url, ...(item.backups ?? []).map((backup) => backup.url)]) {
+        if (endpointUrls.has(endpointUrl)) throw new Error(`订阅中存在重复的源地址：${endpointUrl}`)
+        endpointUrls.add(endpointUrl)
+
+        const owner = manualSources.find(
+          (source) => source.url === endpointUrl || source.backups.some((backup) => backup.url === endpointUrl),
+        )
+        if (owner) throw new Error(`订阅地址已存在于手动源「${owner.name}」`)
+      }
+    }
   }
 }

@@ -195,48 +195,29 @@ export class LiveSourceService {
   }
 
   syncSubscription(items: LiveSourceImportItem[]): SourceSubscriptionSectionResult {
-    const uniqueItems = new Map(items.map((item) => [item.url, item]))
+    const uniqueItems = [...new Map(items.map((item) => [item.url, item])).values()]
     const now = Date.now()
-    let created = 0
-    let updated = 0
-    let unchanged = 0
 
-    for (const item of uniqueItems.values()) {
-      const existing = this.repository.findByUrl(item.url)
-      const enabled = item.enabled ?? true
-
-      if (!existing) {
-        this.repository.upsert({
-          id: randomUUID(),
-          name: item.name,
-          url: item.url,
-          enabled,
-          sort: this.repository.list().length,
-          origin: 'subscription',
-          createdAt: now,
-          updatedAt: now,
-        })
-        created += 1
-        continue
-      }
-
-      const changed = existing.name !== item.name || existing.enabled !== enabled || existing.origin !== 'subscription'
-
-      if (!changed) {
-        unchanged += 1
-        continue
-      }
-
-      this.repository.updateFromSubscription({
-        ...existing,
-        name: item.name,
-        enabled,
-        origin: 'subscription',
-        updatedAt: now,
-      })
-      updated += 1
+    for (const item of uniqueItems) {
+      const owner = this.repository.list().find((source) => source.origin === 'manual' && source.url === item.url)
+      if (owner) throw new Error(`订阅地址已存在于手动直播源「${owner.name}」`)
     }
 
-    return { created, updated, unchanged }
+    this.repository.clearSubscription()
+
+    for (const item of uniqueItems) {
+      this.repository.upsert({
+        id: randomUUID(),
+        name: item.name,
+        url: item.url,
+        enabled: item.enabled ?? true,
+        sort: this.repository.list().length,
+        origin: 'subscription',
+        createdAt: now,
+        updatedAt: now,
+      })
+    }
+
+    return { created: uniqueItems.length, updated: 0, unchanged: 0 }
   }
 }

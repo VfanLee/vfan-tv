@@ -1,8 +1,12 @@
-import { Check, Download, GripVertical, Pencil, Plus, Trash2, Upload } from 'lucide-react'
+import { ChevronDown, Download, GripVertical, Pencil, Plus, Trash2, Upload } from 'lucide-react'
+import { useState } from 'react'
 import type { LiveSourceConfig, VodSourceConfig } from '@shared/types'
 import { SettingsCard } from '@renderer/components'
 import { Badge } from '@/ui/badge'
 import { Button } from '@/ui/button'
+import { Checkbox } from '@/ui/checkbox'
+import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from '@/ui/popover'
+import { RadioGroup, RadioGroupItem } from '@/ui/radio-group'
 import { Switch } from '@/ui/switch'
 import { cn } from '@/utils'
 
@@ -36,6 +40,7 @@ interface SourceTableCardProps<T extends SourceConfig> {
   onExport: () => void
   onImport: () => void
   onToggle: (source: T, enabled: boolean) => void
+  onSwitchBackup?: (source: VodSourceConfig, backupUrl: string) => Promise<void>
   onToggleAll: () => void
   onToggleSelection: (sourceId: string) => void
 }
@@ -68,6 +73,7 @@ export function SourceTableCard<T extends SourceConfig>({
   onExport,
   onImport,
   onToggle,
+  onSwitchBackup,
   onToggleAll,
   onToggleSelection,
 }: SourceTableCardProps<T>): React.JSX.Element {
@@ -129,7 +135,11 @@ export function SourceTableCard<T extends SourceConfig>({
                 <StatusCell checked={source.enabled} onCheckedChange={(checked) => onToggle(source, checked)} />
                 <OriginCell origin={source.origin} />
                 <NameCell name={source.name} />
-                <div className="text-muted-foreground min-w-0 truncate font-mono text-xs">{source.url}</div>
+                {isVodSource(source) && onSwitchBackup ? (
+                  <VodUrlCell source={source} onManage={() => onEdit(source)} onSwitchBackup={onSwitchBackup} />
+                ) : (
+                  <div className="text-muted-foreground min-w-0 truncate font-mono text-xs">{source.url}</div>
+                )}
                 <ActionCell onDelete={() => onDelete(source)} onEdit={() => onEdit(source)} />
               </div>
             ))}
@@ -140,6 +150,122 @@ export function SourceTableCard<T extends SourceConfig>({
       )}
     </SettingsCard>
   )
+}
+
+function VodUrlCell({
+  source,
+  onManage,
+  onSwitchBackup,
+}: {
+  source: VodSourceConfig
+  onManage: () => void
+  onSwitchBackup: (source: VodSourceConfig, backupUrl: string) => Promise<void>
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const [switchingUrl, setSwitchingUrl] = useState<string>()
+
+  const switchTo = async (backupUrl: string): Promise<void> => {
+    setSwitchingUrl(backupUrl)
+    try {
+      await onSwitchBackup(source, backupUrl)
+      setOpen(false)
+    } finally {
+      setSwitchingUrl(undefined)
+    }
+  }
+
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <div className="text-muted-foreground min-w-0 truncate font-mono text-xs" title={source.url}>
+        {source.url}
+      </div>
+      {source.backups.length > 0 ? (
+        <Popover open={open} onOpenChange={setOpen}>
+          <PopoverTrigger asChild>
+            <Button className="shrink-0" size="xs" title="切换备用地址" type="button" variant="outline">
+              {source.backups.length} 个备用
+              <ChevronDown data-icon="inline-end" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent align="start" className="w-[min(30rem,calc(100vw-5rem))] gap-0 p-2">
+            <PopoverHeader className="px-2 py-2">
+              <PopoverTitle className="text-sm font-semibold">切换地址</PopoverTitle>
+              <PopoverDescription className="mt-0.5 text-xs">选择备用地址后立即切换。</PopoverDescription>
+            </PopoverHeader>
+            <RadioGroup
+              className="border-border border-y py-1"
+              value={source.url}
+              onValueChange={(url) => {
+                if (url !== source.url) void switchTo(url)
+              }}
+            >
+              <AddressRadioItem
+                current
+                endpoint={{ url: source.url, referer: source.referer }}
+                itemId={`${source.id}-current`}
+              />
+              {source.backups.map((backup, index) => (
+                <AddressRadioItem
+                  endpoint={backup}
+                  itemId={`${source.id}-backup-${index}`}
+                  key={backup.url}
+                  loading={switchingUrl === backup.url}
+                />
+              ))}
+            </RadioGroup>
+            <Button
+              className="mt-1 w-full justify-start"
+              size="sm"
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setOpen(false)
+                onManage()
+              }}
+            >
+              管理全部地址
+            </Button>
+          </PopoverContent>
+        </Popover>
+      ) : null}
+    </div>
+  )
+}
+
+function AddressRadioItem({
+  current = false,
+  endpoint,
+  itemId,
+  loading = false,
+}: {
+  current?: boolean
+  endpoint: { url: string; referer?: string }
+  itemId: string
+  loading?: boolean
+}): React.JSX.Element {
+  return (
+    <label
+      className="hover:bg-muted has-[[data-slot=radio-group-item]:focus-visible]:ring-ring flex cursor-pointer items-start gap-2 rounded-lg px-2 py-2 has-[[data-slot=radio-group-item]:disabled]:cursor-not-allowed has-[[data-slot=radio-group-item]:disabled]:opacity-60 has-[[data-slot=radio-group-item]:focus-visible]:ring-2"
+      htmlFor={itemId}
+    >
+      <RadioGroupItem disabled={loading} id={itemId} value={endpoint.url} />
+      <span className="min-w-0 flex-1">
+        <span className="block truncate font-mono text-xs">{endpoint.url}</span>
+        {endpoint.referer ? (
+          <span className="text-muted-foreground mt-1 block truncate text-xs">Referer: {endpoint.referer}</span>
+        ) : null}
+      </span>
+      {current ? (
+        <Badge variant="secondary">正在使用</Badge>
+      ) : loading ? (
+        <span className="text-muted-foreground text-xs">切换中</span>
+      ) : null}
+    </label>
+  )
+}
+
+function isVodSource(source: SourceConfig): source is VodSourceConfig {
+  return 'backups' in source
 }
 
 function SourceToolbar({
@@ -263,18 +389,7 @@ function SelectionCheckbox({
   label: string
   onChange: () => void
 }): React.JSX.Element {
-  return (
-    <button
-      aria-checked={checked}
-      aria-label={label}
-      className="border-input bg-background text-primary focus-visible:ring-ring flex size-5 items-center justify-center rounded-xl border outline-none focus-visible:ring-2"
-      role="checkbox"
-      type="button"
-      onClick={onChange}
-    >
-      {checked ? <Check size={14} strokeWidth={3} /> : null}
-    </button>
-  )
+  return <Checkbox aria-label={label} checked={checked} onCheckedChange={() => onChange()} />
 }
 
 function StatusCell({

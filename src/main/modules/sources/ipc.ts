@@ -19,6 +19,11 @@ export function registerSourcesIpc(context: ApplicationContext): void {
   ipcMain.handle(IPC_CHANNELS.sources.update, (_event, id: string, input: Parameters<AppApi['sources']['update']>[1]) =>
     source.update(id, input),
   )
+  ipcMain.handle(
+    IPC_CHANNELS.sources.switchBackup,
+    (_event, id: string, backupUrl: Parameters<AppApi['sources']['switchBackup']>[1]) =>
+      source.switchBackup(id, backupUrl),
+  )
   ipcMain.handle(IPC_CHANNELS.sources.reorder, (_event, ids: Parameters<AppApi['sources']['reorder']>[0]) =>
     source.reorder(ids),
   )

@@ -1,3 +1,4 @@
+import { Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 import type { LiveSourceInput, VodSourceInput } from '@shared/types'
@@ -7,7 +8,7 @@ import { Switch } from '@/ui/switch'
 import { createLiveSource, createSource, isApiAvailable, updateLiveSource, updateSource } from '@renderer/services/api'
 import type { LiveSourceDialogState, SourceDialogState } from '../types'
 
-const emptySourceInput: VodSourceInput = { name: '', url: '', referer: undefined, enabled: false }
+const emptySourceInput: VodSourceInput = { name: '', url: '', referer: undefined, enabled: false, backups: [] }
 const emptyLiveSourceInput: LiveSourceInput = { name: '', url: '', enabled: true }
 
 export function SourceDialog({
@@ -26,6 +27,7 @@ export function SourceDialog({
           url: dialog.source.url,
           referer: dialog.source.referer,
           enabled: dialog.source.enabled,
+          backups: dialog.source.backups,
         }
       : emptySourceInput,
   )
@@ -58,7 +60,7 @@ export function SourceDialog({
         />
       </label>
       <label className="block">
-        <span className="text-foreground text-sm font-medium">URL</span>
+        <span className="text-foreground text-sm font-medium">当前地址 URL</span>
         <Input
           className="mt-2 font-mono text-xs"
           value={form.url}
@@ -74,15 +76,86 @@ export function SourceDialog({
           onChange={(event) => setForm((current) => ({ ...current, referer: event.target.value || undefined }))}
         />
       </label>
-      <label className="border-border bg-muted flex items-center justify-between gap-4 rounded-xl border px-3 py-3">
-        <span>
-          <span className="text-foreground block text-sm font-medium">是否开启</span>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-foreground text-sm font-medium">备用地址</div>
+            <div className="text-muted-foreground text-xs">切换后会自动与当前地址交换。</div>
+          </div>
+          <Button
+            size="sm"
+            type="button"
+            variant="outline"
+            onClick={() =>
+              setForm((current) => ({
+                ...current,
+                backups: [...(current.backups ?? []), { url: '', referer: undefined }],
+              }))
+            }
+          >
+            <Plus data-icon="inline-start" />
+            添加备用地址
+          </Button>
+        </div>
+        {(form.backups ?? []).map((backup, index) => (
+          <div
+            className="border-border bg-muted/40 grid grid-cols-[1fr_1fr_auto] gap-2 rounded-xl border p-3"
+            key={`${backup.url}-${index}`}
+          >
+            <Input
+              aria-label={`备用地址 ${index + 1} URL`}
+              className="font-mono text-xs"
+              placeholder="https://example.com/api.php/provide/vod"
+              value={backup.url}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  backups: (current.backups ?? []).map((item, itemIndex) =>
+                    itemIndex === index ? { ...item, url: event.target.value } : item,
+                  ),
+                }))
+              }
+            />
+            <Input
+              aria-label={`备用地址 ${index + 1} Referer`}
+              className="font-mono text-xs"
+              placeholder="Referer（可选）"
+              value={backup.referer ?? ''}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  backups: (current.backups ?? []).map((item, itemIndex) =>
+                    itemIndex === index ? { ...item, referer: event.target.value || undefined } : item,
+                  ),
+                }))
+              }
+            />
+            <Button
+              aria-label={`删除备用地址 ${index + 1}`}
+              size="icon"
+              type="button"
+              variant="destructive"
+              onClick={() =>
+                setForm((current) => ({
+                  ...current,
+                  backups: (current.backups ?? []).filter((_item, itemIndex) => itemIndex !== index),
+                }))
+              }
+            >
+              <Trash2 />
+            </Button>
+          </div>
+        ))}
+      </div>
+      <label className="block">
+        <span className="text-foreground text-sm font-medium">是否开启</span>
+        <span className="mt-1 flex items-center justify-between gap-4">
           <span className="text-muted-foreground text-xs">关闭后不会参与聚合搜索。</span>
+          <Switch
+            checked={form.enabled ?? false}
+            onCheckedChange={(checked) => setForm((current) => ({ ...current, enabled: checked }))}
+          />
         </span>
-        <Switch
-          checked={form.enabled ?? false}
-          onCheckedChange={(checked) => setForm((current) => ({ ...current, enabled: checked }))}
-        />
       </label>
     </DialogSurface>
   )
