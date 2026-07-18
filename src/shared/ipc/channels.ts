@@ -5,6 +5,7 @@ export const IPC_CHANNELS = {
     create: 'sources:create',
     update: 'sources:update',
     switchBackup: 'sources:switch-backup',
+    testSpeed: 'sources:test-speed',
     reorder: 'sources:reorder',
     delete: 'sources:delete',
     clear: 'sources:clear',

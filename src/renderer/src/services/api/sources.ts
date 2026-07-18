@@ -6,6 +6,7 @@ import type {
   VodSourceImportPreview,
   VodSourceImportResult,
   VodSourceInput,
+  VodSourceSpeedResult,
 } from '@shared/types'
 import { getRuntimeApi, requireRuntimeApi } from './client'
 
@@ -24,6 +25,10 @@ export async function updateSource(id: string, input: VodSourceInput): Promise<V
 
 export async function switchSourceBackup(id: string, backupUrl: string): Promise<VodSourceConfig> {
   return requireRuntimeApi().sources.switchBackup(id, backupUrl)
+}
+
+export async function testSourceSpeed(id: string): Promise<VodSourceSpeedResult> {
+  return requireRuntimeApi().sources.testSpeed(id)
 }
 
 export async function reorderSources(sourceIds: string[]): Promise<VodSourceConfig[]> {

@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto'
+import axios from 'axios'
 import { vodSourceImportItemSchema, vodSourceInputSchema } from '@shared/schemas'
 import type {
   SourceSubscriptionSectionResult,
@@ -9,7 +10,9 @@ import type {
   VodSourceImportPreview,
   VodSourceImportResult,
   VodSourceSubscriptionItem,
+  VodSourceSpeedResult,
 } from '@shared/types'
+import type { HttpClient } from '../../infrastructure/http/http-client'
 import type { VodSourceRepository } from './vod-source.repository'
 
 // 点播源领域服务：将外部导入数据校验为可持久化的源配置，并维护排序与唯一性约束。
@@ -39,7 +42,10 @@ function toImportItems(payload: unknown): {
 }
 
 export class SourceService {
-  constructor(private readonly repository: VodSourceRepository) {}
+  constructor(
+    private readonly repository: VodSourceRepository,
+    private readonly httpClient: HttpClient,
+  ) {}
 
   list(): VodSourceConfig[] {
     return this.repository.list()
@@ -128,6 +134,22 @@ export class SourceService {
       backups,
       updatedAt: Date.now(),
     })
+  }
+
+  async testSpeed(id: string): Promise<VodSourceSpeedResult> {
+    const source = this.repository.findById(id)
+    if (!source) return { status: 'error', errorMessage: '点播源不存在' }
+
+    try {
+      const startedAt = performance.now()
+      await this.httpClient.get(buildVodSourceProbeUrl(source.url), {
+        headers: source.referer ? { Referer: source.referer } : undefined,
+        timeout: 5_000,
+      })
+      return { status: 'success', elapsedMs: Math.max(1, Math.round(performance.now() - startedAt)) }
+    } catch (error) {
+      return { status: 'error', errorMessage: getSpeedTestErrorMessage(error) }
+    }
   }
 
   clear(): void {
@@ -270,4 +292,24 @@ export class SourceService {
       }
     }
   }
+}
+
+/** 构造最小化的 CMS 列表请求，用于测量点播源 API 响应速度。 */
+function buildVodSourceProbeUrl(sourceUrl: string): string {
+  const url = new URL(sourceUrl)
+  if (!['http:', 'https:'].includes(url.protocol)) throw new Error('仅支持 HTTP 或 HTTPS 地址')
+  url.searchParams.set('ac', 'list')
+  url.searchParams.set('pg', '1')
+  url.searchParams.set('limit', '1')
+  return url.toString()
+}
+
+/** 将测速异常转换为适合在设置页展示的简短原因。 */
+function getSpeedTestErrorMessage(error: unknown): string {
+  if (axios.isAxiosError(error)) {
+    if (error.code === 'ECONNABORTED') return '请求超时'
+    if (error.response) return `HTTP ${error.response.status}`
+    return error.message || '连接失败'
+  }
+  return error instanceof Error ? error.message : '请求失败'
 }

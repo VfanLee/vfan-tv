@@ -738,7 +738,7 @@ export function BasicPlayer({
             isTheaterMode ? 'inset-y-0' : 'top-14 bottom-16',
           )}
         >
-          {isResolvingSource ? '正在识别播放源…' : '请选择一个可播放剧集'}
+          {isResolvingSource ? '正在识别播放源…' : '请先选择要播放的内容'}
         </div>
       ) : null}
       {settingsPortalContainer ? createPortal(displaySettingsOverlay, settingsPortalContainer) : displaySettingsOverlay}

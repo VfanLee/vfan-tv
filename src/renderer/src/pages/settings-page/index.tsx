@@ -78,29 +78,28 @@ export function SettingsPage(): React.JSX.Element {
           allSelected={vod.allSelected}
           apiAvailable={apiAvailable}
           description="管理应用的点播源。"
-          draggedSourceId={vod.draggedSourceId}
-          dragOverSourceId={vod.dragOverSourceId}
           emptyText="暂无数据"
           enabledCount={vod.enabledCount}
           heightClassName="h-[460px]"
           isBatchUpdating={vod.isBatchUpdating}
           isClearing={vod.isClearing}
           isReordering={vod.isReordering}
+          isTestingAll={vod.isTestingAll}
           selectedSourceIds={vod.selectedSourceIds}
           sources={vod.sources}
+          speedResults={vod.speedResults}
           title="点播源"
           onAdd={() => setDialog({ mode: 'create' })}
           onBatchToggle={(enabled) => void vod.batchToggle(enabled)}
           onClear={() => setConfirmState({ type: 'clearSources' })}
           onDelete={(source) => setConfirmState({ type: 'deleteSource', source })}
-          onDragEnd={vod.resetDrag}
-          onDragOver={vod.setDragOverSourceId}
-          onDragStart={vod.setDraggedSourceId}
-          onDrop={(sourceId) => void vod.drop(sourceId)}
           onEdit={(source) => setDialog({ mode: 'edit', source })}
           onExport={() => void vod.exportItems()}
           onImport={() => void vod.importItems()}
+          onMoveToEdge={(sourceId, edge) => void vod.moveToEdge(sourceId, edge)}
           onSwitchBackup={(source, backupUrl) => vod.switchBackup(source, backupUrl)}
+          onTestAll={() => void vod.testAll()}
+          onTestSingle={(sourceId) => void vod.testSingle(sourceId)}
           onToggle={(source, enabled) => void vod.toggle(source, enabled)}
           onToggleAll={vod.toggleAll}
           onToggleSelection={vod.toggleSelection}
@@ -111,8 +110,6 @@ export function SettingsPage(): React.JSX.Element {
           allSelected={live.allSelected}
           apiAvailable={apiAvailable}
           description="管理应用的直播源。"
-          draggedSourceId={live.draggedSourceId}
-          dragOverSourceId={live.dragOverSourceId}
           emptyText="暂无直播源"
           enabledCount={live.enabledCount}
           heightClassName="h-[360px]"
@@ -126,13 +123,10 @@ export function SettingsPage(): React.JSX.Element {
           onBatchToggle={(enabled) => void live.batchToggle(enabled)}
           onClear={() => setConfirmState({ type: 'clearLiveSources' })}
           onDelete={(source) => setConfirmState({ type: 'deleteLiveSource', source })}
-          onDragEnd={live.resetDrag}
-          onDragOver={live.setDragOverSourceId}
-          onDragStart={live.setDraggedSourceId}
-          onDrop={(sourceId) => void live.drop(sourceId)}
           onEdit={(source) => setLiveSourceDialog({ mode: 'edit', source })}
           onExport={() => void live.exportItems()}
           onImport={() => void live.importItems()}
+          onMoveToEdge={(sourceId, edge) => void live.moveToEdge(sourceId, edge)}
           onToggle={(source, enabled) => void live.toggle(source, enabled)}
           onToggleAll={live.toggleAll}
           onToggleSelection={live.toggleSelection}

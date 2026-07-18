@@ -6,6 +6,7 @@ import type {
   VodSourceImportPreview,
   VodSourceImportResult,
   VodSourceInput,
+  VodSourceSpeedResult,
 } from './source'
 import type { AppDataClientPayload, AppDataExportResult, AppDataImportResult } from './app-data'
 import type { AppSettings, GitHubProxyRouteId, GitHubProxyTestResult } from './settings'
@@ -68,6 +69,7 @@ export interface AppApi {
     create: (input: VodSourceInput) => Promise<VodSourceConfig>
     update: (id: string, input: VodSourceInput) => Promise<VodSourceConfig>
     switchBackup: (id: string, backupUrl: string) => Promise<VodSourceConfig>
+    testSpeed: (id: string) => Promise<VodSourceSpeedResult>
     reorder: (sourceIds: string[]) => Promise<VodSourceConfig[]>
     delete: (id: string) => Promise<void>
     clear: () => Promise<void>

@@ -14,17 +14,21 @@ export function toggleId(current: Set<string>, id: string): Set<string> {
   return next
 }
 
-export function moveItem<T extends { id: string }>(items: T[], activeId: string, targetId: string): T[] | undefined {
-  const fromIndex = items.findIndex((item) => item.id === activeId)
-  const toIndex = items.findIndex((item) => item.id === targetId)
-
-  if (fromIndex < 0 || toIndex < 0) return undefined
+export function moveItemToEdge<T extends { id: string }>(
+  items: T[],
+  id: string,
+  edge: 'start' | 'end',
+): T[] | undefined {
+  const index = items.findIndex((item) => item.id === id)
+  if (index < 0 || (edge === 'start' && index === 0) || (edge === 'end' && index === items.length - 1)) {
+    return undefined
+  }
 
   const nextItems = [...items]
-  const [movedItem] = nextItems.splice(fromIndex, 1)
-  if (!movedItem) return undefined
-
-  nextItems.splice(toIndex, 0, movedItem)
+  const [item] = nextItems.splice(index, 1)
+  if (!item) return undefined
+  if (edge === 'start') nextItems.unshift(item)
+  else nextItems.push(item)
   return nextItems
 }
 

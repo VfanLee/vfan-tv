@@ -51,6 +51,8 @@ export interface VodSourceInput {
   backups?: VodSourceBackup[]
 }
 
+export type VodSourceSpeedResult = { status: 'success'; elapsedMs: number } | { status: 'error'; errorMessage: string }
+
 export interface VodSourceImportPreview {
   validItems: VodSourceImportItem[]
   invalidItems: Array<{

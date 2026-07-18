@@ -10,12 +10,10 @@ import {
   reorderLiveSources,
   updateLiveSource,
 } from '@renderer/services/api'
-import { moveItem, toggleId } from '../utils'
+import { moveItemToEdge, toggleId } from '../utils'
 
 export interface LiveSourcesState {
   allSelected: boolean
-  draggedSourceId?: string
-  dragOverSourceId?: string
   enabledCount: number
   isBatchUpdating: boolean
   isClearing: boolean
@@ -26,13 +24,10 @@ export interface LiveSourcesState {
   batchToggle: (enabled: boolean) => Promise<void>
   clearAll: () => Promise<void>
   deleteItem: (source: LiveSourceConfig) => Promise<void>
-  drop: (targetSourceId: string) => Promise<void>
   exportItems: () => Promise<void>
   importItems: () => Promise<void>
+  moveToEdge: (sourceId: string, edge: 'start' | 'end') => Promise<void>
   refresh: () => Promise<void>
-  resetDrag: () => void
-  setDraggedSourceId: (sourceId: string | undefined) => void
-  setDragOverSourceId: (sourceId: string | undefined) => void
   toggle: (source: LiveSourceConfig, enabled: boolean) => Promise<void>
   toggleAll: () => void
   toggleSelection: (sourceId: string) => void
@@ -43,8 +38,6 @@ export function useLiveSources(apiAvailable: boolean): LiveSourcesState {
   const [selectedSourceIds, setSelectedSourceIds] = useState<Set<string>>(() => new Set())
   const [isBatchUpdating, setIsBatchUpdating] = useState(false)
   const [isClearing, setIsClearing] = useState(false)
-  const [draggedSourceId, setDraggedSourceId] = useState<string>()
-  const [dragOverSourceId, setDragOverSourceId] = useState<string>()
   const [isReordering, setIsReordering] = useState(false)
 
   const applySources = useCallback((nextSources: LiveSourceConfig[]): void => {
@@ -147,23 +140,14 @@ export function useLiveSources(apiAvailable: boolean): LiveSourcesState {
     const failedCount = results.filter((result) => result.status === 'rejected').length
     await refresh()
     setIsBatchUpdating(false)
-    if (failedCount > 0) {
+    if (failedCount > 0)
       toast.error('部分状态更新失败', { description: `${failedCount} 个直播源未能更新，请稍后重试。` })
-    } else {
-      toast.success(`已${enabled ? '开启' : '关闭'} ${selectedSources.length} 个直播源`)
-    }
+    else toast.success(`已${enabled ? '开启' : '关闭'} ${selectedSources.length} 个直播源`)
   }
 
-  const resetDrag = (): void => {
-    setDraggedSourceId(undefined)
-    setDragOverSourceId(undefined)
-  }
-
-  const drop = async (targetSourceId: string): Promise<void> => {
-    const activeSourceId = draggedSourceId
-    resetDrag()
-    if (!activeSourceId || activeSourceId === targetSourceId) return
-    const nextSources = moveItem(sources, activeSourceId, targetSourceId)
+  const moveToEdge = async (sourceId: string, edge: 'start' | 'end'): Promise<void> => {
+    if (!apiAvailable || isReordering) return
+    const nextSources = moveItemToEdge(sources, sourceId, edge)
     if (!nextSources) return
     const previousSources = sources
     setSources(nextSources)
@@ -180,8 +164,6 @@ export function useLiveSources(apiAvailable: boolean): LiveSourcesState {
 
   return {
     allSelected,
-    draggedSourceId,
-    dragOverSourceId,
     enabledCount: sources.filter((source) => source.enabled).length,
     isBatchUpdating,
     isClearing,
@@ -192,13 +174,10 @@ export function useLiveSources(apiAvailable: boolean): LiveSourcesState {
     batchToggle,
     clearAll,
     deleteItem,
-    drop,
     exportItems,
     importItems,
+    moveToEdge,
     refresh,
-    resetDrag,
-    setDraggedSourceId,
-    setDragOverSourceId,
     toggle,
     toggleAll,
     toggleSelection: (sourceId) => setSelectedSourceIds((current) => toggleId(current, sourceId)),

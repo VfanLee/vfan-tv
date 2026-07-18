@@ -9,32 +9,35 @@ import {
   listSources,
   reorderSources,
   switchSourceBackup,
+  testSourceSpeed,
   updateSource,
 } from '@renderer/services/api'
-import { moveItem, toggleId } from '../utils'
+import type { VodSourceSpeedState } from '../types'
+import { moveItemToEdge, toggleId } from '../utils'
+
+const SPEED_TEST_CONCURRENCY = 6
 
 export interface VodSourcesState {
   allSelected: boolean
-  draggedSourceId?: string
-  dragOverSourceId?: string
   enabledCount: number
   isBatchUpdating: boolean
   isClearing: boolean
   isReordering: boolean
+  isTestingAll: boolean
   selectedSourceIds: Set<string>
   sources: VodSourceConfig[]
+  speedResults: Record<string, VodSourceSpeedState>
   applySources: (sources: VodSourceConfig[]) => void
   batchToggle: (enabled: boolean) => Promise<void>
   clearAll: () => Promise<void>
   deleteItem: (source: VodSourceConfig) => Promise<void>
-  drop: (targetSourceId: string) => Promise<void>
   exportItems: () => Promise<void>
   importItems: () => Promise<void>
+  moveToEdge: (sourceId: string, edge: 'start' | 'end') => Promise<void>
   refresh: () => Promise<void>
-  resetDrag: () => void
-  setDraggedSourceId: (sourceId: string | undefined) => void
-  setDragOverSourceId: (sourceId: string | undefined) => void
   switchBackup: (source: VodSourceConfig, backupUrl: string) => Promise<void>
+  testAll: () => Promise<void>
+  testSingle: (sourceId: string) => Promise<void>
   toggle: (source: VodSourceConfig, enabled: boolean) => Promise<void>
   toggleAll: () => void
   toggleSelection: (sourceId: string) => void
@@ -45,14 +48,15 @@ export function useVodSources(apiAvailable: boolean): VodSourcesState {
   const [selectedSourceIds, setSelectedSourceIds] = useState<Set<string>>(() => new Set())
   const [isBatchUpdating, setIsBatchUpdating] = useState(false)
   const [isClearing, setIsClearing] = useState(false)
-  const [draggedSourceId, setDraggedSourceId] = useState<string>()
-  const [dragOverSourceId, setDragOverSourceId] = useState<string>()
   const [isReordering, setIsReordering] = useState(false)
+  const [isTestingAll, setIsTestingAll] = useState(false)
+  const [speedResults, setSpeedResults] = useState<Record<string, VodSourceSpeedState>>({})
 
   const applySources = useCallback((nextSources: VodSourceConfig[]): void => {
     const sourceIds = new Set(nextSources.map((source) => source.id))
     setSources(nextSources)
     setSelectedSourceIds((current) => new Set([...current].filter((id) => sourceIds.has(id))))
+    setSpeedResults((current) => Object.fromEntries(Object.entries(current).filter(([id]) => sourceIds.has(id))))
   }, [])
 
   const refresh = useCallback(async (): Promise<void> => {
@@ -163,36 +167,13 @@ export function useVodSources(apiAvailable: boolean): VodSourcesState {
     const failedCount = results.filter((result) => result.status === 'rejected').length
     await refresh()
     setIsBatchUpdating(false)
-    if (failedCount > 0) {
+    if (failedCount > 0)
       toast.error('部分状态更新失败', { description: `${failedCount} 个点播源未能更新，请稍后重试。` })
-    } else {
-      toast.success(`已${enabled ? '开启' : '关闭'} ${selectedSources.length} 个点播源`)
-    }
+    else toast.success(`已${enabled ? '开启' : '关闭'} ${selectedSources.length} 个点播源`)
   }
 
-  const resetDrag = (): void => {
-    setDraggedSourceId(undefined)
-    setDragOverSourceId(undefined)
-  }
-
-  const switchBackup = async (source: VodSourceConfig, backupUrl: string): Promise<void> => {
-    if (!apiAvailable) return
-    try {
-      const updated = await switchSourceBackup(source.id, backupUrl)
-      setSources((current) => current.map((item) => (item.id === updated.id ? updated : item)))
-      toast.success('已切换地址', { description: updated.url })
-    } catch (error) {
-      toast.error('切换地址失败', { description: error instanceof Error ? error.message : String(error) })
-      throw error
-    }
-  }
-
-  const drop = async (targetSourceId: string): Promise<void> => {
-    const activeSourceId = draggedSourceId
-    resetDrag()
-    if (!activeSourceId || activeSourceId === targetSourceId) return
-    const nextSources = moveItem(sources, activeSourceId, targetSourceId)
-    if (!nextSources) return
+  const reorder = async (nextSources: VodSourceConfig[]): Promise<void> => {
+    if (!apiAvailable || isReordering) return
     const previousSources = sources
     setSources(nextSources)
     setIsReordering(true)
@@ -206,28 +187,81 @@ export function useVodSources(apiAvailable: boolean): VodSourcesState {
     }
   }
 
+  const moveToEdge = async (sourceId: string, edge: 'start' | 'end'): Promise<void> => {
+    const nextSources = moveItemToEdge(sources, sourceId, edge)
+    if (nextSources) await reorder(nextSources)
+  }
+
+  const switchBackup = async (source: VodSourceConfig, backupUrl: string): Promise<void> => {
+    if (!apiAvailable) return
+    try {
+      const updated = await switchSourceBackup(source.id, backupUrl)
+      setSources((current) => current.map((item) => (item.id === updated.id ? updated : item)))
+      setSpeedResults((current) => {
+        const next = { ...current }
+        delete next[source.id]
+        return next
+      })
+      toast.success('已切换地址', { description: updated.url })
+    } catch (error) {
+      toast.error('切换地址失败', { description: error instanceof Error ? error.message : String(error) })
+      throw error
+    }
+  }
+
+  const testSingle = async (sourceId: string): Promise<void> => {
+    if (!apiAvailable) return
+    setSpeedResults((current) => ({ ...current, [sourceId]: { status: 'testing' } }))
+    try {
+      const result = await testSourceSpeed(sourceId)
+      setSpeedResults((current) => ({ ...current, [sourceId]: result }))
+    } catch (error) {
+      setSpeedResults((current) => ({
+        ...current,
+        [sourceId]: { status: 'error', errorMessage: error instanceof Error ? error.message : '测速失败' },
+      }))
+    }
+  }
+
+  const testAll = async (): Promise<void> => {
+    if (!apiAvailable || sources.length === 0 || isTestingAll) return
+    setIsTestingAll(true)
+    setSpeedResults(
+      Object.fromEntries(sources.map((source) => [source.id, { status: 'testing' } satisfies VodSourceSpeedState])),
+    )
+    const pendingSourceIds = sources.map((source) => source.id)
+    const workers = Array.from({ length: Math.min(SPEED_TEST_CONCURRENCY, pendingSourceIds.length) }, async () => {
+      while (pendingSourceIds.length > 0) {
+        const sourceId = pendingSourceIds.shift()
+        if (sourceId) await testSingle(sourceId)
+      }
+    })
+    await Promise.all(workers)
+    setIsTestingAll(false)
+    toast.success('测速完成')
+  }
+
   return {
     allSelected,
-    draggedSourceId,
-    dragOverSourceId,
     enabledCount: sources.filter((source) => source.enabled).length,
     isBatchUpdating,
     isClearing,
     isReordering,
+    isTestingAll,
     selectedSourceIds,
     sources,
+    speedResults,
     applySources,
     batchToggle,
     clearAll,
     deleteItem,
-    drop,
     exportItems,
     importItems,
+    moveToEdge,
     refresh,
-    resetDrag,
-    setDraggedSourceId,
-    setDragOverSourceId,
     switchBackup,
+    testAll,
+    testSingle,
     toggle,
     toggleAll,
     toggleSelection: (sourceId) => setSelectedSourceIds((current) => toggleId(current, sourceId)),

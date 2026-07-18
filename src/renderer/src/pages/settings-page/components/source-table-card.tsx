@@ -1,5 +1,16 @@
-import { ChevronDown, Download, GripVertical, Pencil, Plus, Trash2, Upload } from 'lucide-react'
-import { useState } from 'react'
+import {
+  ArrowDownToLine,
+  ArrowUpToLine,
+  ChevronDown,
+  Download,
+  Gauge,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2,
+  Upload,
+} from 'lucide-react'
+import { useMemo, useState } from 'react'
 import type { LiveSourceConfig, VodSourceConfig } from '@shared/types'
 import { SettingsCard } from '@renderer/components'
 import { Badge } from '@/ui/badge'
@@ -9,36 +20,37 @@ import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitl
 import { RadioGroup, RadioGroupItem } from '@/ui/radio-group'
 import { Switch } from '@/ui/switch'
 import { cn } from '@/utils'
+import type { VodSourceSpeedState } from '../types'
 
 type SourceConfig = VodSourceConfig | LiveSourceConfig
+type SpeedSortOrder = 'asc' | 'desc' | 'default'
 
 interface SourceTableCardProps<T extends SourceConfig> {
   addText: string
   allSelected: boolean
   apiAvailable: boolean
   description: string
-  draggedSourceId?: string
-  dragOverSourceId?: string
   emptyText: string
   enabledCount: number
   heightClassName: string
   isBatchUpdating: boolean
   isClearing: boolean
   isReordering: boolean
+  isTestingAll?: boolean
   selectedSourceIds: Set<string>
   sources: T[]
+  speedResults?: Record<string, VodSourceSpeedState>
   title: string
   onAdd: () => void
   onBatchToggle: (enabled: boolean) => void
   onClear: () => void
   onDelete: (source: T) => void
-  onDragEnd: () => void
-  onDragOver: (sourceId: string) => void
-  onDragStart: (sourceId: string) => void
-  onDrop: (sourceId: string) => void
   onEdit: (source: T) => void
   onExport: () => void
   onImport: () => void
+  onMoveToEdge: (sourceId: string, edge: 'start' | 'end') => void
+  onTestAll?: () => void
+  onTestSingle?: (sourceId: string) => void
   onToggle: (source: T, enabled: boolean) => void
   onSwitchBackup?: (source: VodSourceConfig, backupUrl: string) => Promise<void>
   onToggleAll: () => void
@@ -50,33 +62,55 @@ export function SourceTableCard<T extends SourceConfig>({
   allSelected,
   apiAvailable,
   description,
-  draggedSourceId,
-  dragOverSourceId,
   emptyText,
   enabledCount,
   heightClassName,
   isBatchUpdating,
   isClearing,
   isReordering,
+  isTestingAll = false,
   selectedSourceIds,
   sources,
+  speedResults,
   title,
   onAdd,
   onBatchToggle,
   onClear,
   onDelete,
-  onDragEnd,
-  onDragOver,
-  onDragStart,
-  onDrop,
   onEdit,
   onExport,
   onImport,
+  onMoveToEdge,
+  onTestAll,
+  onTestSingle,
   onToggle,
   onSwitchBackup,
   onToggleAll,
   onToggleSelection,
 }: SourceTableCardProps<T>): React.JSX.Element {
+  const [speedSortOrder, setSpeedSortOrder] = useState<SpeedSortOrder>('default')
+  const showBackups = Boolean(onSwitchBackup)
+  const displayedSources = useMemo(() => {
+    if (!onTestSingle || speedSortOrder === 'default') return sources
+    return sources
+      .map((source, index) => ({ source, index, result: speedResults?.[source.id] }))
+      .sort((left, right) => {
+        const leftSpeed = left.result?.status === 'success' ? left.result.elapsedMs : undefined
+        const rightSpeed = right.result?.status === 'success' ? right.result.elapsedMs : undefined
+        if (leftSpeed === undefined || rightSpeed === undefined) {
+          if (leftSpeed === rightSpeed) return left.index - right.index
+          return leftSpeed === undefined ? 1 : -1
+        }
+        const comparison = leftSpeed - rightSpeed || left.index - right.index
+        return speedSortOrder === 'asc' ? comparison : -comparison
+      })
+      .map(({ source }) => source)
+  }, [onTestSingle, sources, speedResults, speedSortOrder])
+
+  const cycleSpeedSortOrder = (): void => {
+    setSpeedSortOrder((current) => (current === 'default' ? 'asc' : current === 'asc' ? 'desc' : 'default'))
+  }
+
   return (
     <SettingsCard
       description={description}
@@ -94,39 +128,35 @@ export function SourceTableCard<T extends SourceConfig>({
         clearText={isClearing ? '清空中' : '清空'}
         hasItems={sources.length > 0}
         isBatchUpdating={isBatchUpdating}
+        isTestingAll={isTestingAll}
         selectedCount={selectedSourceIds.size}
         onAdd={onAdd}
         onBatchToggle={onBatchToggle}
         onClear={onClear}
         onExport={onExport}
         onImport={onImport}
+        onTestAll={onTestAll}
       />
 
       {sources.length > 0 ? (
         <div className={cn(heightClassName, 'overflow-auto')}>
-          <div className="min-w-[900px]">
-            <TableHeader allSelected={allSelected} onToggleAll={onToggleAll} />
-            {sources.map((source) => (
+          <div className="min-w-[1160px]">
+            <TableHeader
+              allSelected={allSelected}
+              showBackups={showBackups}
+              showSpeed={Boolean(onTestSingle)}
+              speedSortOrder={speedSortOrder}
+              onSpeedSort={cycleSpeedSortOrder}
+              onToggleAll={onToggleAll}
+            />
+            {displayedSources.map((source) => (
               <div
                 key={source.id}
-                className={rowClassName(draggedSourceId, dragOverSourceId, source.id)}
-                onDragOver={(event) => {
-                  if (!draggedSourceId || draggedSourceId === source.id) return
-                  event.preventDefault()
-                  event.dataTransfer.dropEffect = 'move'
-                  onDragOver(source.id)
-                }}
-                onDrop={(event) => {
-                  event.preventDefault()
-                  onDrop(source.id)
-                }}
+                className={cn(
+                  'border-border hover:bg-muted/30 grid items-center border-b px-5 py-3 transition-colors',
+                  getTableGridClassName(Boolean(onTestSingle), showBackups),
+                )}
               >
-                <DragHandle
-                  disabled={isReordering}
-                  label={`拖拽调整 ${source.name} 的顺序`}
-                  onDragEnd={onDragEnd}
-                  onDragStart={() => onDragStart(source.id)}
-                />
                 <SelectionCheckbox
                   checked={selectedSourceIds.has(source.id)}
                   label={`选择 ${source.name}`}
@@ -135,12 +165,23 @@ export function SourceTableCard<T extends SourceConfig>({
                 <StatusCell checked={source.enabled} onCheckedChange={(checked) => onToggle(source, checked)} />
                 <OriginCell origin={source.origin} />
                 <NameCell name={source.name} />
+                <div className="text-muted-foreground min-w-0 truncate font-mono text-xs" title={source.url}>
+                  {source.url}
+                </div>
                 {isVodSource(source) && onSwitchBackup ? (
-                  <VodUrlCell source={source} onManage={() => onEdit(source)} onSwitchBackup={onSwitchBackup} />
-                ) : (
-                  <div className="text-muted-foreground min-w-0 truncate font-mono text-xs">{source.url}</div>
-                )}
-                <ActionCell onDelete={() => onDelete(source)} onEdit={() => onEdit(source)} />
+                  <BackupCell source={source} onSwitchBackup={onSwitchBackup} />
+                ) : null}
+                {isVodSource(source) && onTestSingle ? (
+                  <SpeedCell result={speedResults?.[source.id]} onTest={() => onTestSingle(source.id)} />
+                ) : null}
+                <ActionCell
+                  disabled={isReordering}
+                  isFirst={sources[0]?.id === source.id}
+                  isLast={sources.at(-1)?.id === source.id}
+                  onDelete={() => onDelete(source)}
+                  onEdit={() => onEdit(source)}
+                  onMoveToEdge={(edge) => onMoveToEdge(source.id, edge)}
+                />
               </div>
             ))}
           </div>
@@ -152,13 +193,11 @@ export function SourceTableCard<T extends SourceConfig>({
   )
 }
 
-function VodUrlCell({
+function BackupCell({
   source,
-  onManage,
   onSwitchBackup,
 }: {
   source: VodSourceConfig
-  onManage: () => void
   onSwitchBackup: (source: VodSourceConfig, backupUrl: string) => Promise<void>
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
@@ -175,10 +214,7 @@ function VodUrlCell({
   }
 
   return (
-    <div className="flex min-w-0 items-center gap-2">
-      <div className="text-muted-foreground min-w-0 truncate font-mono text-xs" title={source.url}>
-        {source.url}
-      </div>
+    <div className="flex min-w-0 items-center">
       {source.backups.length > 0 ? (
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
@@ -213,21 +249,10 @@ function VodUrlCell({
                 />
               ))}
             </RadioGroup>
-            <Button
-              className="mt-1 w-full justify-start"
-              size="sm"
-              type="button"
-              variant="ghost"
-              onClick={() => {
-                setOpen(false)
-                onManage()
-              }}
-            >
-              管理全部地址
-            </Button>
           </PopoverContent>
         </Popover>
       ) : null}
+      {source.backups.length === 0 ? <span className="text-muted-foreground text-xs">无</span> : null}
     </div>
   )
 }
@@ -274,24 +299,28 @@ function SourceToolbar({
   clearText,
   hasItems,
   isBatchUpdating,
+  isTestingAll,
   selectedCount,
   onAdd,
   onBatchToggle,
   onClear,
   onExport,
   onImport,
+  onTestAll,
 }: {
   addText: string
   apiAvailable: boolean
   clearText: string
   hasItems: boolean
   isBatchUpdating: boolean
+  isTestingAll: boolean
   selectedCount: number
   onAdd: () => void
   onBatchToggle: (enabled: boolean) => void
   onClear: () => void
   onExport: () => void
   onImport: () => void
+  onTestAll?: () => void
 }): React.JSX.Element {
   return (
     <div className="border-border flex flex-wrap gap-2 border-b px-5 py-5">
@@ -326,57 +355,64 @@ function SourceToolbar({
         <Trash2 data-icon="inline-start" />
         {clearText}
       </Button>
+      {onTestAll ? (
+        <Button disabled={!apiAvailable || !hasItems || isTestingAll} variant="outline" onClick={onTestAll}>
+          {isTestingAll ? (
+            <RefreshCw className="animate-spin" data-icon="inline-start" />
+          ) : (
+            <Gauge data-icon="inline-start" />
+          )}
+          {isTestingAll ? '测速中' : '测速'}
+        </Button>
+      ) : null}
     </div>
   )
 }
 
 function TableHeader({
   allSelected,
+  showBackups,
+  showSpeed,
+  speedSortOrder,
+  onSpeedSort,
   onToggleAll,
 }: {
   allSelected: boolean
+  showBackups: boolean
+  showSpeed: boolean
+  speedSortOrder: SpeedSortOrder
+  onSpeedSort: () => void
   onToggleAll: () => void
 }): React.JSX.Element {
   return (
-    <div className="border-border bg-muted text-muted-foreground sticky top-0 z-10 grid grid-cols-[32px_40px_112px_80px_1.1fr_2fr_132px] items-center border-b px-5 py-3 font-medium">
-      <div aria-hidden="true" />
+    <div
+      className={cn(
+        'border-border bg-muted text-muted-foreground sticky top-0 z-10 grid items-center border-b px-5 py-3 font-medium',
+        getTableGridClassName(showSpeed, showBackups),
+      )}
+    >
       <SelectionCheckbox checked={allSelected} label={allSelected ? '取消全选' : '全选源'} onChange={onToggleAll} />
       <div>状态</div>
       <div>来源</div>
       <div>名称</div>
       <div>URL</div>
+      {showBackups ? <div>备用</div> : null}
+      {showSpeed ? (
+        <div>
+          <button
+            className="hover:text-foreground inline-flex items-center gap-1 rounded-sm outline-none focus-visible:ring-2"
+            title={getSpeedSortTitle(speedSortOrder)}
+            type="button"
+            onClick={onSpeedSort}
+          >
+            测速
+            {speedSortOrder === 'asc' ? <ArrowUpToLine size={15} /> : null}
+            {speedSortOrder === 'desc' ? <ArrowDownToLine size={15} /> : null}
+          </button>
+        </div>
+      ) : null}
       <div className="text-right">操作</div>
     </div>
-  )
-}
-
-function DragHandle({
-  disabled,
-  label,
-  onDragEnd,
-  onDragStart,
-}: {
-  disabled: boolean
-  label: string
-  onDragEnd: () => void
-  onDragStart: () => void
-}): React.JSX.Element {
-  return (
-    <button
-      aria-label={label}
-      className="text-muted-foreground hover:text-foreground flex size-7 cursor-grab items-center justify-center rounded-lg active:cursor-grabbing disabled:cursor-default"
-      disabled={disabled}
-      draggable={!disabled}
-      title="拖拽调整顺序"
-      type="button"
-      onDragEnd={onDragEnd}
-      onDragStart={(event) => {
-        event.dataTransfer.effectAllowed = 'move'
-        onDragStart()
-      }}
-    >
-      <GripVertical size={16} />
-    </button>
   )
 }
 
@@ -415,9 +451,75 @@ function NameCell({ name }: { name: string }): React.JSX.Element {
   return <div className="text-foreground min-w-0 truncate text-sm font-medium">{name}</div>
 }
 
-function ActionCell({ onDelete, onEdit }: { onDelete: () => void; onEdit: () => void }): React.JSX.Element {
+function SpeedCell({ result, onTest }: { result?: VodSourceSpeedState; onTest: () => void }): React.JSX.Element {
+  const testing = result?.status === 'testing'
+  const label =
+    !result || result.status === 'idle'
+      ? '待测速'
+      : result.status === 'testing'
+        ? '测速中'
+        : result.status === 'success'
+          ? `${result.elapsedMs} ms`
+          : '不可用'
+  const title = result?.status === 'error' ? result.errorMessage : undefined
+  const resultClassName =
+    result?.status === 'success'
+      ? result.elapsedMs <= 800
+        ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+        : result.elapsedMs <= 2000
+          ? 'bg-yellow-500/15 text-yellow-700 dark:text-yellow-400'
+          : 'bg-orange-500/15 text-orange-700 dark:text-orange-400'
+      : result?.status === 'error'
+        ? 'bg-destructive/10 text-destructive'
+        : 'bg-muted text-muted-foreground'
+
+  return (
+    <div className="flex items-center gap-2">
+      <Badge className={cn('max-w-20 truncate', resultClassName)} title={title} variant="secondary">
+        {label}
+      </Badge>
+      <Button className="h-8 px-2" disabled={testing} title="测速" variant="ghost" onClick={onTest}>
+        {testing ? <RefreshCw className="animate-spin" /> : <Gauge />}
+      </Button>
+    </div>
+  )
+}
+
+function ActionCell({
+  disabled,
+  isFirst,
+  isLast,
+  onDelete,
+  onEdit,
+  onMoveToEdge,
+}: {
+  disabled: boolean
+  isFirst: boolean
+  isLast: boolean
+  onDelete: () => void
+  onEdit: () => void
+  onMoveToEdge: (edge: 'start' | 'end') => void
+}): React.JSX.Element {
   return (
     <div className="flex justify-end gap-2">
+      <Button
+        className="h-8 px-2"
+        disabled={disabled || isFirst}
+        title="置顶"
+        variant="ghost"
+        onClick={() => onMoveToEdge('start')}
+      >
+        <ArrowUpToLine />
+      </Button>
+      <Button
+        className="h-8 px-2"
+        disabled={disabled || isLast}
+        title="置底"
+        variant="ghost"
+        onClick={() => onMoveToEdge('end')}
+      >
+        <ArrowDownToLine />
+      </Button>
       <Button className="h-8 px-2" title="编辑" variant="ghost" onClick={onEdit}>
         <Pencil />
       </Button>
@@ -438,10 +540,15 @@ function EmptyTableState({ text }: { text: string }): React.JSX.Element {
   )
 }
 
-function rowClassName(draggedId: string | undefined, dragOverId: string | undefined, sourceId: string): string {
-  return cn(
-    'border-border grid grid-cols-[32px_40px_112px_80px_1.1fr_2fr_132px] items-center border-b px-5 py-4 transition-colors last:border-b-0',
-    draggedId === sourceId && 'opacity-55',
-    dragOverId === sourceId ? 'bg-accent/60' : 'hover:bg-muted',
-  )
+function getTableGridClassName(showSpeed: boolean, showBackups: boolean): string {
+  if (showBackups && showSpeed) return 'grid-cols-[40px_112px_80px_1.1fr_1.8fr_120px_150px_196px]'
+  if (showBackups) return 'grid-cols-[40px_112px_80px_1.1fr_1.8fr_120px_196px]'
+  if (showSpeed) return 'grid-cols-[40px_112px_80px_1.1fr_2fr_150px_196px]'
+  return 'grid-cols-[40px_112px_80px_1.1fr_2fr_196px]'
+}
+
+function getSpeedSortTitle(order: SpeedSortOrder): string {
+  if (order === 'default') return '按速度从快到慢排序'
+  if (order === 'asc') return '按速度从慢到快排序'
+  return '恢复默认排序'
 }

@@ -24,6 +24,7 @@ export function registerSourcesIpc(context: ApplicationContext): void {
     (_event, id: string, backupUrl: Parameters<AppApi['sources']['switchBackup']>[1]) =>
       source.switchBackup(id, backupUrl),
   )
+  ipcMain.handle(IPC_CHANNELS.sources.testSpeed, (_event, id: string) => source.testSpeed(id))
   ipcMain.handle(IPC_CHANNELS.sources.reorder, (_event, ids: Parameters<AppApi['sources']['reorder']>[0]) =>
     source.reorder(ids),
   )

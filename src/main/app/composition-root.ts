@@ -65,7 +65,7 @@ export function createApplicationContext(): ApplicationContext {
     mainWindow?.webContents.send(IPC_CHANNELS.vod.searchEvent, event)
   const emitUpdateEvent: ConstructorParameters<typeof UpdateService>[1] = (event) =>
     mainWindow?.webContents.send(IPC_CHANNELS.updates.event, event)
-  const sourceService = new SourceService(source)
+  const sourceService = new SourceService(source, httpClient)
   const douban = new DoubanService(httpClient)
 
   return {
