@@ -1,9 +1,12 @@
 import { BrowserWindow } from 'electron'
-import { join } from 'path'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
 import { is } from '@electron-toolkit/utils'
 import type { AppSettings } from '@shared/types'
 import { APP_DISPLAY_NAME } from '@shared/constants'
 import { isAllowedExternalUrl, openExternalUrl } from '../infrastructure/external/external-link'
+
+const currentDirectory = dirname(fileURLToPath(import.meta.url))
 
 // 主窗口及其导航边界。窗口创建后通过回调登记，避免 IPC 层保存全局窗口引用。
 interface CreateMainWindowOptions {
@@ -20,7 +23,7 @@ export function createMainWindow({ icon, getSettings, onCreated }: CreateMainWin
     show: false,
     autoHideMenuBar: true,
     icon,
-    webPreferences: { preload: join(__dirname, '../preload/index.js'), sandbox: false },
+    webPreferences: { preload: join(currentDirectory, '../preload/index.mjs'), sandbox: false },
   })
   onCreated(mainWindow)
   mainWindow.on('ready-to-show', () => {
@@ -46,7 +49,7 @@ export function createMainWindow({ icon, getSettings, onCreated }: CreateMainWin
     }
   })
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) void mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  else void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+  else void mainWindow.loadFile(join(currentDirectory, '../renderer/index.html'))
 }
 
 function isSameAppOrigin(window: BrowserWindow, url: string): boolean {

@@ -1,5 +1,6 @@
 import { dialog, ipcMain, type BrowserWindow } from 'electron'
 import { readFile, writeFile } from 'fs/promises'
+import bs58 from 'bs58'
 import { DEFAULT_SOURCES_EXPORT_NAME } from '@shared/constants'
 import { IPC_CHANNELS } from '@shared/ipc'
 import { sourceSubscriptionSchema } from '@shared/schemas'
@@ -10,7 +11,7 @@ import { formatZodError, isZodError } from '../../ipc/utils'
 // 点播源 IPC：文件导入导出留在 main，以避免 renderer 获得任意文件系统权限。
 export function registerSourcesIpc(context: ApplicationContext): void {
   const { source, liveSource } = context.services
-  const { httpClient, decodeBase58String } = context.utilities
+  const { httpClient } = context.utilities
   ipcMain.handle(IPC_CHANNELS.sources.list, () => source.list())
   ipcMain.handle(IPC_CHANNELS.sources.create, (_event, input: Parameters<AppApi['sources']['create']>[0]) =>
     source.create(input),
@@ -60,7 +61,8 @@ export function registerSourcesIpc(context: ApplicationContext): void {
       })
       try {
         // 订阅内容在解码后仍需 schema 校验，远程输入不能直接写入本地数据库。
-        const subscription = sourceSubscriptionSchema.parse(JSON.parse(decodeBase58String(encoded)))
+        const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bs58.decode(encoded.trim()))
+        const subscription = sourceSubscriptionSchema.parse(JSON.parse(decoded))
         return {
           vod: source.syncSubscription(subscription.vod),
           live: liveSource.syncSubscription(subscription.live),

@@ -15,7 +15,6 @@ import { MediaProxyServer } from '../modules/media/media-proxy-server'
 import { probeMediaSource } from '../modules/media/media-probe.service'
 import { SearchTaskManager } from '../modules/media/search-task-manager'
 import { VodSearchService } from '../modules/media/vod-search.service'
-import { decodeBase58String } from '../modules/sources/base58'
 import { SourceService } from '../modules/sources/source.service'
 import { VodSourceRepository } from '../modules/sources/vod-source.repository'
 import { SettingsRepository } from '../modules/settings/settings.repository'
@@ -46,7 +45,6 @@ export interface ApplicationContext {
   }
   utilities: {
     httpClient: HttpClient
-    decodeBase58String: typeof decodeBase58String
     probeMediaSource: typeof probeMediaSource
     detectMediaStreamType: typeof detectMediaStreamType
   }
@@ -88,6 +86,6 @@ export function createApplicationContext(): ApplicationContext {
       vodSearch: new VodSearchService(sourceService, httpClient, new SearchTaskManager(), emitSearchEvent),
       updates: new UpdateService(settings, emitUpdateEvent),
     },
-    utilities: { httpClient, decodeBase58String, probeMediaSource, detectMediaStreamType },
+    utilities: { httpClient, probeMediaSource, detectMediaStreamType },
   }
 }

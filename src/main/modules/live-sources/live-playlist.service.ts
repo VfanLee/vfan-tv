@@ -1,4 +1,4 @@
-import { parse, type PlaylistItem } from 'iptv-playlist-parser'
+import playlistParser, { type PlaylistItem } from 'iptv-playlist-parser'
 import type { LiveChannel, LiveChannelStream, LivePlaylist, LiveStreamRequestHeaders } from '@shared/types'
 import type { HttpClient } from '../../infrastructure/http/http-client'
 
@@ -100,7 +100,7 @@ function parsePlaylistItems(content: string): ParsedPlaylistItem[] {
 }
 
 function parseM3uPlaylistItems(content: string): ParsedPlaylistItem[] {
-  return parse(content).items.flatMap(toParsedPlaylistItem)
+  return playlistParser.parse(content).items.flatMap(toParsedPlaylistItem)
 }
 
 function toParsedPlaylistItem(item: PlaylistItem): ParsedPlaylistItem[] {

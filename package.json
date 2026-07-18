@@ -12,6 +12,7 @@
   },
   "license": "GPL-3.0",
   "author": "VfanLee",
+  "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
     "build": "pnpm run typecheck && electron-vite build",
