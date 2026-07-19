@@ -102,12 +102,85 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Check out release history
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
       - name: Download installers
         uses: actions/download-artifact@v8
         with:
           pattern: release-*
           path: release-assets
           merge-multiple: true
+
+      - name: Generate release notes
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          temp_dir="$(mktemp -d)"
+          trap 'rm -rf "$temp_dir"' EXIT
+          features_file="$temp_dir/features"
+          fixes_file="$temp_dir/fixes"
+          improvements_file="$temp_dir/improvements"
+          conventional_pattern='^(feat|fix|perf|refactor)(\([^)]+\))?:[[:space:]]*(.+)$'
+          : > "$features_file"
+          : > "$fixes_file"
+          : > "$improvements_file"
+
+          previous_tag="$(git tag --merged "$RELEASE_TAG" --sort=-version:refname | grep -Fxv "$RELEASE_TAG" | head -n 1 || true)"
+          if [ -n "$previous_tag" ]; then
+            revision_range="$previous_tag..$RELEASE_TAG"
+          else
+            revision_range="$RELEASE_TAG"
+          fi
+
+          while IFS= read -r subject; do
+            if [[ "$subject" =~ $conventional_pattern ]]; then
+              kind="${BASH_REMATCH[1]}"
+              description="${BASH_REMATCH[3]}"
+            else
+              continue
+            fi
+
+            case "$kind" in
+              feat) target_file="$features_file" ;;
+              fix) target_file="$fixes_file" ;;
+              perf|refactor) target_file="$improvements_file" ;;
+            esac
+            printf -- '- %s\n' "$description" >> "$target_file"
+          done < <(git log "$revision_range" --format='%s')
+
+          append_section() {
+            title="$1"
+            file="$2"
+            if [ -s "$file" ]; then
+              printf '\n## %s\n\n' "$title" >> release-notes.md
+              cat "$file" >> release-notes.md
+            fi
+          }
+
+          {
+            printf '# Vfan TV %s · 更新说明\n' "$RELEASE_TAG"
+          } > release-notes.md
+          append_section '✨ 新功能' "$features_file"
+          append_section '🐛 问题修复' "$fixes_file"
+          append_section '⚡ 体验优化' "$improvements_file"
+
+          if ! [ -s "$features_file" ] && ! [ -s "$fixes_file" ] && ! [ -s "$improvements_file" ]; then
+            printf '\n## 本次更新\n\n- 本次为维护性更新，提升了构建与发布稳定性。\n' >> release-notes.md
+          fi
+
+          cat >> release-notes.md <<'EOF'
+
+          ## 下载与安装
+
+          - **macOS Apple Silicon**：下载 `*-arm64.dmg`。
+          - **Windows x64**：下载 `*-x64-setup.exe`。
+          - **Windows ARM64**：下载 `*-arm64-setup.exe`。
+          EOF
 
       - name: Create or update release
         env:
@@ -117,4 +190,4 @@ jobs:
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release delete "$RELEASE_TAG" --yes --repo "$GITHUB_REPOSITORY"
           fi
-          gh release create "$RELEASE_TAG" release-assets/* --verify-tag --generate-notes --title "Vfan TV $RELEASE_TAG" --repo "$GITHUB_REPOSITORY"
+          gh release create "$RELEASE_TAG" release-assets/* --verify-tag --notes-file release-notes.md --title "Vfan TV $RELEASE_TAG · 更新说明" --repo "$GITHUB_REPOSITORY"
