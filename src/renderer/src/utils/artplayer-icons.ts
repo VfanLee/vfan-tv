@@ -1,6 +1,6 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { Repeat, SkipForward, type LucideIcon } from 'lucide-react'
+import { PictureInPicture2, Repeat, SkipForward, type LucideIcon } from 'lucide-react'
 
 const ARTPLAYER_ICON_PROPS = {
   'size': 22,
@@ -15,6 +15,10 @@ function createArtplayerLucideIcon(Icon: LucideIcon): string {
 export const artplayerSettingIcons = {
   loop: createArtplayerLucideIcon(Repeat),
   autoNext: createArtplayerLucideIcon(SkipForward),
+} as const
+
+export const artplayerControlIcons = {
+  miniWindow: createArtplayerLucideIcon(PictureInPicture2),
 } as const
 
 // 自定义开关图标（覆盖 ArtPlayer 默认 switchOn/switchOff）

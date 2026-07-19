@@ -22,6 +22,12 @@ import type {
 } from './live'
 import type { RecentPlayInput, RecentPlayItem } from './recent'
 import type { MediaStreamDetectionInput, MediaStreamDetectionResult } from './media'
+import type {
+  MiniWindowMoveInput,
+  MiniWindowPlaybackContext,
+  MiniWindowPlaybackExit,
+  MiniWindowResizeInput,
+} from './mini-window'
 import type { SearchEvent } from './search'
 import type { MediaProbeInput, MediaProbeResult, RecommendationItem } from './vod'
 import type { UpdateCheckResult, UpdateEvent } from './update'
@@ -137,6 +143,15 @@ export interface AppApi {
   window: {
     isMaximized: () => Promise<boolean>
     toggleMaximize: () => Promise<boolean>
+    enterMiniWindowMode: (context: MiniWindowPlaybackContext) => Promise<void>
+    getMiniWindowPlayback: () => Promise<MiniWindowPlaybackContext | undefined>
+    updateMiniWindowPlayback: (input: MiniWindowPlaybackExit) => Promise<void>
+    resizeMiniWindow: (input: MiniWindowResizeInput) => Promise<void>
+    moveMiniWindow: (input: MiniWindowMoveInput) => Promise<void>
+    getMiniWindowAlwaysOnTop: (sessionId: string) => Promise<boolean>
+    setMiniWindowAlwaysOnTop: (sessionId: string, enabled: boolean) => Promise<boolean>
+    exitMiniWindowMode: (input: MiniWindowPlaybackExit) => Promise<void>
+    onMiniWindowModeExit: (listener: (input: MiniWindowPlaybackExit) => void) => () => void
   }
   shell: {
     openExternal: (url: string) => Promise<void>

@@ -6,7 +6,7 @@ import { createRecentPlayInput } from '../utils'
 
 interface RecentPlaybackState {
   progressRef: RefObject<{ currentTime: number; duration: number }>
-  save: (progress: { currentTime: number; duration: number }) => Promise<void>
+  save: (progress: { currentTime: number; duration: number; force?: boolean }) => Promise<void>
 }
 
 export function useRecentPlayback(
@@ -17,11 +17,19 @@ export function useRecentPlayback(
   const lastSaveRef = useRef(0)
   const progressRef = useRef({ currentTime: 0, duration: 0 })
 
-  const save = async ({ currentTime, duration }: { currentTime: number; duration: number }): Promise<void> => {
+  const save = async ({
+    currentTime,
+    duration,
+    force = false,
+  }: {
+    currentTime: number
+    duration: number
+    force?: boolean
+  }): Promise<void> => {
     progressRef.current = { currentTime, duration }
     if (!current || !activeLine || !activeEpisode || !isApiAvailable()) return
     const now = Date.now()
-    if (now - lastSaveRef.current < 5000 && currentTime > 0 && currentTime < duration) return
+    if (!force && now - lastSaveRef.current < 5000 && currentTime > 0 && currentTime < duration) return
     lastSaveRef.current = now
     await upsertRecentPlay(
       createRecentPlayInput(current, activeLine.name, activeEpisode.name, activeEpisode.url, { currentTime, duration }),

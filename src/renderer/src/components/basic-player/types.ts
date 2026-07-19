@@ -7,6 +7,17 @@ export interface PlayerNavigationLabels {
   next: string
 }
 
+export interface MiniWindowPlayerController {
+  togglePlayback: () => void
+  toggleMuted: () => void
+  seekBy: (seconds: number) => void
+}
+
+export interface MiniWindowPlayerState {
+  isPlaying: boolean
+  isMuted: boolean
+}
+
 export interface BasicPlayerProps {
   enableAutoNext?: boolean
   autoPlay?: boolean
@@ -21,13 +32,17 @@ export interface BasicPlayerProps {
   hasPreviousEpisode?: boolean
   isTheaterMode?: boolean
   loop?: boolean
+  /** 小窗模式仅保留视频画面，窗口级退出入口由小窗页面提供。 */
+  miniWindowMode?: boolean
+  onMiniWindowControllerReady?: (controller: MiniWindowPlayerController | null) => void
+  onMiniWindowPlayerStateChange?: (state: MiniWindowPlayerState) => void
   persistPlaybackSettings?: boolean
   navigationLabels?: PlayerNavigationLabels
   formatPlaybackUrl?: (src: string) => string
   onNextEpisode?: () => void
   onEnded?: () => void
   onPreviousEpisode?: () => void
-  onProgress?: (progress: { currentTime: number; duration: number }) => void
+  onProgress?: (progress: { currentTime: number; duration: number; force?: boolean }) => void
   onToggleTheaterMode?: () => void
   variant?: PlayerVariant
 }

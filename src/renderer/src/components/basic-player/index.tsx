@@ -13,17 +13,24 @@ import {
   PLAYER_SEEK_STEP_STORAGE_KEY,
 } from '@shared/constants'
 import type { MediaStreamType } from '@shared/types'
-import { artplayerSwitchIcons, cn } from '@/utils'
+import { enterMiniWindowMode, isApiAvailable, onMiniWindowModeExit } from '@renderer/services/api'
+import { artplayerControlIcons, artplayerSwitchIcons, cn } from '@/utils'
 import { CustomSliderDialog, DisplaySettingsMenu } from './components/display-settings-dialogs'
 import { createSettingsPositionTracker } from './utils/settings-position'
-import type { BasicPlayerProps, CustomSliderInput, DisplaySettingsState } from './types'
+import type { BasicPlayerProps, CustomSliderInput, DisplaySettingsState, MiniWindowPlayerController } from './types'
 
 // 播放器适配层：统一 ArtPlayer、HLS.js 与 mpegts.js 的生命周期及持久化播放设置。
-export type { BasicPlayerProps, PlayerNavigationLabels, PlayerVariant } from './types'
+export type {
+  BasicPlayerProps,
+  MiniWindowPlayerController,
+  MiniWindowPlayerState,
+  PlayerNavigationLabels,
+  PlayerVariant,
+} from './types'
 
 interface BasicPlayerCallbacks {
   onEnded?: () => void
-  onProgress?: (progress: { currentTime: number; duration: number }) => void
+  onProgress?: (progress: { currentTime: number; duration: number; force?: boolean }) => void
 }
 
 type ArtplayerWithHls = Artplayer & { hls?: Hls }
@@ -92,6 +99,9 @@ export function BasicPlayer({
   isResolvingSource = false,
   isTheaterMode = false,
   loop,
+  miniWindowMode = false,
+  onMiniWindowControllerReady,
+  onMiniWindowPlayerStateChange,
   persistPlaybackSettings = true,
   formatPlaybackUrl = normalizePlaybackUrlForDisplay,
   onEnded,
@@ -111,6 +121,9 @@ export function BasicPlayer({
   const resumeTimeRef = useRef(0)
   const resolvedUrlRef = useRef('检测中…')
   const restoreFullscreenWebRef = useRef(false)
+  const miniWindowSessionIdRef = useRef<string | undefined>(undefined)
+  const miniWindowControllerReadyRef = useRef(onMiniWindowControllerReady)
+  const miniWindowPlayerStateChangeRef = useRef(onMiniWindowPlayerStateChange)
   const [customNumberInput, setCustomNumberInput] = useState<CustomSliderInput | undefined>(undefined)
   const [displaySettings, setDisplaySettings] = useState<DisplaySettingsState | undefined>(undefined)
   const [isDisplaySettingsClosing, setIsDisplaySettingsClosing] = useState(false)
@@ -121,6 +134,7 @@ export function BasicPlayer({
   const isHls = isHlsSource(src, sourceType)
   const isFlv = isFlvSource(src, sourceType)
   const isMpegts = isMpegtsSource(src, sourceType)
+  const canEnterMiniWindowMode = !miniWindowMode && isApiAvailable()
 
   useEffect(() => {
     setCustomNumberInput(undefined)
@@ -137,7 +151,34 @@ export function BasicPlayer({
     }
     formatPlaybackUrlRef.current = formatPlaybackUrl
     initialTimeRef.current = initialTime
-  }, [formatPlaybackUrl, initialTime, onEnded, onProgress])
+    miniWindowControllerReadyRef.current = onMiniWindowControllerReady
+    miniWindowPlayerStateChangeRef.current = onMiniWindowPlayerStateChange
+  }, [formatPlaybackUrl, initialTime, onEnded, onMiniWindowControllerReady, onMiniWindowPlayerStateChange, onProgress])
+
+  useEffect(() => {
+    if (miniWindowMode) return
+
+    return onMiniWindowModeExit(({ sessionId, currentTime }) => {
+      if (miniWindowSessionIdRef.current !== sessionId) return
+      miniWindowSessionIdRef.current = undefined
+      const art = artRef.current
+      if (!art) return
+
+      if (isLive) {
+        reloadPlayback(art)
+        return
+      }
+
+      const resumedTime = Math.max(0, currentTime)
+      callbacksRef.current.onProgress?.({
+        currentTime: Math.floor(resumedTime),
+        duration: Number.isFinite(art.duration) ? Math.floor(art.duration) : 0,
+        force: true,
+      })
+      art.currentTime = resumedTime
+      void art.play().catch(() => undefined)
+    })
+  }, [isLive, miniWindowMode])
 
   useEffect(() => {
     const container = containerRef.current
@@ -204,23 +245,23 @@ export function BasicPlayer({
       autoplay: autoPlay, // 是否自动播放
       loop: loopEnabled, // 是否循环播放
       isLive, // 是否启用直播模式（真直播无进度条、无倍速）
-      setting: true, // 保留原生齿轮入口，面板由项目自定义 UI 接管
+      setting: !miniWindowMode, // 保留原生齿轮入口，面板由项目自定义 UI 接管
       playbackRate: false, // 使用项目自定义的倍速选项
       aspectRatio: false, // 使用项目自定义的画面比例项
       flip: false, // 使用项目自定义的画面翻转项
-      hotkey: true, // 是否启用 ArtPlayer 原生快捷键
+      hotkey: !miniWindowMode, // 是否启用 ArtPlayer 原生快捷键
       pip: false, // 不提供画中画功能与入口
-      fullscreen: true, // 是否启用浏览器全屏
-      fullscreenWeb: true, // 是否启用网页全屏
-      miniProgressBar: true, // 控制栏收起时保留播放进度提示
-      screenshot: true, // 是否启用截图
-      lock: true, // 是否启用移动端锁定按钮
-      fastForward: true, // 是否启用长按快进
-      autoOrientation: true, // 是否启用移动端全屏自动横屏
-      airplay: true, // 是否启用 AirPlay
+      fullscreen: !miniWindowMode, // 是否启用浏览器全屏
+      fullscreenWeb: !miniWindowMode, // 是否启用窗口全屏
+      miniProgressBar: !miniWindowMode, // 控制栏收起时保留播放进度提示
+      screenshot: !miniWindowMode, // 是否启用截图
+      lock: !miniWindowMode, // 是否启用移动端锁定按钮
+      fastForward: !miniWindowMode, // 是否启用长按快进
+      autoOrientation: !miniWindowMode, // 是否启用移动端全屏自动横屏
+      airplay: !miniWindowMode, // 是否启用 AirPlay
       playsInline: true, // 是否内联播放，避免移动端强制全屏
       mutex: true, // 是否与页面上的其他 ArtPlayer 实例互斥播放
-      backdrop: true, // 是否显示控制栏背景遮罩
+      backdrop: !miniWindowMode, // 是否显示控制栏背景遮罩
       theme: '#fff', // 主色：进度条、音量、选中等高亮统一为纯白
       icons: {
         switchOn: artplayerSwitchIcons.on, // 开关“开启”态：纯白实心
@@ -231,12 +272,54 @@ export function BasicPlayer({
         playsInline: true, // 透传 video playsinline 属性
       },
       settings: [], // 原生设置项全部改由自定义菜单渲染
+      i18n: {
+        'zh-cn': {
+          'Web Fullscreen': '窗口全屏',
+          'Exit Web Fullscreen': '退出窗口全屏',
+        },
+      },
+      controls: canEnterMiniWindowMode
+        ? [
+            {
+              name: 'vfan-mini-window-mode',
+              position: 'right',
+              index: 20,
+              html: artplayerControlIcons.miniWindow,
+              tooltip: '小窗模式',
+              click: () => {
+                if (!src) return
+                const sessionId = crypto.randomUUID()
+                miniWindowSessionIdRef.current = sessionId
+                art.pause()
+                void enterMiniWindowMode({
+                  sessionId,
+                  src,
+                  sourceType,
+                  title,
+                  variant,
+                  initialTime: isLive ? 0 : art.currentTime,
+                  loop: loopEnabled,
+                  audioTrackUrl,
+                }).catch((error: unknown) => {
+                  miniWindowSessionIdRef.current = undefined
+                  console.error('Failed to enter mini window mode:', error)
+                  art.notice.show = '进入小窗模式失败，请重启应用后重试'
+                  void art.play().catch(() => undefined)
+                })
+              },
+            },
+          ]
+        : [],
       plugins: [
         // 背光插件
-        artplayerPluginAmbilight({
-          blur: '30px', // 背光模糊半径
-          opacity: 0.5, // 背光透明度
-        }),
+        ...(!miniWindowMode
+          ? [
+              artplayerPluginAmbilight({
+                blur: '30px', // 背光模糊半径
+                opacity: 0.5, // 背光透明度
+              }),
+            ]
+          : []),
         // 独立外部音轨插件
         ...(audioTrackUrl
           ? [
@@ -245,7 +328,7 @@ export function BasicPlayer({
               }),
             ]
           : []),
-        ...(isHls
+        ...(!miniWindowMode && isHls
           ? [
               (art) => {
                 const plugin = artplayerPluginHlsControl({
@@ -266,72 +349,74 @@ export function BasicPlayer({
             ]
           : []),
       ],
-      contextmenu: [
-        {
-          name: 'vfan-copy-url',
-          html: '复制视频地址',
-          click: (contextmenu) => {
-            void navigator.clipboard.writeText(displayPlaybackUrl)
-            art.notice.show = '视频地址已复制'
-            contextmenu.show = false
-          },
-          mounted(element) {
-            element.title = displayPlaybackUrl
-          },
-        },
-        {
-          name: 'vfan-audio',
-          html: '音效调节',
-          style: { display: 'none' },
-          click: openSettingPanel,
-          mounted(element: HTMLElement) {
-            audioMenuItem = element
-          },
-        },
-        {
-          name: 'vfan-copy-debug',
-          html: '复制调试信息',
-          click: (contextmenu) => {
-            void navigator.clipboard.writeText(
-              buildDebugInfoText({
-                art,
-                rawSrc: src,
-                displayUrl: displayPlaybackUrl,
-                isHls,
-                isLive,
-                title,
-                sourceType,
-                autoPlay,
-                loop: loopEnabled,
-                initialTime: initialTimeRef.current,
-                isFlv,
-                isMpegts,
-                audioTrackUrl,
-                debugLog,
-                autoNextEnabled,
-              }),
-            )
-            art.notice.show = '调试信息已复制'
-            contextmenu.show = false
-          },
-        },
-        {
-          name: 'vfan-stats',
-          html: '统计信息',
-          click: (contextmenu) => {
-            art.info.show = true
-            contextmenu.show = false
-          },
-        },
-        {
-          name: 'vfan-refresh',
-          html: '刷新',
-          click: (contextmenu) => {
-            reloadPlayback(art)
-            contextmenu.show = false
-          },
-        },
-      ],
+      contextmenu: miniWindowMode
+        ? []
+        : [
+            {
+              name: 'vfan-copy-url',
+              html: '复制视频地址',
+              click: (contextmenu) => {
+                void navigator.clipboard.writeText(displayPlaybackUrl)
+                art.notice.show = '视频地址已复制'
+                contextmenu.show = false
+              },
+              mounted(element) {
+                element.title = displayPlaybackUrl
+              },
+            },
+            {
+              name: 'vfan-audio',
+              html: '音效调节',
+              style: { display: 'none' },
+              click: openSettingPanel,
+              mounted(element: HTMLElement) {
+                audioMenuItem = element
+              },
+            },
+            {
+              name: 'vfan-copy-debug',
+              html: '复制调试信息',
+              click: (contextmenu) => {
+                void navigator.clipboard.writeText(
+                  buildDebugInfoText({
+                    art,
+                    rawSrc: src,
+                    displayUrl: displayPlaybackUrl,
+                    isHls,
+                    isLive,
+                    title,
+                    sourceType,
+                    autoPlay,
+                    loop: loopEnabled,
+                    initialTime: initialTimeRef.current,
+                    isFlv,
+                    isMpegts,
+                    audioTrackUrl,
+                    debugLog,
+                    autoNextEnabled,
+                  }),
+                )
+                art.notice.show = '调试信息已复制'
+                contextmenu.show = false
+              },
+            },
+            {
+              name: 'vfan-stats',
+              html: '统计信息',
+              click: (contextmenu) => {
+                art.info.show = true
+                contextmenu.show = false
+              },
+            },
+            {
+              name: 'vfan-refresh',
+              html: '刷新',
+              click: (contextmenu) => {
+                reloadPlayback(art)
+                contextmenu.show = false
+              },
+            },
+          ],
       customType: {
         // 自定义媒体类型处理器
         m3u8(video, url, artInstance) {
@@ -413,7 +498,35 @@ export function BasicPlayer({
     } satisfies Option)
 
     artRef.current = art
-    setSettingsPortalContainer(art.template.$player)
+    const reportMiniWindowPlayerState = (): void => {
+      miniWindowPlayerStateChangeRef.current?.({
+        isPlaying: !art.video.paused && !art.video.ended,
+        isMuted: art.video.muted,
+      })
+    }
+    const miniWindowController: MiniWindowPlayerController = {
+      togglePlayback: () => {
+        if (art.video.paused) void art.play().catch(() => undefined)
+        else art.pause()
+      },
+      toggleMuted: () => {
+        art.muted = !art.muted
+        reportMiniWindowPlayerState()
+      },
+      seekBy: (seconds) => {
+        if (isLive || !Number.isFinite(seconds) || seconds === 0) return
+        if (seconds > 0) art.forward = seconds
+        else art.backward = Math.abs(seconds)
+      },
+    }
+    if (miniWindowMode) {
+      miniWindowControllerReadyRef.current?.(miniWindowController)
+      reportMiniWindowPlayerState()
+      art.on('video:play', reportMiniWindowPlayerState)
+      art.on('video:pause', reportMiniWindowPlayerState)
+      art.on('video:volumechange', reportMiniWindowPlayerState)
+    }
+    if (!miniWindowMode) setSettingsPortalContainer(art.template.$player)
     const settingsPosition = createSettingsPositionTracker(art, (nextOffset) => {
       setSettingsBottomOffset((current) => (current === nextOffset ? current : nextOffset))
     })
@@ -422,11 +535,11 @@ export function BasicPlayer({
       art.playbackRate = playbackRate
       art.template.$player.tabIndex = 0
     }
-    removeDefaultContextMenuItems(art)
+    if (!miniWindowMode) removeDefaultContextMenuItems(art)
     if (isLive) {
       removeLiveSettingItems(art)
     }
-    injectPlayerChromeStyles(art)
+    injectPlayerChromeStyles(art, miniWindowMode)
     localizeInfoPanel(art, displayPlaybackUrl, resolvedUrlRef, getStreamType(isHls, isFlv, isMpegts), isLive, mpegtsRef)
     const openDisplaySettings = (): void => {
       settingsPosition.refreshAfterControlTransition()
@@ -492,13 +605,14 @@ export function BasicPlayer({
       })
     }
     art.on('setting', (visible) => {
+      if (miniWindowMode) return
       if (!visible) return
       art.setting.show = false
       openDisplaySettings()
     })
     art.on('ready', () => {
       settingsPosition.schedule()
-      // 换源等必要重建时，恢复销毁前的网页全屏状态
+      // 换源等必要重建时，恢复销毁前的窗口全屏状态
       if (restoreFullscreenWebRef.current) {
         restoreFullscreenWebRef.current = false
         art.fullscreenWeb = true
@@ -531,7 +645,9 @@ export function BasicPlayer({
         art.notice.show = `回退 ${seekStep} 秒`
       }
     }
+    const preventMiniWindowContextMenu = (event: Event): void => event.preventDefault()
     art.template.$player.addEventListener('pointerdown', focusPlayer)
+    if (miniWindowMode) art.template.$player.addEventListener('contextmenu', preventMiniWindowContextMenu)
     document.addEventListener('keydown', handleSeekShortcut, true)
 
     let startTimeApplied = false
@@ -598,10 +714,11 @@ export function BasicPlayer({
       isResolveActive = false
       resolveAbortController.abort()
       art.template.$player.removeEventListener('pointerdown', focusPlayer)
+      art.template.$player.removeEventListener('contextmenu', preventMiniWindowContextMenu)
       document.removeEventListener('keydown', handleSeekShortcut, true)
       destroyHls(hlsRef)
       destroyMpegts(mpegtsRef)
-      // ArtPlayer 网页全屏会把 $player 挂到 body，销毁前需先退出，否则残留遮罩会卡住页面
+      // ArtPlayer 窗口全屏会把 $player 挂到 body，销毁前需先退出，否则残留遮罩会卡住页面
       try {
         if (art.fullscreenWeb) {
           restoreFullscreenWebRef.current = true
@@ -614,6 +731,7 @@ export function BasicPlayer({
         // Ignore teardown errors while leaving fullscreen states.
       }
       art.destroy(false)
+      if (miniWindowMode) miniWindowControllerReadyRef.current?.(null)
       if (artRef.current === art) {
         artRef.current = null
       }
@@ -628,10 +746,13 @@ export function BasicPlayer({
     isMpegts,
     isLive,
     loop,
+    miniWindowMode,
+    canEnterMiniWindowMode,
     persistPlaybackSettings,
     sourceType,
     src,
     title,
+    variant,
   ])
 
   const displaySettingsOverlay = customNumberInput ? (
@@ -652,8 +773,13 @@ export function BasicPlayer({
 
   return (
     <div
-      className={cn('relative w-full overflow-hidden bg-black', isTheaterMode && 'h-full', className)}
+      className={cn(
+        'relative w-full overflow-hidden bg-black',
+        (isTheaterMode || miniWindowMode) && 'h-full',
+        className,
+      )}
       onPointerDownCapture={(event) => {
+        if (miniWindowMode) return
         if (!displaySettings || !(event.target instanceof Element) || event.target.closest('[data-display-settings]'))
           return
         const isControlInteraction = Boolean(event.target.closest('.art-bottom'))
@@ -681,7 +807,10 @@ export function BasicPlayer({
           {isResolvingSource ? '正在识别播放源…' : '请先选择要播放的内容'}
         </div>
       ) : null}
-      {settingsPortalContainer ? createPortal(displaySettingsOverlay, settingsPortalContainer) : displaySettingsOverlay}
+      {!miniWindowMode &&
+        (settingsPortalContainer
+          ? createPortal(displaySettingsOverlay, settingsPortalContainer)
+          : displaySettingsOverlay)}
     </div>
   )
 }
@@ -885,7 +1014,7 @@ function setContextMenuItemVisible(element: HTMLElement | undefined, visible: bo
   }
 }
 
-function injectPlayerChromeStyles(art: Artplayer): void {
+function injectPlayerChromeStyles(art: Artplayer, miniWindowMode = false): void {
   if (art.template.$player.querySelector('[data-vfan-player-style]')) {
     return
   }
@@ -907,7 +1036,15 @@ function injectPlayerChromeStyles(art: Artplayer): void {
     .art-video-player:not(.art-control-show):not(.art-hover) .art-bottom .art-progress .art-progress-indicator {
       display: none !important;
     }
+    .art-video-player.vfan-mini-window-player .art-top,
+    .art-video-player.vfan-mini-window-player .art-bottom,
+    .art-video-player.vfan-mini-window-player .art-center,
+    .art-video-player.vfan-mini-window-player .art-state,
+    .art-video-player.vfan-mini-window-player .art-notice {
+      display: none !important;
+    }
   `
+  if (miniWindowMode) art.template.$player.classList.add('vfan-mini-window-player')
   art.template.$player.appendChild(style)
 }
 

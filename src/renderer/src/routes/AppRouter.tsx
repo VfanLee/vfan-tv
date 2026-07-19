@@ -7,6 +7,7 @@ import {
   HotPage,
   LinkPlayerPage,
   LivePage,
+  MiniWindowPage,
   VodPage,
   RecentPage,
   SearchPage,
@@ -14,6 +15,7 @@ import {
 } from '@renderer/pages'
 
 const router = createHashRouter([
+  { path: 'mini-window', element: <MiniWindowPage /> },
   {
     path: '/',
     element: <AppLayout />,
