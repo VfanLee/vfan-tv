@@ -163,7 +163,7 @@ jobs:
           }
 
           {
-            printf '# Vfan TV %s · 更新说明\n' "$RELEASE_TAG"
+            printf '## 更新内容\n'
           } > release-notes.md
           append_section '✨ 新功能' "$features_file"
           append_section '🐛 问题修复' "$fixes_file"
@@ -190,4 +190,4 @@ jobs:
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release delete "$RELEASE_TAG" --yes --repo "$GITHUB_REPOSITORY"
           fi
-          gh release create "$RELEASE_TAG" release-assets/* --verify-tag --notes-file release-notes.md --title "Vfan TV $RELEASE_TAG · 更新说明" --repo "$GITHUB_REPOSITORY"
+          gh release create "$RELEASE_TAG" release-assets/* --verify-tag --notes-file release-notes.md --title "Vfan TV $RELEASE_TAG" --repo "$GITHUB_REPOSITORY"
