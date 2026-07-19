@@ -28,6 +28,63 @@ interface CheckUpdateOptions {
   shouldApplyResult?: () => boolean
 }
 
+interface ReleaseNoteSection {
+  title: string
+  items: string[]
+}
+
+function getReleaseNoteSections(notes: string): ReleaseNoteSection[] {
+  const sections: ReleaseNoteSection[] = []
+  let currentSection: ReleaseNoteSection | undefined
+
+  for (const line of notes.split('\n')) {
+    const value = line.trim()
+    const heading = value.match(/^#{1,6}\s+(.+)$/)
+    if (heading) {
+      const title = heading[1].trim()
+      if (title === '下载与安装') break
+      if (title === '更新内容' || /^Vfan TV\s+v/i.test(title)) continue
+
+      currentSection = { title, items: [] }
+      sections.push(currentSection)
+      continue
+    }
+
+    const item = value.match(/^[-*]\s+(.+)$/)
+    if (item && currentSection) {
+      currentSection.items.push(item[1].replace(/`([^`]+)`/g, '$1').replace(/\*\*([^*]+)\*\*/g, '$1'))
+    }
+  }
+
+  return sections.filter((section) => section.items.length > 0)
+}
+
+function ReleaseNotes({ notes }: { notes: string }): React.JSX.Element | null {
+  const sections = getReleaseNoteSections(notes)
+  if (sections.length === 0) return null
+
+  return (
+    <div className="border-border mt-5 border-t pt-5">
+      <h4 className="text-sm font-semibold">更新内容</h4>
+      <div className="mt-3 space-y-4">
+        {sections.map((section) => (
+          <section key={section.title}>
+            <h5 className="text-muted-foreground text-sm font-medium">{section.title}</h5>
+            <ul className="text-muted-foreground mt-1.5 space-y-1 text-sm leading-6">
+              {section.items.map((item) => (
+                <li key={item} className="flex gap-2">
+                  <span aria-hidden="true">·</span>
+                  <span>{item}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function AboutPage(): React.JSX.Element {
   const [currentVersion, setCurrentVersion] = useState('')
   const [updateResult, setUpdateResult] = useState<UpdateCheckResult>()
@@ -225,10 +282,7 @@ export function AboutPage(): React.JSX.Element {
                   <SquareArrowOutUpRight className="shrink-0" size={14} />
                 </button>
               )}
-              <h4 className="mt-4 text-sm font-semibold">更新日志：</h4>
-              <p className="text-muted-foreground mt-1.5 max-h-24 overflow-y-auto text-sm leading-6 whitespace-pre-wrap">
-                {updateResult.releaseNotes}
-              </p>
+              <ReleaseNotes notes={updateResult.releaseNotes} />
             </div>
           ) : null}
         </Card>

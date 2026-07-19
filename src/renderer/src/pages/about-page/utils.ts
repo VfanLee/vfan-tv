@@ -16,7 +16,7 @@ export function getUpdateHint(
   if (isUpdateDownloaded) return '更新已下载，可重启安装'
   if (!result) return '提示：点击「检查更新」获取最新版本'
   if (result.updateAvailable && result.canAutoUpdate) return `发现新版本 v${result.latestVersion}，可自动下载并安装`
-  if (result.updateAvailable) return `发现新版本 v${result.latestVersion}，可查看更新说明并手动下载`
+  if (result.updateAvailable) return `发现新版本 v${result.latestVersion}，可手动下载`
   return '当前已是最新版本'
 }
 
