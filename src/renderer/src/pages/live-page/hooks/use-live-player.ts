@@ -10,15 +10,18 @@ import {
   loadLivePlaylist,
 } from '@renderer/services/api'
 import {
+  getStreamTypeCacheKey,
   groupChannels,
   getKnownStreamType,
   normalizeLivePlaylist,
   readCachedPlaylist,
   readCachedSelection,
+  readCachedStreamTypes,
   resolveLiveSelection,
   resolveStreamPlaybackUrl,
   writeCachedPlaylist,
   writeCachedSelection,
+  writeCachedStreamTypes,
 } from '../utils'
 
 export interface LivePlayerState {
@@ -68,7 +71,7 @@ export function useLivePlayer(): LivePlayerState {
   const [isLoadingPlaylist, setIsLoadingPlaylist] = useState(false)
   const [isTheaterMode, setIsTheaterMode] = useState(false)
   const [detectedStream, setDetectedStream] = useState<{ url: string; type: MediaStreamType }>()
-  const [streamTypeCache, setStreamTypeCache] = useState<Record<string, MediaStreamType>>({})
+  const [streamTypeCache, setStreamTypeCache] = useState<Record<string, MediaStreamType>>(() => readCachedStreamTypes())
   const selectedSource = liveSources.find((source) => source.id === selectedSourceId)
   const activeChannel = playlist?.channels.find((channel) => channel.id === activeChannelId)
   const activeStream =
@@ -76,7 +79,11 @@ export function useLivePlayer(): LivePlayerState {
   const activeStreamIndex = activeChannel?.streams.findIndex((stream) => stream.id === activeStreamId) ?? -1
   const activeStreamUrl = activeStream?.url ?? ''
   const knownStreamType = getKnownStreamType(activeStreamUrl)
-  const cachedStreamType = streamTypeCache[activeStreamUrl]
+  const streamTypeCacheKey =
+    selectedSource && activeChannel && activeStream
+      ? getStreamTypeCacheKey(selectedSource, activeChannel, activeStream)
+      : ''
+  const cachedStreamType = streamTypeCache[streamTypeCacheKey]
   const activeStreamType =
     knownStreamType ??
     cachedStreamType ??
@@ -97,12 +104,10 @@ export function useLivePlayer(): LivePlayerState {
   const loadPlaylist = useCallback(
     async ({ force = false, silent = false }: { force?: boolean; silent?: boolean } = {}): Promise<void> => {
       if (!selectedSource || !isApiAvailable()) return
-      if (!force) {
-        const cachedPlaylist = readCachedPlaylist(selectedSource)
-        if (cachedPlaylist) {
-          applyPlaylist(cachedPlaylist, selectedSource.id)
-          return
-        }
+      const cachedPlaylist = readCachedPlaylist(selectedSource)
+      if (cachedPlaylist) {
+        applyPlaylist(cachedPlaylist, selectedSource.id)
+        if (!force) return
       }
       setIsLoadingPlaylist(true)
       try {
@@ -145,7 +150,7 @@ export function useLivePlayer(): LivePlayerState {
 
   useEffect(() => {
     if (isLoadingSettings || !selectedSource || playlist?.sourceUrl === selectedSource.url) return
-    queueMicrotask(() => void loadPlaylist({ silent: true }))
+    queueMicrotask(() => void loadPlaylist({ force: true, silent: true }))
   }, [isLoadingSettings, loadPlaylist, playlist?.sourceUrl, selectedSource])
 
   useEffect(() => {
@@ -176,10 +181,14 @@ export function useLivePlayer(): LivePlayerState {
       userAgent: activeStream?.requestHeaders?.userAgent,
     }).then((result) => {
       if (!active || !result) return
-      // 探测因超时/网络错误被动降级为 native 时不写入永久缓存，
+      // 探测因超时/网络错误被动降级为 native 时不写入本地缓存，
       // 以便下次访问该频道时仍有机会重新探测出真实的流类型。
       if (!result.uncertain) {
-        setStreamTypeCache((current) => ({ ...current, [activeStreamUrl]: result.type }))
+        setStreamTypeCache((current) => {
+          const nextCache = { ...current, [streamTypeCacheKey]: result.type }
+          writeCachedStreamTypes(nextCache)
+          return nextCache
+        })
       }
       setDetectedStream({ url: activeStreamUrl, type: result.type })
     })
@@ -192,6 +201,7 @@ export function useLivePlayer(): LivePlayerState {
     activeStreamUrl,
     cachedStreamType,
     knownStreamType,
+    streamTypeCacheKey,
   ])
 
   const selectSource = (sourceId: string): void => {
@@ -214,12 +224,7 @@ export function useLivePlayer(): LivePlayerState {
   }
 
   const toggleGroup = (groupName: string): void => {
-    setExpandedGroups((current) => {
-      const nextGroups = new Set(current)
-      if (nextGroups.has(groupName)) nextGroups.delete(groupName)
-      else nextGroups.add(groupName)
-      return nextGroups
-    })
+    setExpandedGroups(groupName ? new Set([groupName]) : new Set())
   }
 
   return {

@@ -2,9 +2,11 @@ import {
   LIVE_PLAYLIST_CACHE_PREFIX,
   LIVE_SELECTED_SOURCE_STORAGE_KEY,
   LIVE_SELECTION_STORAGE_PREFIX,
+  LIVE_STREAM_TYPE_CACHE_STORAGE_KEY,
 } from '@shared/constants'
 import type {
   LiveChannel,
+  LiveChannelStream,
   LivePlaylist,
   LiveSourceConfig,
   LiveStreamRequestHeaders,
@@ -13,7 +15,7 @@ import type {
 import type { LiveSelectionCache } from './types'
 
 const LIVE_CONTEXT_KEYWORDS = ['直播', '卫视', '央视', '央卫视']
-const VOD_CONTEXT_KEYWORDS = ['点播', '录播', '回放']
+const VOD_CONTEXT_KEYWORDS = ['点播', '录播', '回放', '春晚']
 
 export function groupChannels(
   channels: LiveChannel[],
@@ -83,6 +85,36 @@ export function writeCachedSelection(sourceId: string, selection: LiveSelectionC
   }
 }
 
+export function readCachedStreamTypes(): Record<string, MediaStreamType> {
+  try {
+    const rawValue = window.localStorage.getItem(LIVE_STREAM_TYPE_CACHE_STORAGE_KEY)
+    if (!rawValue) return {}
+    const parsed = JSON.parse(rawValue) as unknown
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {}
+    return Object.fromEntries(
+      Object.entries(parsed).filter((entry): entry is [string, MediaStreamType] => isMediaStreamType(entry[1])),
+    )
+  } catch {
+    return {}
+  }
+}
+
+export function writeCachedStreamTypes(streamTypes: Record<string, MediaStreamType>): void {
+  try {
+    window.localStorage.setItem(LIVE_STREAM_TYPE_CACHE_STORAGE_KEY, JSON.stringify(streamTypes))
+  } catch {
+    // Playback still works when storage is unavailable.
+  }
+}
+
+export function getStreamTypeCacheKey(
+  source: LiveSourceConfig,
+  channel: LiveChannel,
+  stream: LiveChannelStream,
+): string {
+  return JSON.stringify([source.id, source.url, channel.id, stream.name])
+}
+
 export function resolveLiveSelection(playlist: LivePlaylist, cached?: LiveSelectionCache): LiveSelectionCache {
   const firstChannel = playlist.channels[0]
   const fallback: LiveSelectionCache = {
@@ -94,17 +126,10 @@ export function resolveLiveSelection(playlist: LivePlaylist, cached?: LiveSelect
   const channel = playlist.channels.find((item) => item.id === cached.channelId) ?? firstChannel
   if (!channel) return fallback
   const stream = channel.streams.find((item) => item.id === cached.streamId) ?? channel.streams[0]
-  const knownGroups = new Set(playlist.channels.map((item) => item.group))
-  const expandedGroups = cached.expandedGroups.filter((group) => knownGroups.has(group))
   return {
     channelId: channel.id,
     streamId: stream?.id ?? '',
-    expandedGroups:
-      expandedGroups.length > 0
-        ? expandedGroups.includes(channel.group)
-          ? expandedGroups
-          : [...expandedGroups, channel.group]
-        : [channel.group],
+    expandedGroups: [channel.group],
   }
 }
 
@@ -149,6 +174,10 @@ function inferStreamIsLive(group: string, title: string, url: string): boolean {
   if (/\.(?:mp4|m4v|mkv|mov|avi|wmv|webm)(?:$|[?#])/i.test(url)) return false
   if (LIVE_CONTEXT_KEYWORDS.some((keyword) => context.includes(keyword))) return true
   return true
+}
+
+function isMediaStreamType(value: unknown): value is MediaStreamType {
+  return value === 'hls' || value === 'flv' || value === 'mpegts' || value === 'native'
 }
 
 export function isLikelyHlsStream(url: string | undefined): boolean {

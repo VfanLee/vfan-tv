@@ -8,7 +8,7 @@ const VOD_STREAM_URL_PATTERN = /\.(?:mp4|m4v|mkv|mov|avi|wmv|webm)(?:$|[?#])/i
 const STREAM_URL_PATTERN = /(?:https?|rtmp|rtsp):\/\/\S+/i
 const TEXT_GROUP_MARKERS = new Set(['#genre#', '#group#'])
 const LIVE_CONTEXT_KEYWORDS = ['直播', '卫视', '央视', '央卫视']
-const VOD_CONTEXT_KEYWORDS = ['点播', '录播', '回放']
+const VOD_CONTEXT_KEYWORDS = ['点播', '录播', '回放', '春晚']
 
 interface ParsedExtInf {
   title: string

@@ -45,21 +45,10 @@ export interface CustomSliderInput {
   onChange: (value: number) => void
 }
 
-export interface CustomOptionsInput {
-  title: string
-  selectedValue: number
-  options: readonly { value: number; label: string }[]
-  onChange: (value: number) => void
-}
-
 export interface DisplaySettingsState {
   aspectRatio: string
   flip: string
   audioTrack?: {
-    label: string
-    onClick: () => void
-  }
-  quality?: {
     label: string
     onClick: () => void
   }

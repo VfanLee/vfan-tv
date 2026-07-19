@@ -1,5 +1,7 @@
-import { ChevronDown, Loader2, Play, Radio, RefreshCw, Search, Tv } from 'lucide-react'
+import { Loader2, Play, Radio, RefreshCw, Search, Tv } from 'lucide-react'
 import type { LiveChannel } from '@shared/types'
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/ui/accordion'
+import { Badge } from '@/ui/badge'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/ui/select'
@@ -74,43 +76,36 @@ export function LiveSidebar({ player }: { player: LivePlayerState }): React.JSX.
 
         <div className="min-h-0 flex-1 overflow-auto">
           {player.groupedChannels.length > 0 ? (
-            <div className="flex flex-col p-3 sm:p-4">
-              {player.groupedChannels.map((group) => (
-                <section key={group.name} className="border-border border-b last:border-b-0">
-                  <button
-                    aria-expanded={player.expandedGroups.has(group.name)}
-                    className="hover:bg-muted/70 focus-visible:ring-ring flex h-12 w-full items-center gap-2 rounded-lg px-2 text-left transition-colors outline-none focus-visible:ring-2"
-                    type="button"
-                    onClick={() => player.toggleGroup(group.name)}
-                  >
-                    <ChevronDown
-                      className={cn(
-                        'text-muted-foreground shrink-0 transition-transform',
-                        player.expandedGroups.has(group.name) ? 'rotate-0' : '-rotate-90',
-                      )}
-                      size={16}
-                    />
-                    <span className="text-muted-foreground min-w-0 flex-1 truncate text-xs font-semibold">
-                      {group.name}
-                    </span>
-                    <span className="text-muted-foreground shrink-0 text-xs font-semibold">
-                      {group.channels.length}
-                    </span>
-                  </button>
-                  {player.expandedGroups.has(group.name) ? (
-                    <div className="flex flex-col gap-1.5 pb-3">
-                      {group.channels.map((channel) => (
-                        <ChannelButton
-                          key={channel.id}
-                          active={channel.id === player.activeChannelId}
-                          channel={channel}
-                          onClick={() => player.selectChannel(channel)}
-                        />
-                      ))}
-                    </div>
-                  ) : null}
-                </section>
-              ))}
+            <div className="p-3 sm:p-4">
+              <Accordion
+                collapsible
+                type="single"
+                value={[...player.expandedGroups][0] ?? ''}
+                onValueChange={player.toggleGroup}
+              >
+                {player.groupedChannels.map((group) => (
+                  <AccordionItem key={group.name} value={group.name}>
+                    <AccordionTrigger>
+                      <span className="flex min-w-0 items-center gap-2">
+                        <span className="truncate">{group.name}</span>
+                        <Badge variant="secondary">{group.channels.length} 个频道</Badge>
+                      </span>
+                    </AccordionTrigger>
+                    <AccordionContent>
+                      <div className="flex flex-col gap-1.5">
+                        {group.channels.map((channel) => (
+                          <ChannelButton
+                            key={channel.id}
+                            active={channel.id === player.activeChannelId}
+                            channel={channel}
+                            onClick={() => player.selectChannel(channel)}
+                          />
+                        ))}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
             </div>
           ) : (
             <EmptyLiveState
@@ -152,34 +147,16 @@ function ChannelButton({
   channel: LiveChannel
   onClick: () => void
 }): React.JSX.Element {
-  const channelInitial = channel.title.trim().charAt(0).toUpperCase() || '台'
   return (
     <button
       className={cn(
-        'focus-visible:ring-ring flex h-14 items-center gap-3 rounded-xl px-3 text-left transition-colors outline-none focus-visible:ring-2',
+        'focus-visible:ring-ring flex h-11 items-center gap-3 rounded-xl px-3 text-left transition-colors outline-none focus-visible:ring-2',
         active ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-foreground',
       )}
       type="button"
       onClick={onClick}
     >
-      <span
-        className={cn(
-          'flex size-9 shrink-0 items-center justify-center rounded-lg border text-sm font-bold',
-          active
-            ? 'border-primary-foreground/25 bg-primary-foreground/15 text-primary-foreground'
-            : 'border-border bg-muted text-muted-foreground',
-        )}
-      >
-        <span aria-hidden="true" className="leading-none">
-          {channelInitial}
-        </span>
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-semibold">{channel.title}</span>
-        <span className={cn('block truncate text-xs', active ? 'text-primary-foreground/80' : 'text-muted-foreground')}>
-          {channel.streams.length > 1 ? `${channel.streams.length} 条线路` : channel.group}
-        </span>
-      </span>
+      <span className="min-w-0 flex-1 truncate text-sm font-semibold">{channel.title}</span>
       <Play className="shrink-0" size={15} />
     </button>
   )

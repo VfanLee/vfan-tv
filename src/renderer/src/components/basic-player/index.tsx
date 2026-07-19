@@ -14,9 +14,9 @@ import {
 } from '@shared/constants'
 import type { MediaStreamType } from '@shared/types'
 import { artplayerSwitchIcons, cn } from '@/utils'
-import { CustomOptionsDialog, CustomSliderDialog, DisplaySettingsMenu } from './components/display-settings-dialogs'
+import { CustomSliderDialog, DisplaySettingsMenu } from './components/display-settings-dialogs'
 import { createSettingsPositionTracker } from './utils/settings-position'
-import type { BasicPlayerProps, CustomOptionsInput, CustomSliderInput, DisplaySettingsState } from './types'
+import type { BasicPlayerProps, CustomSliderInput, DisplaySettingsState } from './types'
 
 // 播放器适配层：统一 ArtPlayer、HLS.js 与 mpegts.js 的生命周期及持久化播放设置。
 export type { BasicPlayerProps, PlayerNavigationLabels, PlayerVariant } from './types'
@@ -112,7 +112,6 @@ export function BasicPlayer({
   const resolvedUrlRef = useRef('检测中…')
   const restoreFullscreenWebRef = useRef(false)
   const [customNumberInput, setCustomNumberInput] = useState<CustomSliderInput | undefined>(undefined)
-  const [customOptionsInput, setCustomOptionsInput] = useState<CustomOptionsInput | undefined>(undefined)
   const [displaySettings, setDisplaySettings] = useState<DisplaySettingsState | undefined>(undefined)
   const [isDisplaySettingsClosing, setIsDisplaySettingsClosing] = useState(false)
   const [settingsPortalContainer, setSettingsPortalContainer] = useState<HTMLElement | undefined>(undefined)
@@ -125,7 +124,6 @@ export function BasicPlayer({
 
   useEffect(() => {
     setCustomNumberInput(undefined)
-    setCustomOptionsInput(undefined)
     setDisplaySettings(undefined)
     setIsDisplaySettingsClosing(false)
     setSettingsPortalContainer(undefined)
@@ -252,11 +250,8 @@ export function BasicPlayer({
               (art) => {
                 const plugin = artplayerPluginHlsControl({
                   quality: {
-                    control: false, // 清晰度入口由项目自定义设置菜单提供
-                    setting: false, // 在设置面板显示 HLS 清晰度入口
-                    title: '清晰度', // HLS 清晰度菜单标题
-                    auto: '自动', // HLS 自动清晰度文案
-                    getName: (level) => getHlsQualityLabel(level, art.video),
+                    control: false,
+                    setting: false,
                   },
                   audio: {
                     control: false,
@@ -349,9 +344,6 @@ export function BasicPlayer({
             artInstance.hls = hls
             hls.on(Hls.Events.MANIFEST_PARSED, () => {
               debugLog.push('HLS', `清单已解析 · ${hls.levels.length} 档 · ${hls.audioTracks.length} 音轨`)
-              syncHlsQualityUi(artInstance, hls, isLive, {
-                updateHlsControl: () => hlsControlUpdate?.(),
-              })
               if (hasHlsAudioTracks(hls)) {
                 hlsControlUpdate?.()
                 setContextMenuItemVisible(audioMenuItem, true)
@@ -359,9 +351,6 @@ export function BasicPlayer({
             })
             hls.on(Hls.Events.LEVEL_LOADED, () => {
               hlsNetworkRecoveryAttempts = 0
-              syncHlsQualityUi(artInstance, hls, isLive, {
-                updateHlsControl: () => hlsControlUpdate?.(),
-              })
             })
             hls.on(Hls.Events.ERROR, (_event, data) => {
               debugLog.push('HLS', formatHlsErrorBrief(data))
@@ -453,35 +442,10 @@ export function BasicPlayer({
               },
             }
           : undefined
-      const quality =
-        hls && shouldShowHlsQualityControl(hls, isLive)
-          ? {
-              label: getQualityText(art, true),
-              onClick: () => {
-                setCustomOptionsInput({
-                  title: '画质',
-                  selectedValue: hls.currentLevel,
-                  options: [
-                    { value: -1, label: '自动' },
-                    ...hls.levels.map((level, index) => ({
-                      value: index,
-                      label: getHlsQualityLabel(level, art.video),
-                    })),
-                  ],
-                  onChange: (nextLevel) => {
-                    hls.currentLevel = nextLevel
-                    art.notice.show = `画质 ${nextLevel < 0 ? '自动' : getHlsQualityLabel(hls.levels[nextLevel], art.video)}`
-                    refresh()
-                  },
-                })
-              },
-            }
-          : undefined
       setDisplaySettings({
         aspectRatio: art.aspectRatio,
         flip: art.flip,
         audioTrack,
-        quality,
         playbackRate,
         seekStep,
         loop: loopEnabled,
@@ -532,19 +496,7 @@ export function BasicPlayer({
       art.setting.show = false
       openDisplaySettings()
     })
-    const refreshHlsQualityUi = (): void => {
-      const hls = (art as ArtplayerWithHls).hls
-      if (!hls?.levels.length) {
-        return
-      }
-
-      syncHlsQualityUi(art, hls, isLive, {
-        updateHlsControl: () => hlsControlUpdate?.(),
-      })
-    }
-
     art.on('ready', () => {
-      moveHlsQualityControl(art)
       settingsPosition.schedule()
       // 换源等必要重建时，恢复销毁前的网页全屏状态
       if (restoreFullscreenWebRef.current) {
@@ -552,11 +504,8 @@ export function BasicPlayer({
         art.fullscreenWeb = true
       }
     })
-    art.on('restart', () => moveHlsQualityControl(art))
     art.on('fullscreen', settingsPosition.schedule)
     art.on('fullscreenWeb', settingsPosition.schedule)
-    art.on('video:loadedmetadata', refreshHlsQualityUi)
-    art.on('video:resize', refreshHlsQualityUi)
 
     const focusPlayer = (): void => art.template.$player.focus()
     const handleSeekShortcut = (event: KeyboardEvent): void => {
@@ -693,14 +642,6 @@ export function BasicPlayer({
       bottomOffset={settingsBottomOffset}
       onBack={() => setCustomNumberInput(undefined)}
     />
-  ) : customOptionsInput ? (
-    <CustomOptionsDialog
-      key={`${customOptionsInput.title}-${customOptionsInput.selectedValue}`}
-      input={customOptionsInput}
-      closing={isDisplaySettingsClosing}
-      bottomOffset={settingsBottomOffset}
-      onBack={() => setCustomOptionsInput(undefined)}
-    />
   ) : displaySettings ? (
     <DisplaySettingsMenu
       state={displaySettings}
@@ -724,7 +665,6 @@ export function BasicPlayer({
         setIsDisplaySettingsClosing(true)
         window.setTimeout(() => {
           setCustomNumberInput(undefined)
-          setCustomOptionsInput(undefined)
           setDisplaySettings(undefined)
           setIsDisplaySettingsClosing(false)
         }, 150)
@@ -932,49 +872,6 @@ function removeLiveSettingItems(art: Artplayer): void {
     } catch {
       // Ignore settings that were not mounted for this source.
     }
-  }
-}
-
-function moveHlsQualityControl(art: Artplayer): void {
-  const qualityControl = art.controls['hls-quality']
-  const settingControl = art.controls['setting']
-  if (!qualityControl || !settingControl || qualityControl.nextElementSibling === settingControl) {
-    return
-  }
-
-  qualityControl.dataset.index = '25'
-  settingControl.insertAdjacentElement('beforebegin', qualityControl)
-}
-
-function shouldShowHlsQualityControl(hls: Hls, isLive: boolean): boolean {
-  if (!hls.levels.length) {
-    return false
-  }
-
-  return isLive || hls.levels.length > 1
-}
-
-function setHlsQualityControlVisible(art: Artplayer, visible: boolean): void {
-  const qualityControl = art.controls['hls-quality']
-  if (qualityControl) {
-    qualityControl.style.display = visible ? '' : 'none'
-  }
-}
-
-function syncHlsQualityUi(
-  art: Artplayer,
-  hls: Hls,
-  isLive: boolean,
-  options: {
-    updateHlsControl: () => void
-  },
-): void {
-  const shouldShow = shouldShowHlsQualityControl(hls, isLive)
-  setHlsQualityControlVisible(art, shouldShow)
-
-  if (shouldShow) {
-    options.updateHlsControl()
-    moveHlsQualityControl(art)
   }
 }
 

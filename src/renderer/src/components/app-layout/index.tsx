@@ -192,9 +192,11 @@ function SidebarLink({
       to={item.to}
       className={({ isActive }) =>
         cn(
-          'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground flex h-11 items-center rounded-xl font-medium transition-colors',
+          'flex h-11 items-center rounded-xl font-medium transition-colors',
           collapsed ? 'justify-center px-0' : 'gap-3 px-3',
-          isActive && 'bg-sidebar-accent text-sidebar-primary',
+          isActive
+            ? 'bg-sidebar-accent text-sidebar-primary'
+            : 'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground',
         )
       }
     >

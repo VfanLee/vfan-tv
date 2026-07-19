@@ -1,4 +1,5 @@
 export { Alert, AlertAction, AlertDescription, AlertTitle } from './alert'
+export { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from './accordion'
 export {
   AlertDialog,
   AlertDialogAction,

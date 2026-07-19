@@ -1,6 +1,6 @@
 import { useState, type JSX, type ReactNode } from 'react'
 import { cn } from '@/utils'
-import type { CustomOptionsInput, CustomSliderInput, DisplaySettingsState } from '../types'
+import type { CustomSliderInput, DisplaySettingsState } from '../types'
 
 interface SettingsSurfaceProps {
   bottomOffset: number
@@ -39,9 +39,6 @@ export function DisplaySettingsMenu({
     <SettingsSurface bottomOffset={bottomOffset} closing={closing} className="w-80 p-2">
       <DisplaySettingRow label="画面比例" value={formatAspectRatio(state.aspectRatio)} onClick={state.onAspectRatio} />
       <DisplaySettingRow label="画面翻转" value={formatFlip(state.flip)} onClick={state.onFlip} />
-      {state.quality ? (
-        <DisplaySettingRow label="画质" value={state.quality.label} onClick={state.quality.onClick} />
-      ) : null}
       {state.audioTrack ? (
         <DisplaySettingRow label="音效" value={state.audioTrack.label} onClick={state.audioTrack.onClick} />
       ) : null}
@@ -206,73 +203,6 @@ export function CustomSliderDialog({
             </div>
           ))}
         </div>
-      </div>
-    </SettingsSurface>
-  )
-}
-
-export function CustomOptionsDialog({
-  input,
-  closing,
-  onBack,
-  bottomOffset,
-}: {
-  input: CustomOptionsInput
-  closing: boolean
-  onBack: () => void
-  bottomOffset: number
-}): JSX.Element {
-  const [value, setValue] = useState(input.selectedValue)
-
-  return (
-    <SettingsSurface bottomOffset={bottomOffset} closing={closing} className="w-80 p-2">
-      <header className="flex items-center gap-3 border-b border-white/10 px-2 py-2.5">
-        <button
-          type="button"
-          aria-label="返回显示设置"
-          className="flex size-8 items-center justify-center rounded-full text-white hover:bg-white/10"
-          onClick={onBack}
-        >
-          <svg
-            className="size-5"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="m15 18-6-6 6-6" />
-          </svg>
-        </button>
-        <h2 className="text-base font-semibold text-white">{input.title}</h2>
-      </header>
-      <div className="py-1">
-        {input.options.map((option) => {
-          const selected = value === option.value
-          return (
-            <button
-              key={option.value}
-              type="button"
-              className={cn(
-                'flex h-11 w-full items-center px-3 text-left text-sm transition-colors hover:bg-white/10',
-                selected && 'bg-white/10 text-white',
-              )}
-              onClick={() => {
-                setValue(option.value)
-                input.onChange(option.value)
-              }}
-            >
-              <span className="flex-1">{option.label}</span>
-              {selected ? (
-                <span className="text-base" aria-label="已选择">
-                  ✓
-                </span>
-              ) : null}
-            </button>
-          )
-        })}
       </div>
     </SettingsSurface>
   )
