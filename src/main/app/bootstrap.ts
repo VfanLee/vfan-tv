@@ -76,7 +76,7 @@ function showAboutWindow(): void {
       <img src="${iconDataUrl}" alt="${APP_DISPLAY_NAME}" />
       <h1>${APP_DISPLAY_NAME}</h1>
       <p class="version">v${getCurrentVersion()}</p>
-      <p class="description">免费开源、开箱即用、跨平台的桌面端影视聚合播放器。</p>
+      <p class="description">Vfan TV 是一款免费开源、跨平台、开箱即用的桌面影视聚合播放器。</p>
       <p class="copyright">Copyright © 2026 VfanLee</p>
     </main>
   </body>

@@ -3,7 +3,7 @@
 
 # Vfan TV
 
-> **Vfan TV** 是一款免费开源、开箱即用、跨平台的桌面端影视聚合播放器。  
+> **Vfan TV** 是一款免费开源、跨平台、开箱即用的桌面影视聚合播放器。  
 > 基于 **TypeScript** + **Electron** + **React** + **Tailwind CSS** 构建，支持多源搜索、在线播放、收藏与播放记录。
 
 [![Release](https://img.shields.io/github/v/release/vfanlee/vfan-tv?display_name=tag&style=flat-square)](https://github.com/vfanlee/vfan-tv/releases/latest)

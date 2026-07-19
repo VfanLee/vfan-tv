@@ -223,7 +223,7 @@ export function AboutPage(): React.JSX.Element {
                   <Badge>GPL-3.0</Badge>
                 </div>
                 <p className="text-muted-foreground mt-1.5 text-sm leading-6">
-                  免费开源、开箱即用、跨平台的桌面端影视聚合播放器。
+                  Vfan TV 是一款免费开源、跨平台、开箱即用的桌面影视聚合播放器。
                 </p>
               </div>
             </div>
