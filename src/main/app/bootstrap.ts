@@ -109,11 +109,6 @@ function showAboutWindow(): void {
   void aboutWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`)
 }
 
-function formatReleaseNotes(notes: string): string {
-  const maxLength = 1_200
-  return notes.length > maxLength ? `${notes.slice(0, maxLength).trim()}\n\n……` : notes
-}
-
 function showMessageBox(options: MessageBoxOptions): Promise<MessageBoxReturnValue> {
   const parent = BrowserWindow.getFocusedWindow()
   return parent ? dialog.showMessageBox(parent, options) : dialog.showMessageBox(options)
@@ -141,8 +136,8 @@ async function runUpdateCheck(interactive: boolean): Promise<void> {
     const response = await showMessageBox({
       type: 'info',
       title: '发现新版本',
-      message: `${result.releaseName} 已发布`,
-      detail: `当前版本：v${result.currentVersion}\n最新版本：v${result.latestVersion}\n\n${formatReleaseNotes(result.releaseNotes)}`,
+      message: '有新版本可用',
+      detail: `当前版本：v${result.currentVersion}\n最新版本：v${result.latestVersion}`,
       buttons: ['前往下载', '稍后'],
       defaultId: 0,
       cancelId: 1,
