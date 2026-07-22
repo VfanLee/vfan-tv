@@ -7,6 +7,7 @@ import { registerMediaIpc } from '../modules/media/ipc'
 import { registerSettingsIpc } from '../modules/settings/ipc'
 import { registerSourcesIpc } from '../modules/sources/ipc'
 import { registerUpdatesIpc } from '../modules/updates/ipc'
+import { registerRadioIpc } from '../modules/radio/ipc'
 import { registerShellIpc } from './shell'
 import { registerWindowIpc } from './window'
 
@@ -17,6 +18,7 @@ export function registerIpcHandlers(context: ApplicationContext): void {
   registerHomeIpc(context)
   registerLibraryIpc(context)
   registerMediaIpc(context)
+  registerRadioIpc(context)
   registerSettingsIpc(context)
   registerAppDataIpc(context)
   registerUpdatesIpc(context)

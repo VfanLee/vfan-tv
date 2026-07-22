@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useMatches, useNavigate, useSearchParams } from 'react-router'
-import { ChevronLeft, ChevronRight, Clock3, Heart, Home, Info, Link, Search, Settings, Tv } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Clock3, Heart, Home, Info, Link, Radio, Search, Settings, Tv } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { SIDEBAR_COLLAPSED_STORAGE_KEY } from '@shared/constants'
 import { categoryIcons } from '@renderer/constants'
@@ -11,6 +11,7 @@ import logoMarkUrl from '@renderer/assets/logo-mark.svg'
 const primaryNavItems: Array<{ to: string; label: string; icon: LucideIcon }> = [
   { to: '/', label: '首页', icon: Home },
   { to: '/live', label: '直播', icon: Tv },
+  { to: '/radio', label: '电台', icon: Radio },
   { to: '/hot/movie', label: '电影', icon: categoryIcons.movie },
   { to: '/hot/tv', label: '电视剧', icon: categoryIcons.tv },
   { to: '/hot/animation', label: '动画', icon: categoryIcons.animation },

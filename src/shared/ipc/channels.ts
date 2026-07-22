@@ -42,6 +42,15 @@ export const IPC_CHANNELS = {
     searchEvent: 'vod:search-event',
   },
   live: { loadPlaylist: 'live:load-playlist' },
+  radio: {
+    getCategories: 'radio:get-categories',
+    getCategoryChannels: 'radio:get-category-channels',
+    getChannelDetail: 'radio:get-channel-detail',
+    searchChannels: 'radio:search-channels',
+    getLivePrograms: 'radio:get-live-programs',
+    getRegions: 'radio:get-regions',
+    getBillboard: 'radio:get-billboard',
+  },
   media: { getProxyBaseUrl: 'media:get-proxy-base-url', detectStreamType: 'media:detect-stream-type' },
   settings: {
     get: 'settings:get',

@@ -10,6 +10,7 @@ import {
   MiniWindowPage,
   VodPage,
   RecentPage,
+  RadioPage,
   SearchPage,
   SettingsPage,
 } from '@renderer/pages'
@@ -33,6 +34,7 @@ const router = createHashRouter([
 
       { path: 'search', element: <SearchPage />, handle: { showGlobalSearch: true } },
       { path: 'live', element: <LivePage />, handle: { hideTopBar: true } },
+      { path: 'radio', element: <RadioPage />, handle: { hideTopBar: true } },
       { path: 'link-player', element: <LinkPlayerPage />, handle: { hideTopBar: true } },
       { path: 'vod/:sourceId/:vodId', element: <VodPage />, handle: { hideTopBar: true } },
     ],

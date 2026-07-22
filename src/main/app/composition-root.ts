@@ -20,6 +20,7 @@ import { VodSourceRepository } from '../modules/sources/vod-source.repository'
 import { SettingsRepository } from '../modules/settings/settings.repository'
 import { SettingsService } from '../modules/settings/settings.service'
 import { UpdateService } from '../modules/updates/update.service'
+import { RadioService } from '../modules/radio/radio.service'
 
 // main 进程唯一的组合根：在此处集中装配依赖，领域模块不得自行创建全局实例。
 export interface ApplicationContext {
@@ -42,6 +43,7 @@ export interface ApplicationContext {
     mediaProxy: MediaProxyServer
     vodSearch: VodSearchService
     updates: UpdateService
+    radio: RadioService
   }
   utilities: {
     httpClient: HttpClient
@@ -85,6 +87,7 @@ export function createApplicationContext(): ApplicationContext {
       mediaProxy: new MediaProxyServer(),
       vodSearch: new VodSearchService(sourceService, httpClient, new SearchTaskManager(), emitSearchEvent),
       updates: new UpdateService(settings, emitUpdateEvent),
+      radio: new RadioService(httpClient),
     },
     utilities: { httpClient, probeMediaSource, detectMediaStreamType },
   }

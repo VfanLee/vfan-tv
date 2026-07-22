@@ -22,6 +22,7 @@ import type {
 } from './live'
 import type { RecentPlayInput, RecentPlayItem } from './recent'
 import type { MediaStreamDetectionInput, MediaStreamDetectionResult } from './media'
+import type { RadioCategory, RadioChannel, RadioLiveProgram, RadioRegion, RadioSearchResult } from './radio'
 import type {
   MiniWindowMoveInput,
   MiniWindowPlaybackContext,
@@ -120,6 +121,15 @@ export interface AppApi {
   }
   live: {
     loadPlaylist: (url: string) => Promise<LivePlaylist>
+  }
+  radio: {
+    getCategories: () => Promise<RadioCategory[]>
+    getCategoryChannels: (categoryId: number, page?: number, pageSize?: number) => Promise<RadioChannel[]>
+    getChannelDetail: (channelId: number) => Promise<RadioChannel>
+    searchChannels: (keyword: string, page?: number, pageSize?: number) => Promise<RadioSearchResult>
+    getLivePrograms: (channelIds: number[]) => Promise<RadioLiveProgram[]>
+    getRegions: () => Promise<RadioRegion[]>
+    getBillboard: (categoryId: number, regionId: number) => Promise<RadioChannel[]>
   }
   media: {
     getProxyBaseUrl: () => Promise<string>
