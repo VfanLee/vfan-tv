@@ -4,7 +4,7 @@
 # Vfan TV
 
 > **Vfan TV** 是一款免费开源、跨平台、开箱即用的桌面影视聚合播放器。  
-> 基于 **TypeScript** + **Electron** + **React** + **Tailwind CSS** 构建，支持多源搜索、在线播放、收藏与播放记录。
+> 基于 **TypeScript** + **Electron** + **React** + **Tailwind CSS** 构建，支持多源搜索、点播、直播、电台、收藏与播放记录。
 
 [![Release](https://img.shields.io/github/v/release/vfanlee/vfan-tv?display_name=tag&style=flat-square)](https://github.com/vfanlee/vfan-tv/releases/latest)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue?style=flat-square)](LICENSE)
@@ -25,6 +25,7 @@
 - ▶️ **流媒体播放**：自动识别 HLS、FLV、MPEG-TS 与原生直链，支持清晰度、音轨切换、倍速、自动续播和环境光效果
 - 🔗 **直链播放**：可直接播放 HLS 等媒体链接，并提供本地媒体代理以适配需要处理的播放地址
 - 📺 **直播播放**：支持 M3U 直播源、频道分组、频道搜索、多线路切换和上次选择记忆
+- 📻 **在线电台**：支持分类浏览、排行榜、搜索、节目单、底部播放器和轻量小窗播放
 - ⚙️ **数据与网络管理**：支持点播源、直播源的导入 / 导出 / 订阅同步，以及应用数据备份、导入、初始化和网络代理配置
 - 🔄 **应用更新**：支持检查更新、查看更新日志，以及在支持的平台下载并安装更新
 - 🌗 **主题切换**：支持浅色、深色和跟随系统主题
