@@ -19,6 +19,16 @@ let applicationContext: ApplicationContext | null = null
 
 configureAppIdentityAndPaths()
 
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+
+if (!hasSingleInstanceLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    showOrCreateApplicationWindow()
+  })
+}
+
 app.on('will-finish-launching', () => {
   configureAppIdentityAndPaths()
 })
@@ -254,6 +264,8 @@ function createApplicationMenu(): void {
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
+  if (!hasSingleInstanceLock) return
+
   // Set app user model id for windows
   configureAppIdentityAndPaths()
   app.dock?.setIcon(icon)
@@ -273,20 +285,36 @@ app.whenReady().then(() => {
   scheduleStartupUpdateCheck()
 
   app.on('activate', function () {
-    const mainWindow = getApplicationContext().getMainWindow()
-    if (mainWindow && showActiveMiniWindow(mainWindow)) return
-    // On macOS it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    showOrCreateApplicationWindow()
   })
 })
+
+function showOrCreateApplicationWindow(): void {
+  if (!app.isReady() || !applicationContext) return
+
+  const mainWindow = applicationContext.getMainWindow()
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow()
+    return
+  }
+
+  if (showActiveMiniWindow(mainWindow)) return
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  mainWindow.show()
+  mainWindow.focus()
+}
 
 function createWindow(): void {
   const context = getApplicationContext()
   createMainWindow({
     icon,
     getSettings: () => context.services.settings.get(),
-    onCreated: context.setMainWindow,
+    onCreated: (window) => {
+      context.setMainWindow(window)
+      window.once('closed', () => {
+        if (context.getMainWindow() === window) context.setMainWindow(null)
+      })
+    },
   })
 }
 
