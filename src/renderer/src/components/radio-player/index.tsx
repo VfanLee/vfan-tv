@@ -285,7 +285,7 @@ export function RadioPlayerPanel(): React.JSX.Element {
       <RadioBackground />
       <div aria-hidden="true" className="bg-background/5 dark:bg-background/10 pointer-events-none absolute inset-0" />
       <div className="relative p-5 sm:p-7 lg:p-9">
-        <div className="grid items-center gap-6 md:grid-cols-[190px_minmax(0,1fr)] md:gap-8 lg:grid-cols-[240px_minmax(260px,0.72fr)_minmax(320px,1fr)] lg:gap-10">
+        <div className="grid items-center gap-6 md:grid-cols-[190px_minmax(0,1fr)] md:gap-8 lg:grid-cols-[240px_minmax(0,1fr)_minmax(0,1fr)] lg:gap-10">
           <div className="bg-card flex aspect-square items-center justify-center overflow-hidden rounded-[1.75rem] shadow-lg">
             {displayedChannel ? (
               <RadioStationCover className="size-full rounded-none" channel={displayedChannel} />
@@ -298,7 +298,7 @@ export function RadioPlayerPanel(): React.JSX.Element {
             <h2 className="truncate text-3xl font-semibold tracking-[-0.04em] sm:text-4xl lg:text-5xl">
               {displayedChannel?.title ?? '选择一个声音'}
             </h2>
-            <p className="text-primary mt-4 min-h-7 truncate text-lg font-semibold sm:text-xl lg:text-2xl">
+            <p className="text-muted-foreground mt-4 min-h-7 truncate text-lg font-semibold sm:text-xl lg:text-2xl">
               {displayedChannel?.nowPlayingTitle ?? '选中后会立即开始播放'}
             </p>
           </div>
@@ -378,17 +378,36 @@ export function RadioBottomPlayer(): React.JSX.Element {
       <div className="relative flex h-full w-full items-center gap-4 px-6 sm:gap-5 sm:px-8">
         <div className="flex min-w-0 flex-1 items-center gap-4">
           {channel ? (
-            <RadioStationCover className="size-18 shrink-0 rounded-2xl" channel={channel} />
+            <span className="relative size-20 shrink-0 overflow-hidden rounded-2xl shadow-md ring-1 ring-black/5">
+              <RadioStationCover className="size-full rounded-none" channel={channel} />
+              <span
+                aria-hidden="true"
+                className={cn(
+                  'absolute inset-0 flex items-center justify-center bg-black/25 text-white',
+                  isPlaying && 'animate-pulse motion-reduce:animate-none',
+                )}
+              >
+                <AudioLines className="drop-shadow-sm" size={32} strokeWidth={2.25} />
+              </span>
+            </span>
           ) : (
-            <span className="bg-primary/10 text-primary flex size-18 shrink-0 items-center justify-center rounded-2xl">
+            <span className="bg-primary/10 text-primary flex size-20 shrink-0 items-center justify-center rounded-2xl">
               <Radio size={26} />
             </span>
           )}
           <span className="flex min-w-0 flex-col items-start">
-            <span aria-live="polite" className="shrink-0">
-              <RadioPlaybackStatusBadge status={status} hasChannel={Boolean(channel)} />
+            <span aria-live="polite" className="sr-only">
+              {status === 'playing'
+                ? '正在播放'
+                : status === 'loading'
+                  ? '正在连接'
+                  : status === 'error'
+                    ? '播放失败'
+                    : status === 'paused'
+                      ? '播放已暂停'
+                      : '等待播放'}
             </span>
-            <span className="mt-2 max-w-full min-w-0 truncate text-base leading-6 font-semibold">
+            <span className="max-w-full min-w-0 truncate text-base leading-6 font-semibold">
               {channel?.title ?? '选择一个电台开始收听'}
             </span>
             <span
@@ -520,48 +539,6 @@ export function RadioPlaybackControlIcon({
       ) : (
         <Play className="ml-0.5" size={iconSize} fill="currentColor" />
       )}
-    </span>
-  )
-}
-
-export function RadioPlaybackStatusBadge({
-  hasChannel,
-  status,
-}: {
-  hasChannel: boolean
-  status: RadioPlaybackStatus
-}): React.JSX.Element {
-  const visibleStatus = hasChannel ? status : 'idle'
-  const label =
-    visibleStatus === 'loading'
-      ? '连接中'
-      : visibleStatus === 'playing'
-        ? '播放中'
-        : visibleStatus === 'error'
-          ? '播放失败'
-          : visibleStatus === 'paused'
-            ? '已暂停'
-            : '待播放'
-
-  return (
-    <span
-      className={cn(
-        'inline-flex h-6 shrink-0 items-center gap-2 rounded-full border px-2.5 text-xs leading-none font-medium',
-        visibleStatus === 'playing' && 'border-primary/20 bg-primary/10 text-primary',
-        visibleStatus === 'loading' && 'border-amber-500/20 bg-amber-500/10 text-amber-700 dark:text-amber-300',
-        visibleStatus === 'error' && 'border-destructive/20 bg-destructive/10 text-destructive',
-        ['idle', 'paused'].includes(visibleStatus) && 'border-border/80 bg-muted/70 text-muted-foreground',
-      )}
-    >
-      <span
-        aria-hidden="true"
-        className={cn(
-          'size-2 rounded-full bg-current',
-          visibleStatus === 'playing' && 'animate-pulse motion-reduce:animate-none',
-          visibleStatus === 'loading' && 'animate-pulse motion-reduce:animate-none',
-        )}
-      />
-      {label}
     </span>
   )
 }
