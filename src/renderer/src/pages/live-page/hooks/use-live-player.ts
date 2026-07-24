@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { LIVE_SELECTED_SOURCE_STORAGE_KEY } from '@shared/constants'
 import type { LiveChannel, LiveChannelStream, LivePlaylist, LiveSourceConfig, MediaStreamType } from '@shared/types'
@@ -59,6 +59,8 @@ export interface LivePlayerState {
 }
 
 export function useLivePlayer(): LivePlayerState {
+  const mountedRef = useRef(true)
+  const playlistRequestIdRef = useRef(0)
   const [liveSources, setLiveSources] = useState<LiveSourceConfig[]>([])
   const [selectedSourceId, setSelectedSourceId] = useState('')
   const [playlist, setPlaylist] = useState<LivePlaylist>()
@@ -109,22 +111,35 @@ export function useLivePlayer(): LivePlayerState {
         applyPlaylist(cachedPlaylist, selectedSource.id)
         if (!force) return
       }
+      const requestId = ++playlistRequestIdRef.current
       setIsLoadingPlaylist(true)
       try {
         const nextPlaylist = normalizeLivePlaylist(await loadLivePlaylist(selectedSource.url))
+        if (!mountedRef.current || requestId !== playlistRequestIdRef.current) return
         writeCachedPlaylist(selectedSource, nextPlaylist)
         applyPlaylist(nextPlaylist, selectedSource.id)
         if (!silent) {
           toast.success('直播源加载完成', { description: `共 ${nextPlaylist.channels.length} 个频道` })
         }
       } catch (error) {
+        if (!mountedRef.current || requestId !== playlistRequestIdRef.current || silent) return
         toast.error('直播源加载失败', { description: error instanceof Error ? error.message : String(error) })
       } finally {
-        setIsLoadingPlaylist(false)
+        if (mountedRef.current && requestId === playlistRequestIdRef.current) {
+          setIsLoadingPlaylist(false)
+        }
       }
     },
     [applyPlaylist, selectedSource],
   )
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      playlistRequestIdRef.current += 1
+    }
+  }, [])
 
   useEffect(() => {
     let active = true

@@ -8,6 +8,7 @@ import { createApplicationContext, type ApplicationContext } from './composition
 import { openExternalUrl } from '../infrastructure/external/external-link'
 import { checkLatestRelease } from '../modules/updates/update-checker'
 import { createMainWindow } from '../windows/main-window'
+import { showActiveMiniWindow } from '../windows/mini-window-mode'
 import { APP_DISPLAY_NAME, APP_ID, USER_DATA_DIR_NAME } from '@shared/constants'
 import packageJson from '../../../package.json'
 
@@ -272,6 +273,8 @@ app.whenReady().then(() => {
   scheduleStartupUpdateCheck()
 
   app.on('activate', function () {
+    const mainWindow = getApplicationContext().getMainWindow()
+    if (mainWindow && showActiveMiniWindow(mainWindow)) return
     // On macOS it's common to re-create a window in the app when the
     // dock icon is clicked and there are no other windows open.
     if (BrowserWindow.getAllWindows().length === 0) createWindow()

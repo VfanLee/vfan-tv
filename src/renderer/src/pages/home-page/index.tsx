@@ -51,8 +51,8 @@ export function HomePage(): React.JSX.Element {
   }
 
   return (
-    <div className="bg-background text-foreground min-h-full px-10 py-7">
-      <div className="mx-auto max-w-[1500px]">
+    <div className="text-foreground min-h-full bg-transparent px-10 py-7">
+      <div className="w-full">
         <section className="mb-11">
           <SectionHeader icon={Clock3} title="最近播放" onMore={() => navigate('/recent')} />
           {recentLoading ? (

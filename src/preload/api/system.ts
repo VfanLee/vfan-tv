@@ -30,6 +30,7 @@ export function createSystemApi(): Pick<AppApi, 'settings' | 'updates' | 'window
       updateMiniWindowPlayback: (input) => ipcRenderer.invoke(IPC_CHANNELS.window.updateMiniWindowPlayback, input),
       resizeMiniWindow: (input) => ipcRenderer.invoke(IPC_CHANNELS.window.resizeMiniWindow, input),
       moveMiniWindow: (input) => ipcRenderer.invoke(IPC_CHANNELS.window.moveMiniWindow, input),
+      hideMiniWindow: (sessionId) => ipcRenderer.invoke(IPC_CHANNELS.window.hideMiniWindow, sessionId),
       getMiniWindowAlwaysOnTop: (sessionId) =>
         ipcRenderer.invoke(IPC_CHANNELS.window.getMiniWindowAlwaysOnTop, sessionId),
       setMiniWindowAlwaysOnTop: (sessionId, enabled) =>

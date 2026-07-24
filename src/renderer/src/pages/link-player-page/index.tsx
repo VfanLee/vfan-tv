@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, Play } from 'lucide-react'
 import type { MediaStreamType } from '@shared/types'
-import { BasicPlayer } from '@renderer/components'
+import { BasicPlayer, PageHeader } from '@renderer/components'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/ui/select'
@@ -68,15 +68,9 @@ export function LinkPlayerPage(): React.JSX.Element {
   }
 
   return (
-    <div className="bg-background text-foreground h-screen overflow-hidden px-5 py-6 sm:px-8 sm:py-8">
+    <div className="text-foreground h-screen overflow-hidden bg-transparent px-5 py-6 sm:px-8 sm:py-8">
       <div className="flex h-full min-h-0 w-full flex-col gap-5">
-        <header className="shrink-0">
-          <div className="flex items-center gap-2">
-            <Link className="text-primary size-5" aria-hidden />
-            <h1 className="text-2xl font-semibold tracking-tight">直链播放</h1>
-          </div>
-          <p className="text-muted-foreground mt-1.5 text-sm">粘贴媒体地址，解析后立即播放。</p>
-        </header>
+        <PageHeader className="mb-0 shrink-0" title="直链播放" />
 
         <form className="flex shrink-0 flex-col gap-2" onSubmit={handleSubmit}>
           <label className="sr-only" htmlFor="playback-url">

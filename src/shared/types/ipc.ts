@@ -158,6 +158,7 @@ export interface AppApi {
     updateMiniWindowPlayback: (input: MiniWindowPlaybackExit) => Promise<void>
     resizeMiniWindow: (input: MiniWindowResizeInput) => Promise<void>
     moveMiniWindow: (input: MiniWindowMoveInput) => Promise<void>
+    hideMiniWindow: (sessionId: string) => Promise<void>
     getMiniWindowAlwaysOnTop: (sessionId: string) => Promise<boolean>
     setMiniWindowAlwaysOnTop: (sessionId: string, enabled: boolean) => Promise<boolean>
     exitMiniWindowMode: (input: MiniWindowPlaybackExit) => Promise<void>

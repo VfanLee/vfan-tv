@@ -35,8 +35,8 @@ export function SearchPage(): React.JSX.Element {
   }
 
   return (
-    <div className="bg-background text-foreground min-h-full px-10 pb-10">
-      <div className="mx-auto max-w-[1280px] pt-8">
+    <div className="text-foreground min-h-full bg-transparent px-10 pb-10">
+      <div className="w-full pt-8">
         <SearchHistory
           histories={search.histories}
           onClear={search.clearHistories}
@@ -47,7 +47,7 @@ export function SearchPage(): React.JSX.Element {
         <section className="border-border mt-8 border-t pt-6">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-              <h1 className="text-lg font-semibold tracking-tight">搜索结果</h1>
+              <h1 className="text-2xl font-semibold tracking-tight">搜索结果</h1>
               <SearchStats stats={search.stats} />
             </div>
             <div className="flex items-center gap-3">

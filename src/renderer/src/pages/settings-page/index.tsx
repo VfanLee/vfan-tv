@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ConfirmDialog, ThemeSettings } from '@renderer/components'
+import { ConfirmDialog, PageHeader, ThemeSettings } from '@renderer/components'
 import { isApiAvailable } from '@renderer/services/api'
 import { DataManagementCard, NetworkSettingsCard, SubscriptionSettingsCard } from './components/settings-cards'
 import { LiveSourceDialog, SourceDialog } from './components/source-dialogs'
@@ -44,11 +44,7 @@ export function SettingsPage(): React.JSX.Element {
 
   return (
     <div className="min-h-full px-8 py-8">
-      <header className="mb-7 pr-16">
-        <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
-          <h1 className="text-foreground text-3xl font-semibold tracking-tight">设置</h1>
-        </div>
-      </header>
+      <PageHeader className="pr-16" title="设置" />
 
       <div className="grid gap-5">
         <ThemeSettings />

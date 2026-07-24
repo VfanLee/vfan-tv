@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
 import type { HotRecommendationType, RecommendationItem } from '@shared/types'
-import { MediaPoster, PosterCardSkeleton } from '@renderer/components'
-import { categoryIcons, categorySections } from '@renderer/constants'
-import { getHotCacheKey, getHotCategorySection, cn } from '@/utils'
+import { MediaPoster, PageHeader, PosterCardSkeleton } from '@renderer/components'
+import { categorySections } from '@renderer/constants'
 import { useAppDataStore } from '@/stores'
+import { SegmentedTabs } from '@/ui'
+import { getHotCacheKey, getHotCategorySection } from '@/utils'
 
 // 热门页从共享分页缓存读取数据，并用观察哨兵触发下一页加载。
 export function HotPage(): React.JSX.Element {
@@ -12,7 +13,6 @@ export function HotPage(): React.JSX.Element {
   const { category } = useParams()
   const [searchParams, setSearchParams] = useSearchParams()
   const activeSection = getHotCategorySection(category)
-  const CategoryIcon = categoryIcons[activeSection.key]
   const activeType = readType(activeSection, searchParams.get('type'))
   const cacheKey = getHotCacheKey(activeSection.key, activeType)
   const categoryCache = useAppDataStore((state) => state.hot[cacheKey])
@@ -66,33 +66,22 @@ export function HotPage(): React.JSX.Element {
   ])
 
   return (
-    <div className="bg-background text-foreground min-h-full px-10 py-7">
-      <div className="mx-auto max-w-[1500px]">
-        <header className="mb-5 flex h-11 shrink-0 items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <CategoryIcon className="text-primary" size={22} />
-              <h1 className="text-2xl font-semibold tracking-tight">热门{activeSection.title}</h1>
-            </div>
-          </div>
-          {activeSection.filters.length > 1 ? (
-            <div className="border-border bg-card flex flex-wrap rounded-xl border p-1">
-              {activeSection.filters.map((filter) => (
-                <button
-                  key={filter.value}
-                  className={cn(
-                    'text-muted-foreground hover:text-foreground focus-visible:ring-ring h-9 rounded-xl px-4 text-sm font-medium outline-none focus-visible:ring-2',
-                    activeType === filter.value && 'bg-accent text-primary',
-                  )}
-                  type="button"
-                  onClick={() => setSearchParams({ type: filter.value })}
-                >
-                  {filter.label}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </header>
+    <div className="text-foreground min-h-full bg-transparent px-10 py-7">
+      <div className="w-full">
+        <PageHeader
+          className="mb-5"
+          title={`热门${activeSection.title}`}
+          actions={
+            activeSection.filters.length > 1 ? (
+              <SegmentedTabs
+                ariaLabel={`${activeSection.title}地区筛选`}
+                items={activeSection.filters.map((filter) => ({ value: filter.value, label: filter.label }))}
+                value={activeType}
+                onValueChange={(nextType) => setSearchParams({ type: nextType })}
+              />
+            ) : null
+          }
+        />
 
         <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] items-start gap-x-6 gap-y-9">
           {categoryCache.items.map((item) => (

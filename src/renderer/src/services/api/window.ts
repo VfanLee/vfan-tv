@@ -41,6 +41,11 @@ export async function moveMiniWindow(input: MiniWindowMoveInput): Promise<void> 
   if (api) await api.window.moveMiniWindow(input)
 }
 
+export async function hideMiniWindow(sessionId: string): Promise<void> {
+  const api = getRuntimeApi()
+  if (api) await api.window.hideMiniWindow(sessionId)
+}
+
 export async function getMiniWindowAlwaysOnTop(sessionId: string): Promise<boolean> {
   const api = getRuntimeApi()
   return api ? api.window.getMiniWindowAlwaysOnTop(sessionId) : false

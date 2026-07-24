@@ -5,6 +5,7 @@ import type { UpdateCheckResult, UpdateDownloadProgress } from '@shared/types'
 import { Badge } from '@/ui/badge'
 import { Button } from '@/ui/button'
 import { Card } from '@/ui/card'
+import { PageHeader } from '@renderer/components'
 import logoMarkUrl from '@renderer/assets/logo-mark.svg'
 import {
   checkForUpdates,
@@ -211,15 +212,16 @@ export function AboutPage(): React.JSX.Element {
   }, [apiAvailable, handleCheckUpdates])
 
   return (
-    <div className="bg-background text-foreground min-h-full px-10 py-9 pr-24">
-      <div className="mx-auto flex max-w-3xl flex-col gap-5">
+    <div className="text-foreground min-h-full bg-transparent px-10 py-9 pr-24">
+      <div className="flex w-full flex-col gap-5">
+        <PageHeader className="mb-2" title="关于" />
         <Card className="p-7">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex min-w-0 items-center gap-4">
               <img alt="Vfan TV" className="size-16 shrink-0" draggable={false} src={logoMarkUrl} />
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2.5">
-                  <h1 className="text-2xl font-semibold tracking-tight">Vfan TV</h1>
+                  <h2 className="text-2xl font-semibold tracking-tight">Vfan TV</h2>
                   <Badge>GPL-3.0</Badge>
                 </div>
                 <p className="text-muted-foreground mt-1.5 text-sm leading-6">

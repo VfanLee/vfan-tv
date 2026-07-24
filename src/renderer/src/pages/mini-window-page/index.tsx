@@ -1,20 +1,51 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { LogOut, Pause, Pin, PinOff, Play, Volume2, VolumeX } from 'lucide-react'
-import type { MiniWindowPlaybackContext, MiniWindowResizeCorner, MiniWindowBounds } from '@shared/types'
-import { BasicPlayer, type MiniWindowPlayerController, type MiniWindowPlayerState } from '@renderer/components'
+import { EyeOff, LogOut, Pause, Pin, PinOff, Play, RotateCcw } from 'lucide-react'
+import type {
+  MiniWindowBounds,
+  MiniWindowPlaybackContext,
+  MiniWindowResizeCorner,
+  RadioMiniWindowPlaybackContext,
+  RadioMiniWindowPlaybackExit,
+  VideoMiniWindowPlaybackContext,
+} from '@shared/types'
+import {
+  BasicPlayer,
+  RadioPlaybackControlIcon,
+  RadioStreamEngine,
+  useRadioProgramRefresh,
+  type MiniWindowPlayerController,
+  type MiniWindowPlayerState,
+} from '@renderer/components'
 import {
   exitMiniWindowMode,
   getMiniWindowAlwaysOnTop,
   getMiniWindowPlayback,
+  hideMiniWindow,
   moveMiniWindow,
   resizeMiniWindow,
   setMiniWindowAlwaysOnTop,
   updateMiniWindowPlayback,
 } from '@renderer/services/api'
+import type { RadioPlaybackCommand, RadioPlaybackStatus } from '@/stores/radio-player'
+import { cn } from '@/utils'
 
-const MINI_WINDOW_ASPECT_RATIO = 16 / 9
-const MINI_WINDOW_MIN_WIDTH = 200
-const MINI_WINDOW_MAX_WIDTH = 960
+interface MiniWindowSizeConfig {
+  aspectRatio: number
+  minWidth: number
+  maxWidth: number
+}
+
+const VIDEO_SIZE_CONFIG: MiniWindowSizeConfig = {
+  aspectRatio: 16 / 9,
+  minWidth: 200,
+  maxWidth: 960,
+}
+
+const RADIO_SIZE_CONFIG: MiniWindowSizeConfig = {
+  aspectRatio: 184 / 44,
+  minWidth: 184,
+  maxWidth: 184,
+}
 
 interface ResizeGesture {
   pointerId: number
@@ -37,18 +68,43 @@ export function MiniWindowPage(): React.JSX.Element {
   const [playback, setPlayback] = useState<MiniWindowPlaybackContext | undefined>(undefined)
   const [isHovering, setIsHovering] = useState(false)
   const currentTimeRef = useRef(0)
+  const radioExitRef = useRef<RadioMiniWindowPlaybackExit | undefined>(undefined)
   const lastReportedTimeRef = useRef(-1)
   const resizeGestureRef = useRef<ResizeGesture | undefined>(undefined)
   const moveGestureRef = useRef<MoveGesture | undefined>(undefined)
   const playerControllerRef = useRef<MiniWindowPlayerController | null>(null)
-  const [playerState, setPlayerState] = useState<MiniWindowPlayerState>({ isPlaying: true, isMuted: false })
+  const [playerState, setPlayerState] = useState<MiniWindowPlayerState>({
+    isPlaying: true,
+    isMuted: false,
+  })
   const [isAlwaysOnTop, setIsAlwaysOnTop] = useState(false)
   const [isAlwaysOnTopUpdating, setIsAlwaysOnTopUpdating] = useState(false)
 
   useEffect(() => {
+    const root = document.getElementById('root')
+    const previousHtmlBackground = document.documentElement.style.background
+    const previousBodyBackground = document.body.style.background
+    const previousRootBackground = root?.style.background ?? ''
+
+    document.documentElement.style.background = 'transparent'
+    document.body.style.background = 'transparent'
+    if (root) root.style.background = 'transparent'
+
+    return () => {
+      document.documentElement.style.background = previousHtmlBackground
+      document.body.style.background = previousBodyBackground
+      if (root) root.style.background = previousRootBackground
+    }
+  }, [])
+
+  useEffect(() => {
     void getMiniWindowPlayback().then((context) => {
       if (!context) return
-      currentTimeRef.current = context.initialTime
+      if (context.variant === 'radio') {
+        radioExitRef.current = createInitialRadioExit(context)
+      } else {
+        currentTimeRef.current = context.initialTime
+      }
       setPlayback(context)
       void getMiniWindowAlwaysOnTop(context.sessionId).then(setIsAlwaysOnTop)
     })
@@ -56,7 +112,15 @@ export function MiniWindowPage(): React.JSX.Element {
 
   const leaveMiniWindowMode = useCallback((): void => {
     if (!playback) return
-    void exitMiniWindowMode({ sessionId: playback.sessionId, currentTime: currentTimeRef.current })
+    if (playback.variant === 'radio') {
+      void exitMiniWindowMode(radioExitRef.current ?? createInitialRadioExit(playback))
+      return
+    }
+    void exitMiniWindowMode({
+      sessionId: playback.sessionId,
+      variant: playback.variant,
+      currentTime: currentTimeRef.current,
+    })
   }, [playback])
 
   const startResize = (corner: MiniWindowResizeCorner, event: React.PointerEvent<HTMLDivElement>): void => {
@@ -81,24 +145,23 @@ export function MiniWindowPage(): React.JSX.Element {
   const resize = (event: React.PointerEvent<HTMLDivElement>): void => {
     const gesture = resizeGestureRef.current
     if (!playback || !gesture || gesture.pointerId !== event.pointerId) return
-
+    const config = playback.variant === 'radio' ? RADIO_SIZE_CONFIG : VIDEO_SIZE_CONFIG
     const horizontalChange = isLeftCorner(gesture.corner)
       ? gesture.pointerX - event.screenX
       : event.screenX - gesture.pointerX
     const verticalChange = isTopCorner(gesture.corner)
-      ? (gesture.pointerY - event.screenY) * MINI_WINDOW_ASPECT_RATIO
-      : (event.screenY - gesture.pointerY) * MINI_WINDOW_ASPECT_RATIO
+      ? (gesture.pointerY - event.screenY) * config.aspectRatio
+      : (event.screenY - gesture.pointerY) * config.aspectRatio
     const width = clamp(
       Math.round(
         gesture.bounds.width +
           (Math.abs(horizontalChange) >= Math.abs(verticalChange) ? horizontalChange : verticalChange),
       ),
-      MINI_WINDOW_MIN_WIDTH,
-      MINI_WINDOW_MAX_WIDTH,
+      config.minWidth,
+      config.maxWidth,
     )
-    const height = Math.round(width / MINI_WINDOW_ASPECT_RATIO)
+    const height = Math.round(width / config.aspectRatio)
     const bounds = getResizedBounds(gesture.corner, gesture.bounds, width, height)
-
     void resizeMiniWindow({ sessionId: playback.sessionId, corner: gesture.corner, bounds })
   }
 
@@ -144,9 +207,13 @@ export function MiniWindowPage(): React.JSX.Element {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') leaveMiniWindowMode()
+      if (event.key === 'Escape') {
+        leaveMiniWindowMode()
+        return
+      }
       if (
         !playback ||
+        playback.variant === 'radio' ||
         playback.variant === 'live' ||
         (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') ||
         event.altKey ||
@@ -155,7 +222,6 @@ export function MiniWindowPage(): React.JSX.Element {
       ) {
         return
       }
-
       const controller = playerControllerRef.current
       if (!controller) return
       event.preventDefault()
@@ -165,40 +231,57 @@ export function MiniWindowPage(): React.JSX.Element {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [leaveMiniWindowMode, playback])
 
-  if (!playback) {
-    return <main className="fixed inset-0 bg-black" />
-  }
+  if (!playback) return <main className="fixed inset-0 bg-transparent" />
+
+  const showWindowActions = isHovering
 
   return (
     <main
-      className="fixed inset-0 overflow-hidden bg-black"
+      className={cn(
+        'fixed inset-0 overflow-hidden',
+        playback.variant === 'radio' ? 'text-foreground bg-transparent' : 'bg-black',
+      )}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
     >
-      <BasicPlayer
-        autoPlay
-        audioTrackUrl={playback.audioTrackUrl}
-        className="h-full"
-        enableAutoNext={false}
-        initialTime={playback.initialTime}
-        loop={playback.loop}
-        miniWindowMode
-        persistPlaybackSettings={false}
-        sourceType={playback.sourceType}
-        src={playback.src}
-        title={playback.title}
-        variant={playback.variant}
-        onMiniWindowControllerReady={(controller) => {
-          playerControllerRef.current = controller
-        }}
-        onMiniWindowPlayerStateChange={setPlayerState}
-        onProgress={({ currentTime }) => {
-          currentTimeRef.current = currentTime
-          if (lastReportedTimeRef.current === currentTime) return
-          lastReportedTimeRef.current = currentTime
-          void updateMiniWindowPlayback({ sessionId: playback.sessionId, currentTime })
-        }}
-      />
+      {playback.variant === 'radio' ? (
+        <RadioMiniWindowPlayer
+          isAlwaysOnTop={isAlwaysOnTop}
+          isAlwaysOnTopUpdating={isAlwaysOnTopUpdating}
+          playback={playback}
+          onExit={leaveMiniWindowMode}
+          onExitChange={(exit) => {
+            radioExitRef.current = exit
+          }}
+          onHide={() => {
+            void hideMiniWindow(playback.sessionId)
+          }}
+          onToggleAlwaysOnTop={() => {
+            if (isAlwaysOnTopUpdating) return
+            setIsAlwaysOnTopUpdating(true)
+            void setMiniWindowAlwaysOnTop(playback.sessionId, !isAlwaysOnTop)
+              .then(setIsAlwaysOnTop)
+              .finally(() => setIsAlwaysOnTopUpdating(false))
+          }}
+        />
+      ) : (
+        <VideoMiniWindowPlayer
+          playback={playback}
+          playerControllerRef={playerControllerRef}
+          onPlayerStateChange={setPlayerState}
+          onProgress={(currentTime) => {
+            currentTimeRef.current = currentTime
+            if (lastReportedTimeRef.current === currentTime) return
+            lastReportedTimeRef.current = currentTime
+            void updateMiniWindowPlayback({
+              sessionId: playback.sessionId,
+              variant: playback.variant,
+              currentTime,
+            })
+          }}
+        />
+      )}
+
       <div
         aria-hidden="true"
         className="absolute inset-0 z-10 cursor-grab [-webkit-app-region:no-drag] active:cursor-grabbing"
@@ -208,62 +291,247 @@ export function MiniWindowPage(): React.JSX.Element {
         onPointerMove={move}
         onPointerUp={stopMove}
       />
-      <div
-        className={`absolute top-[clamp(12px,3vw,16px)] right-[clamp(12px,3vw,16px)] z-30 flex gap-[clamp(4px,1.5vw,8px)] transition-opacity duration-150 [-webkit-app-region:no-drag] ${
-          isHovering ? 'opacity-100' : 'pointer-events-none opacity-0'
-        }`}
-      >
-        <MiniWindowActionButton
-          disabled={isAlwaysOnTopUpdating}
-          label={isAlwaysOnTop ? '取消置顶' : '置顶显示'}
-          onClick={() => {
-            if (isAlwaysOnTopUpdating) return
-            setIsAlwaysOnTopUpdating(true)
-            void setMiniWindowAlwaysOnTop(playback.sessionId, !isAlwaysOnTop)
-              .then(setIsAlwaysOnTop)
-              .finally(() => setIsAlwaysOnTopUpdating(false))
-          }}
-        >
-          {isAlwaysOnTop ? <Pin /> : <PinOff />}
-        </MiniWindowActionButton>
-        <MiniWindowActionButton
-          label={playerState.isMuted ? '恢复声音' : '静音'}
-          onClick={() => playerControllerRef.current?.toggleMuted()}
-        >
-          {playerState.isMuted ? <VolumeX /> : <Volume2 />}
-        </MiniWindowActionButton>
-        <MiniWindowActionButton label="退出小窗模式" onClick={leaveMiniWindowMode}>
-          <LogOut />
-        </MiniWindowActionButton>
-      </div>
-      <button
-        type="button"
-        aria-label={playerState.isPlaying ? '暂停播放' : '继续播放'}
-        className={`absolute top-1/2 left-1/2 z-30 flex size-[clamp(36px,14vw,56px)] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-[clamp(10px,4vw,18px)] bg-black/45 text-white transition-[opacity,background-color] duration-150 [-webkit-app-region:no-drag] hover:bg-black/65 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none ${
-          isHovering ? 'opacity-100' : 'pointer-events-none opacity-0'
-        }`}
-        onClick={() => playerControllerRef.current?.togglePlayback()}
-      >
-        {playerState.isPlaying ? (
-          <Pause className="size-[clamp(18px,7vw,26px)]" aria-hidden="true" />
-        ) : (
-          <Play className="size-[clamp(18px,7vw,26px)]" aria-hidden="true" />
-        )}
-      </button>
-      {(['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const).map((corner) => (
+
+      {playback.variant !== 'radio' ? (
         <div
-          key={corner}
-          aria-hidden="true"
-          className={getResizeHandleClassName(corner)}
-          onLostPointerCapture={stopResize}
-          onPointerCancel={stopResize}
-          onPointerDown={(event) => startResize(corner, event)}
-          onPointerMove={resize}
-          onPointerUp={stopResize}
-        />
-      ))}
+          className={cn(
+            'absolute top-[clamp(10px,3vw,14px)] right-[clamp(10px,3vw,14px)] z-30 flex gap-1.5 transition-opacity duration-150 [-webkit-app-region:no-drag] motion-reduce:transition-none',
+            showWindowActions ? 'opacity-100' : 'pointer-events-none opacity-0',
+          )}
+        >
+          <MiniWindowActionButton
+            label="隐藏小窗"
+            onClick={() => {
+              void hideMiniWindow(playback.sessionId)
+            }}
+          >
+            <EyeOff />
+          </MiniWindowActionButton>
+          <MiniWindowActionButton
+            disabled={isAlwaysOnTopUpdating}
+            label={isAlwaysOnTop ? '取消置顶' : '置顶显示'}
+            onClick={() => {
+              if (isAlwaysOnTopUpdating) return
+              setIsAlwaysOnTopUpdating(true)
+              void setMiniWindowAlwaysOnTop(playback.sessionId, !isAlwaysOnTop)
+                .then(setIsAlwaysOnTop)
+                .finally(() => setIsAlwaysOnTopUpdating(false))
+            }}
+          >
+            {isAlwaysOnTop ? <Pin /> : <PinOff />}
+          </MiniWindowActionButton>
+          <MiniWindowActionButton label="退出小窗播放" onClick={leaveMiniWindowMode}>
+            <LogOut />
+          </MiniWindowActionButton>
+        </div>
+      ) : null}
+
+      {playback.variant !== 'radio' ? (
+        <button
+          type="button"
+          aria-label={playerState.isPlaying ? '暂停播放' : '继续播放'}
+          className={cn(
+            'absolute top-1/2 left-1/2 z-30 flex size-[clamp(36px,14vw,56px)] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-[clamp(10px,4vw,18px)] bg-black/45 text-white transition-[opacity,background-color] duration-150 [-webkit-app-region:no-drag] hover:bg-black/65 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none motion-reduce:transition-none',
+            isHovering ? 'opacity-100' : 'pointer-events-none opacity-0',
+          )}
+          onClick={() => playerControllerRef.current?.togglePlayback()}
+        >
+          {playerState.isPlaying ? (
+            <Pause className="size-[clamp(18px,7vw,26px)]" aria-hidden="true" />
+          ) : (
+            <Play className="size-[clamp(18px,7vw,26px)]" aria-hidden="true" />
+          )}
+        </button>
+      ) : null}
+
+      {playback.variant !== 'radio'
+        ? (['top-left', 'top-right', 'bottom-left', 'bottom-right'] as const).map((corner) => (
+            <div
+              key={corner}
+              aria-hidden="true"
+              className={getResizeHandleClassName(corner)}
+              onLostPointerCapture={stopResize}
+              onPointerCancel={stopResize}
+              // The ref is only read after pointer interaction; the hook rule cannot infer that through this corner adapter.
+              // eslint-disable-next-line react-hooks/refs
+              onPointerDown={(event) => startResize(corner, event)}
+              onPointerMove={resize}
+              onPointerUp={stopResize}
+            />
+          ))
+        : null}
     </main>
   )
+}
+
+function VideoMiniWindowPlayer({
+  playback,
+  playerControllerRef,
+  onPlayerStateChange,
+  onProgress,
+}: {
+  playback: VideoMiniWindowPlaybackContext
+  playerControllerRef: React.MutableRefObject<MiniWindowPlayerController | null>
+  onPlayerStateChange: (state: MiniWindowPlayerState) => void
+  onProgress: (currentTime: number) => void
+}): React.JSX.Element {
+  return (
+    <BasicPlayer
+      autoPlay
+      audioTrackUrl={playback.audioTrackUrl}
+      className="h-full"
+      enableAutoNext={false}
+      initialTime={playback.initialTime}
+      loop={playback.loop}
+      miniWindowMode
+      persistPlaybackSettings={false}
+      sourceType={playback.sourceType}
+      src={playback.src}
+      title={playback.title}
+      variant={playback.variant}
+      onMiniWindowControllerReady={(controller) => {
+        playerControllerRef.current = controller
+      }}
+      onMiniWindowPlayerStateChange={onPlayerStateChange}
+      onProgress={({ currentTime }) => onProgress(currentTime)}
+    />
+  )
+}
+
+function RadioMiniWindowPlayer({
+  isAlwaysOnTop,
+  isAlwaysOnTopUpdating,
+  playback,
+  onExit,
+  onExitChange,
+  onHide,
+  onToggleAlwaysOnTop,
+}: {
+  isAlwaysOnTop: boolean
+  isAlwaysOnTopUpdating: boolean
+  playback: RadioMiniWindowPlaybackContext
+  onExit: () => void
+  onExitChange: (exit: RadioMiniWindowPlaybackExit) => void
+  onHide: () => void
+  onToggleAlwaysOnTop: () => void
+}): React.JSX.Element {
+  const [channel, setChannel] = useState(playback.channel)
+  const [command, setCommand] = useState<RadioPlaybackCommand>('play')
+  const [commandId, setCommandId] = useState(1)
+  const [isMuted] = useState(playback.isMuted)
+  const [status, setStatus] = useState<RadioPlaybackStatus>('loading')
+  const [volume] = useState(playback.volume)
+
+  useRadioProgramRefresh(channel.id, (title) => {
+    setChannel((current) => ({ ...current, nowPlayingTitle: title }))
+  })
+
+  useEffect(() => {
+    const exit: RadioMiniWindowPlaybackExit = {
+      sessionId: playback.sessionId,
+      variant: 'radio',
+      channel,
+      isPlaying: ['loading', 'playing'].includes(status),
+      isMuted,
+      volume,
+    }
+    onExitChange(exit)
+    void updateMiniWindowPlayback(exit)
+  }, [channel, isMuted, onExitChange, playback.sessionId, status, volume])
+
+  const isPlaying = status === 'playing'
+  const runCommand = (nextCommand: RadioPlaybackCommand): void => {
+    setCommand(nextCommand)
+    setCommandId((current) => current + 1)
+  }
+
+  return (
+    <>
+      <RadioStreamEngine
+        channel={channel}
+        command={command}
+        commandId={commandId}
+        isMuted={isMuted}
+        volume={volume}
+        onError={() => setStatus('error')}
+        onStatusChange={(nextStatus) => {
+          setStatus(nextStatus)
+        }}
+      />
+      <section
+        aria-label="电台小窗播放器"
+        className="border-border/80 bg-background/95 absolute inset-0 z-20 flex items-center justify-center gap-1 rounded-[11px] border p-1 shadow-sm backdrop-blur-md [-webkit-app-region:no-drag]"
+      >
+        <RadioMiniWindowActionButton label="隐藏小窗" onClick={onHide}>
+          <EyeOff />
+        </RadioMiniWindowActionButton>
+        <RadioMiniWindowActionButton
+          disabled={isAlwaysOnTopUpdating}
+          label={isAlwaysOnTop ? '取消置顶' : '置顶显示'}
+          onClick={onToggleAlwaysOnTop}
+        >
+          {isAlwaysOnTop ? <Pin /> : <PinOff />}
+        </RadioMiniWindowActionButton>
+        {status === 'error' ? (
+          <button
+            aria-label="重试播放"
+            className="group/playback focus-visible:ring-ring shrink-0 rounded-full outline-none focus-visible:ring-2"
+            type="button"
+            onClick={() => runCommand('retry')}
+          >
+            <span className="bg-primary text-primary-foreground flex size-9 items-center justify-center rounded-full shadow-sm">
+              <RotateCcw size={17} />
+            </span>
+          </button>
+        ) : (
+          <button
+            aria-label={isPlaying || status === 'loading' ? '暂停播放' : '继续播放'}
+            className="group/playback focus-visible:ring-ring shrink-0 rounded-full outline-none focus-visible:ring-2"
+            type="button"
+            onClick={() => runCommand(isPlaying || status === 'loading' ? 'pause' : 'play')}
+          >
+            <RadioPlaybackControlIcon
+              className="size-9"
+              state={status === 'loading' ? 'loading' : isPlaying ? 'pause' : 'play'}
+            />
+          </button>
+        )}
+        <RadioMiniWindowActionButton label="退出小窗播放" onClick={onExit}>
+          <LogOut />
+        </RadioMiniWindowActionButton>
+      </section>
+    </>
+  )
+}
+
+function RadioMiniWindowActionButton({
+  children,
+  disabled = false,
+  label,
+  onClick,
+}: MiniWindowActionButtonProps): React.JSX.Element {
+  return (
+    <button
+      aria-label={label}
+      className="text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-ring flex size-9 shrink-0 items-center justify-center rounded-full transition-colors outline-none focus-visible:ring-2 disabled:cursor-wait disabled:opacity-45 [&_svg]:size-[18px]"
+      disabled={disabled}
+      type="button"
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  )
+}
+
+function createInitialRadioExit(playback: RadioMiniWindowPlaybackContext): RadioMiniWindowPlaybackExit {
+  return {
+    sessionId: playback.sessionId,
+    variant: 'radio',
+    channel: playback.channel,
+    isPlaying: true,
+    isMuted: playback.isMuted,
+    volume: playback.volume,
+  }
 }
 
 interface MiniWindowActionButtonProps {
@@ -284,7 +552,7 @@ function MiniWindowActionButton({
       type="button"
       disabled={disabled}
       aria-label={label}
-      className="flex size-[clamp(24px,8vw,34px)] items-center justify-center rounded-[clamp(7px,2.5vw,12px)] bg-black/45 text-white transition-colors hover:bg-black/65 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none disabled:cursor-wait disabled:opacity-55 [&_svg]:size-[clamp(13px,4vw,18px)]"
+      className="flex size-[clamp(26px,8vw,34px)] items-center justify-center rounded-[clamp(8px,2.5vw,12px)] bg-black/45 text-white transition-colors hover:bg-black/65 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none disabled:cursor-wait disabled:opacity-55 [&_svg]:size-[clamp(13px,4vw,18px)]"
       onClick={onClick}
     >
       {children}
@@ -321,7 +589,7 @@ function getResizeHandleClassName(corner: MiniWindowResizeCorner): string {
     'bottom-left': 'bottom-0 left-0 cursor-nesw-resize',
     'bottom-right': 'right-0 bottom-0 cursor-nwse-resize',
   }
-  return `absolute z-30 size-3 [-webkit-app-region:no-drag] ${positions[corner]}`
+  return `absolute z-40 size-3 [-webkit-app-region:no-drag] ${positions[corner]}`
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

@@ -44,3 +44,5 @@ export {
 } from './select'
 export { Skeleton } from './skeleton'
 export { Switch } from './switch'
+export { SearchBox } from './search-box'
+export { SegmentedTabs, type SegmentedTabItem } from './segmented-tabs'

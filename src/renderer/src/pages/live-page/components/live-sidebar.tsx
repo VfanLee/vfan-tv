@@ -10,14 +10,6 @@ import type { useLivePlayer } from '../hooks/use-live-player'
 
 type LivePlayerState = ReturnType<typeof useLivePlayer>
 
-export function NowPlayingTitle({ title }: { title?: string }): React.JSX.Element {
-  return (
-    <div className="flex h-12 shrink-0 items-center pl-2 text-xl leading-6 font-semibold">
-      <span className="truncate">正在播放：{title ?? '请选择频道'}</span>
-    </div>
-  )
-}
-
 export function LiveSidebar({ player }: { player: LivePlayerState }): React.JSX.Element {
   return (
     <aside className="flex min-h-[520px] flex-col gap-3 sm:gap-4 xl:min-h-0">

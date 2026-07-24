@@ -3,9 +3,10 @@ import { useLocation, useNavigate, useParams } from 'react-router'
 import { ArrowLeft, Heart, ListVideo, Radio } from 'lucide-react'
 import type { VodSearchResult } from '@shared/types'
 import { BasicPlayer, MediaPoster } from '@renderer/components'
+import { SegmentedTabs } from '@/ui'
 import { cn } from '@/utils'
 import { useSearchContextStore } from '@/stores'
-import { EpisodesPanel, NowPlayingTitle, PanelTab, SourcesPanel, VodDetailPanel } from './components/vod-panels'
+import { EpisodesPanel, NowPlayingTitle, SourcesPanel, VodDetailPanel } from './components/vod-panels'
 import { useRecentPlayback } from './hooks/use-recent-playback'
 import { useVodFavorite } from './hooks/use-vod-favorite'
 import { useVodPageHydration } from './hooks/use-vod-page-hydration'
@@ -198,7 +199,7 @@ export function VodPage(): React.JSX.Element {
       className={cn(
         isTheaterMode
           ? 'fixed inset-0 z-50 flex flex-col bg-black'
-          : 'bg-background text-foreground min-h-screen overflow-y-auto px-8 pb-6',
+          : 'text-foreground min-h-screen overflow-y-auto bg-transparent px-8 pb-6',
       )}
     >
       {isTheaterMode ? (
@@ -262,15 +263,23 @@ export function VodPage(): React.JSX.Element {
                 </main>
 
                 <aside className="border-border bg-card flex min-h-0 flex-col rounded-xl border p-4 shadow-sm">
-                  <div className="bg-muted grid grid-cols-2 rounded-xl p-1">
-                    <PanelTab
-                      active={activeTab === 'episodes'}
-                      icon={ListVideo}
-                      label="选集"
-                      onClick={() => setActiveTab('episodes')}
-                    />
-                    <PanelTab active={activeTab === 'sources'} icon={Radio} label="换源" onClick={openSourcesTab} />
-                  </div>
+                  <SegmentedTabs
+                    ariaLabel="播放内容面板"
+                    className="w-full"
+                    equalWidth
+                    items={[
+                      { value: 'episodes', label: '选集', icon: ListVideo },
+                      { value: 'sources', label: '换源', icon: Radio },
+                    ]}
+                    value={activeTab}
+                    onValueChange={(nextTab) => {
+                      if (nextTab === 'sources') {
+                        openSourcesTab()
+                      } else {
+                        setActiveTab(nextTab)
+                      }
+                    }}
+                  />
 
                   <div className="min-h-0 flex-1 overflow-hidden">
                     {activeTab === 'episodes' ? (

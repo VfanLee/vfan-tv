@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { Heart, Search, Trash2 } from 'lucide-react'
+import { Search, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { FavoriteItem } from '@shared/types'
-import { ConfirmDialog, MediaPoster, PosterPlayOverlay } from '@renderer/components'
+import { ConfirmDialog, MediaPoster, PageHeader, PosterPlayOverlay } from '@renderer/components'
 import { listFavorites, removeFavorite } from '@renderer/services/api'
 import { favoriteToVodSearchResult } from '@renderer/services/playback'
 import { useSearchContextStore } from '@/stores'
@@ -47,14 +47,9 @@ export function FavoritesPage(): React.JSX.Element {
   }
 
   return (
-    <div className="bg-background text-foreground min-h-full px-10 py-9 pr-24">
-      <div className="mx-auto max-w-[1500px]">
-        <header className="mb-8">
-          <div className="flex items-center gap-2">
-            <Heart className="text-primary" size={22} />
-            <h1 className="text-2xl font-semibold tracking-tight">我的收藏</h1>
-          </div>
-        </header>
+    <div className="text-foreground min-h-full bg-transparent px-10 py-9 pr-24">
+      <div className="w-full">
+        <PageHeader title="我的收藏" />
 
         {items.length > 0 ? (
           <div className="grid grid-cols-[repeat(auto-fill,220px)] items-start gap-x-6 gap-y-9">

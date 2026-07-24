@@ -1,6 +1,6 @@
-import { BasicPlayer } from '@renderer/components'
+import { BasicPlayer, PageHeader } from '@renderer/components'
 import { cn } from '@/utils'
-import { LiveSidebar, NowPlayingTitle } from './components/live-sidebar'
+import { LiveSidebar } from './components/live-sidebar'
 import { useLivePlayer } from './hooks/use-live-player'
 
 export function LivePage(): React.JSX.Element {
@@ -11,17 +11,17 @@ export function LivePage(): React.JSX.Element {
       className={cn(
         player.isTheaterMode
           ? 'fixed inset-0 z-50 flex flex-col bg-black'
-          : 'bg-background text-foreground min-h-screen overflow-y-auto p-3 sm:p-4 xl:h-screen xl:overflow-hidden',
+          : 'text-foreground min-h-screen overflow-y-auto bg-transparent p-3 sm:p-4 xl:h-screen xl:overflow-hidden',
       )}
     >
       <div
         className={cn(
           player.isTheaterMode
             ? 'flex min-h-0 flex-1 items-center justify-center'
-            : 'mx-auto flex min-h-[calc(100vh-1.5rem)] max-w-[1760px] flex-col gap-3 sm:min-h-[calc(100vh-2rem)] sm:gap-4 xl:h-full xl:min-h-0',
+            : 'flex min-h-[calc(100vh-1.5rem)] w-full flex-col gap-3 sm:min-h-[calc(100vh-2rem)] sm:gap-4 xl:h-full xl:min-h-0',
         )}
       >
-        {!player.isTheaterMode ? <NowPlayingTitle title={player.playerTitle} /> : null}
+        {!player.isTheaterMode ? <PageHeader className="mb-0 shrink-0" title="直播" /> : null}
         <div
           className={cn(
             player.isTheaterMode

@@ -14,7 +14,13 @@ import {
 } from '@shared/constants'
 import type { MediaStreamType } from '@shared/types'
 import { enterMiniWindowMode, isApiAvailable, onMiniWindowModeExit } from '@renderer/services/api'
-import { artplayerControlIcons, artplayerSwitchIcons, cn } from '@/utils'
+import {
+  artplayerControlIcons,
+  artplayerSwitchIcons,
+  cn,
+  createMediaPlaybackCoordinator,
+  type MediaPlaybackCoordinator,
+} from '@/utils'
 import { CustomSliderDialog, DisplaySettingsMenu } from './components/display-settings-dialogs'
 import { createSettingsPositionTracker } from './utils/settings-position'
 import type { BasicPlayerProps, CustomSliderInput, DisplaySettingsState, MiniWindowPlayerController } from './types'
@@ -124,6 +130,7 @@ export function BasicPlayer({
   const miniWindowSessionIdRef = useRef<string | undefined>(undefined)
   const miniWindowControllerReadyRef = useRef(onMiniWindowControllerReady)
   const miniWindowPlayerStateChangeRef = useRef(onMiniWindowPlayerStateChange)
+  const playbackCoordinatorRef = useRef<MediaPlaybackCoordinator | null>(null)
   const [customNumberInput, setCustomNumberInput] = useState<CustomSliderInput | undefined>(undefined)
   const [displaySettings, setDisplaySettings] = useState<DisplaySettingsState | undefined>(undefined)
   const [isDisplaySettingsClosing, setIsDisplaySettingsClosing] = useState(false)
@@ -135,6 +142,20 @@ export function BasicPlayer({
   const isFlv = isFlvSource(src, sourceType)
   const isMpegts = isMpegtsSource(src, sourceType)
   const canEnterMiniWindowMode = !miniWindowMode && isApiAvailable()
+
+  useEffect(() => {
+    const coordinator = createMediaPlaybackCoordinator('video', () => {
+      artRef.current?.pause()
+    })
+    playbackCoordinatorRef.current = coordinator
+
+    return () => {
+      coordinator.dispose()
+      if (playbackCoordinatorRef.current === coordinator) {
+        playbackCoordinatorRef.current = null
+      }
+    }
+  }, [])
 
   useEffect(() => {
     setCustomNumberInput(undefined)
@@ -158,8 +179,8 @@ export function BasicPlayer({
   useEffect(() => {
     if (miniWindowMode) return
 
-    return onMiniWindowModeExit(({ sessionId, currentTime }) => {
-      if (miniWindowSessionIdRef.current !== sessionId) return
+    return onMiniWindowModeExit((exit) => {
+      if (exit.variant === 'radio' || miniWindowSessionIdRef.current !== exit.sessionId) return
       miniWindowSessionIdRef.current = undefined
       const art = artRef.current
       if (!art) return
@@ -169,7 +190,7 @@ export function BasicPlayer({
         return
       }
 
-      const resumedTime = Math.max(0, currentTime)
+      const resumedTime = Math.max(0, exit.currentTime)
       callbacksRef.current.onProgress?.({
         currentTime: Math.floor(resumedTime),
         duration: Number.isFinite(art.duration) ? Math.floor(art.duration) : 0,
@@ -284,7 +305,7 @@ export function BasicPlayer({
               name: 'vfan-mini-window-mode',
               position: 'right',
               index: 20,
-              html: artplayerControlIcons.miniWindow,
+              html: `<span class="vfan-mini-window-icon">${artplayerControlIcons.miniWindow}</span>`,
               tooltip: '小窗模式',
               click: () => {
                 if (!src) return
@@ -498,6 +519,7 @@ export function BasicPlayer({
     } satisfies Option)
 
     artRef.current = art
+    art.on('video:play', () => playbackCoordinatorRef.current?.announcePlaying())
     const reportMiniWindowPlayerState = (): void => {
       miniWindowPlayerStateChangeRef.current?.({
         isPlaying: !art.video.paused && !art.video.ended,
@@ -1032,6 +1054,17 @@ function injectPlayerChromeStyles(art: Artplayer, miniWindowMode = false): void 
       display: block;
       width: 22px;
       height: 22px;
+    }
+    .art-video-player .vfan-mini-window-icon,
+    .art-video-player .vfan-mini-window-icon svg {
+      display: block;
+      width: 19px;
+      height: 19px;
+    }
+    .art-video-player .vfan-mini-window-icon svg,
+    .art-video-player .vfan-mini-window-icon svg * {
+      fill: none !important;
+      stroke: currentColor !important;
     }
     .art-video-player:not(.art-control-show):not(.art-hover) .art-bottom .art-progress .art-progress-indicator {
       display: none !important;

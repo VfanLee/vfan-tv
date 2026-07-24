@@ -12,12 +12,31 @@ import type {
 } from '@shared/types'
 
 const currentDirectory = dirname(fileURLToPath(import.meta.url))
-const MINI_WINDOW_WIDTH = 360
-const MINI_WINDOW_HEIGHT = 240
 const MINI_WINDOW_MARGIN = 16
-const MINI_WINDOW_MIN_WIDTH = 200
-const MINI_WINDOW_MAX_WIDTH = 960
-const MINI_WINDOW_ASPECT_RATIO = 16 / 9
+
+interface MiniWindowConfig {
+  width: number
+  height: number
+  minWidth: number
+  maxWidth: number
+  aspectRatio: number
+}
+
+const VIDEO_MINI_WINDOW_CONFIG: MiniWindowConfig = {
+  width: 360,
+  height: 240,
+  minWidth: 200,
+  maxWidth: 960,
+  aspectRatio: 16 / 9,
+}
+
+const RADIO_MINI_WINDOW_CONFIG: MiniWindowConfig = {
+  width: 184,
+  height: 44,
+  minWidth: 184,
+  maxWidth: 184,
+  aspectRatio: 184 / 44,
+}
 
 interface MainWindowState {
   bounds: Rectangle
@@ -37,6 +56,7 @@ const miniWindowModeStates = new WeakMap<BrowserWindow, MiniWindowModeState>()
 export function enterMiniWindowMode(mainWindow: BrowserWindow, context: MiniWindowPlaybackContext): void {
   restoreMiniWindowMode(mainWindow)
 
+  const config = getMiniWindowConfig(context)
   const mainWindowState: MainWindowState = {
     bounds: mainWindow.getNormalBounds(),
     isFullScreen: mainWindow.isFullScreen(),
@@ -44,8 +64,8 @@ export function enterMiniWindowMode(mainWindow: BrowserWindow, context: MiniWind
   }
   const display = screen.getDisplayMatching(mainWindow.getBounds())
   const { workArea } = display
-  const width = Math.min(MINI_WINDOW_WIDTH, workArea.width)
-  const height = Math.min(MINI_WINDOW_HEIGHT, workArea.height)
+  const width = Math.min(config.width, workArea.width)
+  const height = Math.min(config.height, workArea.height)
   const miniWindow = new BrowserWindow({
     width,
     height,
@@ -54,18 +74,19 @@ export function enterMiniWindowMode(mainWindow: BrowserWindow, context: MiniWind
     show: false,
     frame: false,
     roundedCorners: false,
+    transparent: context.variant === 'radio',
     resizable: false,
     maximizable: false,
     minimizable: false,
     fullscreenable: false,
-    backgroundColor: '#000000',
+    backgroundColor: context.variant === 'radio' ? '#00000000' : '#000000',
     webPreferences: { preload: join(currentDirectory, '../preload/index.mjs'), sandbox: false },
   })
   const state: MiniWindowModeState = {
     context,
     mainWindowState,
     miniWindow,
-    exit: { sessionId: context.sessionId, currentTime: context.initialTime },
+    exit: createInitialMiniWindowExit(context),
   }
   miniWindowModeStates.set(mainWindow, state)
 
@@ -94,7 +115,7 @@ export function getMiniWindowPlayback(
 
 export function exitMiniWindowMode(mainWindow: BrowserWindow, exit: MiniWindowPlaybackExit): void {
   const state = miniWindowModeStates.get(mainWindow)
-  if (!state || state.context.sessionId !== exit.sessionId) return
+  if (!state || state.context.sessionId !== exit.sessionId || !isMatchingMiniWindowExit(state.context, exit)) return
 
   state.exit = exit
   state.miniWindow.close()
@@ -106,7 +127,12 @@ export function updateMiniWindowPlayback(
   exit: MiniWindowPlaybackExit,
 ): void {
   const state = miniWindowModeStates.get(mainWindow)
-  if (state?.context.sessionId !== exit.sessionId || state.miniWindow.webContents.id !== senderId) return
+  if (
+    state?.context.sessionId !== exit.sessionId ||
+    state.miniWindow.webContents.id !== senderId ||
+    !isMatchingMiniWindowExit(state.context, exit)
+  )
+    return
 
   state.exit = exit
 }
@@ -117,7 +143,7 @@ export function resizeMiniWindow(mainWindow: BrowserWindow, senderId: number, in
   if (state?.context.sessionId !== input.sessionId || state.miniWindow.webContents.id !== senderId) return
   if (!isValidMiniWindowBounds(input.bounds)) return
 
-  state.miniWindow.setBounds(normalizeMiniWindowBounds(input))
+  state.miniWindow.setBounds(normalizeMiniWindowBounds(input, getMiniWindowConfig(state.context)))
 }
 
 export function moveMiniWindow(mainWindow: BrowserWindow, senderId: number, input: MiniWindowMoveInput): void {
@@ -126,6 +152,22 @@ export function moveMiniWindow(mainWindow: BrowserWindow, senderId: number, inpu
   if (!isValidMiniWindowPosition(input.position)) return
 
   state.miniWindow.setPosition(Math.round(input.position.x), Math.round(input.position.y))
+}
+
+export function hideMiniWindow(mainWindow: BrowserWindow, senderId: number, sessionId: string): void {
+  const state = miniWindowModeStates.get(mainWindow)
+  if (state?.context.sessionId !== sessionId || state.miniWindow.webContents.id !== senderId) return
+
+  state.miniWindow.hide()
+}
+
+export function showActiveMiniWindow(mainWindow: BrowserWindow): boolean {
+  const state = miniWindowModeStates.get(mainWindow)
+  if (!state || state.miniWindow.isDestroyed()) return false
+
+  state.miniWindow.show()
+  state.miniWindow.focus()
+  return true
 }
 
 export function getMiniWindowAlwaysOnTop(mainWindow: BrowserWindow, senderId: number, sessionId: string): boolean {
@@ -148,9 +190,12 @@ export function setMiniWindowAlwaysOnTop(
   return state.miniWindow.isAlwaysOnTop()
 }
 
-function normalizeMiniWindowBounds({ corner, bounds }: MiniWindowResizeInput): MiniWindowBounds {
-  const width = clamp(Math.round(bounds.width), MINI_WINDOW_MIN_WIDTH, MINI_WINDOW_MAX_WIDTH)
-  const height = Math.round(width / MINI_WINDOW_ASPECT_RATIO)
+function normalizeMiniWindowBounds(
+  { corner, bounds }: MiniWindowResizeInput,
+  config: MiniWindowConfig,
+): MiniWindowBounds {
+  const width = clamp(Math.round(bounds.width), config.minWidth, config.maxWidth)
+  const height = Math.round(width / config.aspectRatio)
   const right = bounds.x + bounds.width
   const bottom = bounds.y + bounds.height
 
@@ -164,6 +209,32 @@ function normalizeMiniWindowBounds({ corner, bounds }: MiniWindowResizeInput): M
     case 'bottom-right':
       return { x: bounds.x, y: bounds.y, width, height }
   }
+}
+
+function getMiniWindowConfig(context: MiniWindowPlaybackContext): MiniWindowConfig {
+  return context.variant === 'radio' ? RADIO_MINI_WINDOW_CONFIG : VIDEO_MINI_WINDOW_CONFIG
+}
+
+function createInitialMiniWindowExit(context: MiniWindowPlaybackContext): MiniWindowPlaybackExit {
+  return context.variant === 'radio'
+    ? {
+        sessionId: context.sessionId,
+        variant: 'radio',
+        channel: context.channel,
+        isPlaying: true,
+        isMuted: context.isMuted,
+        volume: context.volume,
+      }
+    : {
+        sessionId: context.sessionId,
+        variant: context.variant,
+        currentTime: context.initialTime,
+      }
+}
+
+function isMatchingMiniWindowExit(context: MiniWindowPlaybackContext, exit: MiniWindowPlaybackExit): boolean {
+  if (context.variant === 'radio') return exit.variant === 'radio'
+  return exit.variant === context.variant
 }
 
 function clamp(value: number, minimum: number, maximum: number): number {

@@ -2,14 +2,20 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { PictureInPicture2, Repeat, SkipForward, type LucideIcon } from 'lucide-react'
 
-const ARTPLAYER_ICON_PROPS = {
+interface ArtplayerIconProps {
+  'size': number
+  'strokeWidth': number
+  'aria-hidden': boolean
+}
+
+const ARTPLAYER_ICON_PROPS: ArtplayerIconProps = {
   'size': 22,
   'strokeWidth': 1.75,
   'aria-hidden': true,
-} as const
+}
 
-function createArtplayerLucideIcon(Icon: LucideIcon): string {
-  return renderToStaticMarkup(createElement(Icon, ARTPLAYER_ICON_PROPS))
+function createArtplayerLucideIcon(Icon: LucideIcon, props: Partial<ArtplayerIconProps> = {}): string {
+  return renderToStaticMarkup(createElement(Icon, { ...ARTPLAYER_ICON_PROPS, ...props }))
 }
 
 export const artplayerSettingIcons = {
@@ -18,7 +24,7 @@ export const artplayerSettingIcons = {
 } as const
 
 export const artplayerControlIcons = {
-  miniWindow: createArtplayerLucideIcon(PictureInPicture2),
+  miniWindow: createArtplayerLucideIcon(PictureInPicture2, { size: 19, strokeWidth: 2 }),
 } as const
 
 // 自定义开关图标（覆盖 ArtPlayer 默认 switchOn/switchOff）

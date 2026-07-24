@@ -1,6 +1,7 @@
 import { AlertCircle, CheckCircle2, ChevronRight, Loader2, MinusCircle, Play, Search } from 'lucide-react'
 import type { SearchSourceStatus, VodSearchResult } from '@shared/types'
 import { MediaPoster } from '@renderer/components'
+import { SegmentedTabs } from '@/ui'
 import { cn } from '@/utils'
 import type { GroupedSearchResult, ResultViewMode, SearchSourceStats, SourceSearchState } from '../types'
 import { formatMeta, getStatusTone } from '../utils'
@@ -43,24 +44,15 @@ export function ViewModeSwitch({
   value: ResultViewMode
 }): React.JSX.Element {
   return (
-    <div className="bg-muted flex rounded-xl p-1">
-      {[
-        { value: 'grouped' as const, label: '按组展示' },
-        { value: 'source' as const, label: '按源展示' },
-      ].map((tab) => (
-        <button
-          key={tab.value}
-          className={cn(
-            'text-muted-foreground hover:text-foreground focus-visible:ring-ring h-10 rounded-xl px-5 text-sm font-semibold transition-colors outline-none focus-visible:ring-2',
-            value === tab.value && 'bg-card text-primary shadow-sm',
-          )}
-          type="button"
-          onClick={() => onChange(tab.value)}
-        >
-          {tab.label}
-        </button>
-      ))}
-    </div>
+    <SegmentedTabs
+      ariaLabel="搜索结果展示方式"
+      items={[
+        { value: 'grouped', label: '按组展示' },
+        { value: 'source', label: '按源展示' },
+      ]}
+      value={value}
+      onValueChange={onChange}
+    />
   )
 }
 

@@ -3,8 +3,9 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { Readable } from 'stream'
 
 const PLAYLIST_CONTENT_TYPES = ['application/vnd.apple.mpegurl', 'application/x-mpegurl', 'audio/mpegurl']
+const RADIO_API_ORIGINS = new Set(['https://rapi.qtfm.cn', 'https://rapi.qingting.fm', 'https://search.qingting.fm'])
 
-// 本地回环代理：补齐请求头、重写 HLS 子资源，并避免 renderer 直接跨域请求第三方媒体。
+// 本地回环代理：转发受信任的电台 API，并补齐请求头、重写 HLS 子资源，避免 renderer 直接跨域请求第三方资源。
 export class MediaProxyServer {
   private server?: Server
   private baseUrl?: string
@@ -21,6 +22,17 @@ export class MediaProxyServer {
     }
 
     return this.startPromise
+  }
+
+  async createRadioApiUrl(targetUrl: string): Promise<string> {
+    const parsedTargetUrl = new URL(targetUrl)
+    if (!RADIO_API_ORIGINS.has(parsedTargetUrl.origin)) {
+      throw new Error('不支持代理该电台服务地址')
+    }
+
+    const proxyUrl = new URL('/radio-api', await this.getBaseUrl())
+    proxyUrl.searchParams.set('url', parsedTargetUrl.toString())
+    return proxyUrl.toString()
   }
 
   private start(): Promise<string> {
@@ -53,7 +65,7 @@ export class MediaProxyServer {
 
     const requestUrl = new URL(request.url ?? '/', 'http://127.0.0.1')
     // 仅暴露固定路径，代理本身不能成为任意本地 HTTP 服务。
-    if (!['/media', '/image', '/resolve'].includes(requestUrl.pathname)) {
+    if (!['/media', '/image', '/resolve', '/radio-api'].includes(requestUrl.pathname)) {
       response.writeHead(404)
       response.end('Not found')
       return
@@ -71,6 +83,18 @@ export class MediaProxyServer {
       if (!['http:', 'https:'].includes(parsedTargetUrl.protocol)) {
         response.writeHead(400)
         response.end('Only http/https media resources are supported')
+        return
+      }
+
+      if (requestUrl.pathname === '/radio-api') {
+        if (!RADIO_API_ORIGINS.has(parsedTargetUrl.origin)) {
+          writeCorsHeaders(response)
+          response.writeHead(403)
+          response.end('Unsupported radio API origin')
+          return
+        }
+
+        await proxyRadioApiRequest(response, parsedTargetUrl.toString())
         return
       }
 
@@ -93,7 +117,7 @@ export class MediaProxyServer {
         requestUrl.searchParams.get('user-agent') ?? undefined,
       )
     } catch (error) {
-      console.error('Live media proxy failed:', targetUrl, error)
+      console.error('Local proxy request failed:', targetUrl, error)
       if (!response.headersSent) {
         writeCorsHeaders(response)
         response.writeHead(502)
@@ -101,6 +125,28 @@ export class MediaProxyServer {
       response.end('Failed to fetch media resource')
     }
   }
+}
+
+async function proxyRadioApiRequest(response: ServerResponse, targetUrl: string): Promise<void> {
+  const upstream = await axios.get<unknown>(targetUrl, {
+    headers: {
+      'Accept': 'application/json, text/plain, */*',
+      'User-Agent':
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36',
+    },
+    proxy: false,
+    responseType: 'text',
+    timeout: 12_000,
+    transformResponse: [(value) => value],
+    validateStatus: () => true,
+  })
+  const contentType = getResponseHeader(upstream.headers, 'content-type') ?? 'application/json; charset=utf-8'
+  writeCorsHeaders(response)
+  response.writeHead(upstream.status, {
+    'Content-Type': contentType,
+    'Cache-Control': 'no-store',
+  })
+  response.end(upstream.data)
 }
 
 /**

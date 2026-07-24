@@ -6,6 +6,7 @@ import {
   exitMiniWindowMode,
   getMiniWindowAlwaysOnTop,
   getMiniWindowPlayback,
+  hideMiniWindow,
   moveMiniWindow,
   resizeMiniWindow,
   setMiniWindowAlwaysOnTop,
@@ -33,6 +34,10 @@ export function registerWindowIpc(context: ApplicationContext): void {
   ipcMain.handle(IPC_CHANNELS.window.moveMiniWindow, (event, input) => {
     const window = context.getMainWindow()
     if (window) moveMiniWindow(window, event.sender.id, input)
+  })
+  ipcMain.handle(IPC_CHANNELS.window.hideMiniWindow, (event, sessionId) => {
+    const window = context.getMainWindow()
+    if (window) hideMiniWindow(window, event.sender.id, sessionId)
   })
   ipcMain.handle(IPC_CHANNELS.window.getMiniWindowAlwaysOnTop, (event, sessionId) => {
     const window = context.getMainWindow()

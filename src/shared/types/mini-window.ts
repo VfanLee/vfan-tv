@@ -1,6 +1,7 @@
 import type { MediaStreamType } from './media'
+import type { RadioChannel } from './radio'
 
-export interface MiniWindowPlaybackContext {
+export interface VideoMiniWindowPlaybackContext {
   sessionId: string
   src: string
   sourceType?: MediaStreamType
@@ -11,10 +12,32 @@ export interface MiniWindowPlaybackContext {
   audioTrackUrl?: string
 }
 
-export interface MiniWindowPlaybackExit {
+export interface RadioMiniWindowPlaybackContext {
   sessionId: string
+  variant: 'radio'
+  channel: RadioChannel
+  isMuted: boolean
+  volume: number
+}
+
+export type MiniWindowPlaybackContext = VideoMiniWindowPlaybackContext | RadioMiniWindowPlaybackContext
+
+export interface VideoMiniWindowPlaybackExit {
+  sessionId: string
+  variant: 'vod' | 'live'
   currentTime: number
 }
+
+export interface RadioMiniWindowPlaybackExit {
+  sessionId: string
+  variant: 'radio'
+  channel: RadioChannel
+  isPlaying: boolean
+  isMuted: boolean
+  volume: number
+}
+
+export type MiniWindowPlaybackExit = VideoMiniWindowPlaybackExit | RadioMiniWindowPlaybackExit
 
 export type MiniWindowResizeCorner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right'
 

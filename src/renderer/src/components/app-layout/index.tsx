@@ -1,22 +1,28 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useMatches, useNavigate, useSearchParams } from 'react-router'
-import { ChevronLeft, ChevronRight, Clock3, Heart, Home, Info, Link, Radio, Search, Settings, Tv } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Clock3, Heart, Home, Info, Link, Radio, Settings, Tv } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { SIDEBAR_COLLAPSED_STORAGE_KEY } from '@shared/constants'
 import { categoryIcons } from '@renderer/constants'
+import { SearchBox } from '@/ui'
 import { cn } from '@/utils'
 import logoMarkUrl from '@renderer/assets/logo-mark.svg'
+import applicationBackgroundUrl from '@renderer/assets/application-background.png'
+import applicationBackgroundDarkUrl from '@renderer/assets/application-background-dark.png'
+import sidebarBackgroundUrl from '@renderer/assets/sidebar-background.png'
+import sidebarBackgroundDarkUrl from '@renderer/assets/sidebar-background-dark.png'
+import { RadioBottomPlayer } from '../radio-player'
 
-// 应用级壳层维护导航、顶部栏与主内容滚动状态，不承载页面业务数据。
+// 应用级壳层维护导航、顶部栏、主内容滚动状态，以及仅在电台页常驻的底部播放器容器。
 const primaryNavItems: Array<{ to: string; label: string; icon: LucideIcon }> = [
   { to: '/', label: '首页', icon: Home },
-  { to: '/live', label: '直播', icon: Tv },
-  { to: '/radio', label: '电台', icon: Radio },
   { to: '/hot/movie', label: '电影', icon: categoryIcons.movie },
   { to: '/hot/tv', label: '电视剧', icon: categoryIcons.tv },
   { to: '/hot/animation', label: '动画', icon: categoryIcons.animation },
   { to: '/hot/documentary', label: '纪录片', icon: categoryIcons.documentary },
   { to: '/hot/show', label: '综艺', icon: categoryIcons.show },
+  { to: '/live', label: '直播', icon: Tv },
+  { to: '/radio', label: '电台', icon: Radio },
   { to: '/link-player', label: '直链播放', icon: Link },
 ]
 
@@ -37,6 +43,7 @@ export function AppLayout(): React.JSX.Element {
   const location = useLocation()
   const mainRef = useRef<HTMLElement>(null)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => readSidebarCollapsed())
+  const showRadioBottomPlayer = location.pathname === '/radio'
   const toggleSidebar = (): void => {
     setIsSidebarCollapsed((current) => {
       const next = !current
@@ -70,10 +77,20 @@ export function AppLayout(): React.JSX.Element {
     >
       <aside
         className={cn(
-          'border-sidebar-border bg-sidebar text-sidebar-foreground relative flex h-screen flex-col border-r py-4 transition-[padding] duration-200',
+          'border-sidebar-border bg-sidebar text-sidebar-foreground relative isolate z-20 flex h-screen flex-col border-r py-4 transition-[padding] duration-200',
           isSidebarCollapsed ? 'px-2' : 'px-4',
         )}
       >
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 -z-10 bg-cover bg-center dark:hidden"
+          style={{ backgroundImage: `url(${sidebarBackgroundUrl})` }}
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 -z-10 hidden bg-cover bg-center dark:block"
+          style={{ backgroundImage: `url(${sidebarBackgroundDarkUrl})` }}
+        />
         <div className={cn('mb-4 flex items-center justify-center px-1', isSidebarCollapsed && 'justify-center px-0')}>
           <Logo collapsed={isSidebarCollapsed} />
         </div>
@@ -111,10 +128,33 @@ export function AppLayout(): React.JSX.Element {
         </nav>
       </aside>
 
-      <main ref={mainRef} className="relative h-screen min-w-0 overflow-y-auto">
-        {hideTopBar ? null : <TopBar searchKey={location.search} showSearch={showGlobalSearch} />}
-        <Outlet />
-      </main>
+      <section className="bg-background relative isolate z-0 h-screen min-w-0 overflow-hidden">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 -z-10 bg-cover bg-fixed bg-center dark:hidden"
+          style={{ backgroundImage: `url(${applicationBackgroundUrl})` }}
+        />
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-0 -z-10 hidden bg-cover bg-fixed bg-center dark:block"
+          style={{ backgroundImage: `url(${applicationBackgroundDarkUrl})` }}
+        />
+        <div
+          aria-hidden="true"
+          className="bg-background/5 dark:bg-background/10 pointer-events-none absolute inset-0 -z-10"
+        />
+        <main
+          ref={mainRef}
+          className={cn(
+            'relative h-screen min-w-0 overflow-y-auto transition-[padding] duration-150 motion-reduce:transition-none',
+            showRadioBottomPlayer && 'pb-28',
+          )}
+        >
+          {hideTopBar ? null : <TopBar searchKey={location.search} showSearch={showGlobalSearch} />}
+          <Outlet />
+        </main>
+        {showRadioBottomPlayer ? <RadioBottomPlayer /> : null}
+      </section>
     </div>
   )
 }
@@ -134,28 +174,14 @@ function LayoutSearchForm(): React.JSX.Element {
   const [keyword, setKeyword] = useState(urlKeyword)
 
   return (
-    <form
-      className="border-border bg-card mx-auto flex h-14 max-w-4xl items-center gap-3 rounded-xl border px-5 shadow-sm"
-      onSubmit={(event) => {
-        event.preventDefault()
-        openSearch(keyword, navigate)
-      }}
-    >
-      <Search className="text-muted-foreground shrink-0" size={22} />
-      <input
-        aria-label="搜索片名"
-        className="text-foreground placeholder:text-muted-foreground h-full min-w-0 flex-1 bg-transparent text-[15px] font-medium outline-none"
-        placeholder="搜索电影、电视剧、动画、纪录片、综艺"
-        value={keyword}
-        onChange={(event) => setKeyword(event.target.value.trim())}
-      />
-      <button
-        className="bg-muted text-muted-foreground border-border/80 hover:bg-muted/80 hover:text-foreground focus-visible:ring-ring cursor-pointer rounded-xl border px-5 py-2.5 text-sm font-semibold shadow-[0_1px_0_0_rgba(255,255,255,0.55)_inset,0_2px_5px_rgba(0,0,0,0.08)] transition-[transform,box-shadow,background-color,color] duration-150 outline-none hover:shadow-[0_1px_0_0_rgba(255,255,255,0.7)_inset,0_3px_8px_rgba(0,0,0,0.1)] focus-visible:ring-2 active:translate-y-px active:shadow-[0_1px_0_0_rgba(255,255,255,0.35)_inset,0_1px_2px_rgba(0,0,0,0.08)] dark:shadow-[0_1px_0_0_rgba(255,255,255,0.08)_inset,0_2px_5px_rgba(0,0,0,0.35)] dark:hover:shadow-[0_1px_0_0_rgba(255,255,255,0.12)_inset,0_3px_8px_rgba(0,0,0,0.4)] dark:active:shadow-[0_1px_0_0_rgba(255,255,255,0.05)_inset,0_1px_2px_rgba(0,0,0,0.3)]"
-        type="submit"
-      >
-        搜索
-      </button>
-    </form>
+    <SearchBox
+      ariaLabel="搜索片名"
+      placeholder="搜索电影、电视剧、动画、纪录片、综艺"
+      value={keyword}
+      onChange={setKeyword}
+      onClear={() => setKeyword('')}
+      onSubmit={() => openSearch(keyword, navigate)}
+    />
   )
 }
 

@@ -69,6 +69,7 @@ export function createApplicationContext(): ApplicationContext {
     mainWindow?.webContents.send(IPC_CHANNELS.updates.event, event)
   const sourceService = new SourceService(source, httpClient)
   const douban = new DoubanService(httpClient)
+  const mediaProxy = new MediaProxyServer()
 
   return {
     db,
@@ -84,10 +85,10 @@ export function createApplicationContext(): ApplicationContext {
       home: new HomeService(recentPlay, douban),
       douban,
       settings,
-      mediaProxy: new MediaProxyServer(),
+      mediaProxy,
       vodSearch: new VodSearchService(sourceService, httpClient, new SearchTaskManager(), emitSearchEvent),
       updates: new UpdateService(settings, emitUpdateEvent),
-      radio: new RadioService(httpClient),
+      radio: new RadioService(httpClient, mediaProxy),
     },
     utilities: { httpClient, probeMediaSource, detectMediaStreamType },
   }

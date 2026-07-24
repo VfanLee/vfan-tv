@@ -1,5 +1,6 @@
 import type { RadioCategory, RadioChannel, RadioLiveProgram, RadioRegion, RadioSearchResult } from '@shared/types'
 import type { HttpClient } from '../../infrastructure/http/http-client'
+import type { MediaProxyServer } from '../media/media-proxy-server'
 
 const QTFM_API_BASE_URL = 'https://rapi.qtfm.cn'
 const QINGTING_API_BASE_URL = 'https://rapi.qingting.fm'
@@ -11,10 +12,13 @@ type UnknownRecord = Record<string, unknown>
  * 蜻蜓的这些端点没有稳定的公开 SDK；服务层在这里收敛上游字段差异，避免 renderer 依赖其原始结构。
  */
 export class RadioService {
-  constructor(private readonly httpClient: HttpClient) {}
+  constructor(
+    private readonly httpClient: HttpClient,
+    private readonly proxyServer: MediaProxyServer,
+  ) {}
 
   async getCategories(): Promise<RadioCategory[]> {
-    const response = await this.httpClient.get<unknown>(`${QTFM_API_BASE_URL}/categories?type=channel`)
+    const response = await this.get<unknown>(`${QTFM_API_BASE_URL}/categories?type=channel`)
     return asArray(getPayload(response)).map(toCategory).filter(isDefined)
   }
 
@@ -22,14 +26,12 @@ export class RadioService {
     const url = new URL(`${QTFM_API_BASE_URL}/categories/${normalizeId(categoryId)}/channels`)
     url.searchParams.set('page', String(normalizePage(page)))
     url.searchParams.set('pagesize', String(normalizePageSize(pageSize)))
-    const response = await this.httpClient.get<unknown>(url.toString())
+    const response = await this.get<unknown>(url.toString())
     return asArray(getPayload(response)).map(toChannel).filter(isDefined)
   }
 
   async getChannelDetail(channelId: number): Promise<RadioChannel> {
-    const response = await this.httpClient.get<unknown>(
-      `${QINGTING_API_BASE_URL}/v4/channels/${normalizeId(channelId)}`,
-    )
+    const response = await this.get<unknown>(`${QINGTING_API_BASE_URL}/v4/channels/${normalizeId(channelId)}`)
     const channel = toChannel(getPayload(response))
     if (!channel) throw new Error('未找到该电台的详情')
     return channel
@@ -45,7 +47,7 @@ export class RadioService {
     url.searchParams.set('pagesize', String(normalizePageSize(pageSize)))
     url.searchParams.set('include', 'channel_live')
     url.searchParams.set('k_src', 'direct')
-    const payload = getPayload(await this.httpClient.get<unknown>(url.toString()))
+    const payload = getPayload(await this.get<unknown>(url.toString()))
     const record = asRecord(payload)
     const data = asRecord(record?.data)
     const items = asArray(data?.docs).map(toChannel).filter(isDefined)
@@ -63,21 +65,25 @@ export class RadioService {
     const url = new URL(`${QINGTING_API_BASE_URL}/v2/livechannelplaying`)
     url.searchParams.set('ids', ids.join(','))
     url.searchParams.set('current_time', String(Math.floor(Date.now() / 1000)))
-    return asArray(getPayload(await this.httpClient.get<unknown>(url.toString())))
+    return asArray(getPayload(await this.get<unknown>(url.toString())))
       .map(toLiveProgram)
       .filter(isDefined)
   }
 
   async getRegions(): Promise<RadioRegion[]> {
-    const response = await this.httpClient.get<unknown>(`${QTFM_API_BASE_URL}/regions?all=true`)
+    const response = await this.get<unknown>(`${QTFM_API_BASE_URL}/regions?all=true`)
     return asArray(getPayload(response)).map(toRegion).filter(isDefined)
   }
 
   async getBillboard(categoryId: number, regionId: number): Promise<RadioChannel[]> {
-    const response = await this.httpClient.get<unknown>(
+    const response = await this.get<unknown>(
       `${QTFM_API_BASE_URL}/billboards/${normalizeId(categoryId)}/${normalizeId(regionId)}/channels`,
     )
     return asArray(getPayload(response)).map(toChannel).filter(isDefined)
+  }
+
+  private async get<T>(url: string): Promise<T> {
+    return this.httpClient.get<T>(await this.proxyServer.createRadioApiUrl(url))
   }
 }
 

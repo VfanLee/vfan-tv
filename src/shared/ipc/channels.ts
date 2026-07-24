@@ -75,6 +75,7 @@ export const IPC_CHANNELS = {
     updateMiniWindowPlayback: 'window:update-mini-window-playback',
     resizeMiniWindow: 'window:resize-mini-window',
     moveMiniWindow: 'window:move-mini-window',
+    hideMiniWindow: 'window:hide-mini-window',
     getMiniWindowAlwaysOnTop: 'window:get-mini-window-always-on-top',
     setMiniWindowAlwaysOnTop: 'window:set-mini-window-always-on-top',
     exitMiniWindowMode: 'window:exit-mini-window-mode',

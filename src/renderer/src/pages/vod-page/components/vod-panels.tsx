@@ -1,4 +1,4 @@
-import { ArrowUpDown, CheckCircle2, ListVideo, Loader2, Radio, RefreshCw } from 'lucide-react'
+import { ArrowUpDown, CheckCircle2, Loader2, Radio, RefreshCw } from 'lucide-react'
 import type { PlayLine, VodSearchResult } from '@shared/types'
 import { cn } from '@/utils'
 import type { EpisodeSelection, SourceProbeState, SourceRefreshState } from '../types'
@@ -24,32 +24,6 @@ export function VodDetailPanel({ items }: { items: Array<{ label: string; value:
         </div>
       ))}
     </section>
-  )
-}
-
-export function PanelTab({
-  active,
-  icon: Icon,
-  label,
-  onClick,
-}: {
-  active: boolean
-  icon: typeof ListVideo
-  label: string
-  onClick: () => void
-}): React.JSX.Element {
-  return (
-    <button
-      className={cn(
-        'text-muted-foreground hover:text-foreground focus-visible:ring-ring inline-flex min-h-11 items-center justify-center gap-2 rounded-xl py-2 text-sm font-semibold transition-colors outline-none focus-visible:ring-2',
-        active && 'bg-card text-primary shadow-sm',
-      )}
-      type="button"
-      onClick={onClick}
-    >
-      <Icon size={17} />
-      {label}
-    </button>
   )
 }
 
