@@ -24,16 +24,38 @@ export function UpdateOptions({
   const manualDownloadUrl = result.manualDownloadUrl ?? result.downloadUrl
   const fileName = result.manualDownloadName ?? result.downloadName
   return (
-    <div className="bg-muted/40 mt-4 rounded-xl p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h4 className="text-sm font-semibold">更新下载</h4>
+    <div className="mt-3">
+      <div className="flex flex-wrap items-center gap-2 sm:justify-end">
         {fileName ? <span className="text-muted-foreground max-w-full truncate text-xs">{fileName}</span> : null}
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {result.canAutoUpdate && !isDownloaded ? (
+            <Button disabled={isDownloading} size="sm" onClick={onDownload}>
+              {isDownloading ? (
+                <RefreshCw className="animate-spin" data-icon="inline-start" />
+              ) : (
+                <Download data-icon="inline-start" />
+              )}
+              {isDownloading ? '下载中' : '下载更新'}
+            </Button>
+          ) : null}
+          {result.canAutoUpdate && isDownloaded ? (
+            <Button size="sm" onClick={onInstall}>
+              <Rocket data-icon="inline-start" />
+              安装并重启
+            </Button>
+          ) : null}
+          {manualDownloadUrl ? (
+            <Button size="sm" variant="outline" onClick={() => void openExternalUrl(manualDownloadUrl)}>
+              手动下载
+            </Button>
+          ) : null}
+        </div>
       </div>
       {result.autoUpdateError ? (
-        <p className="text-destructive mt-3 text-xs leading-5">自动更新不可用：{result.autoUpdateError}</p>
+        <p className="text-destructive mt-2 text-xs leading-5">自动更新不可用：{result.autoUpdateError}</p>
       ) : null}
       {downloadProgress ? (
-        <div className="mt-3">
+        <div className="mt-2">
           <div className="bg-border h-2 overflow-hidden rounded-full">
             <div
               className="bg-primary h-full rounded-full transition-[width]"
@@ -46,36 +68,6 @@ export function UpdateOptions({
           </div>
         </div>
       ) : null}
-      <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-muted-foreground text-xs leading-5">
-          {result.canAutoUpdate
-            ? 'Windows 安装版可自动下载并重启安装，也可以手动下载安装包。'
-            : '当前平台使用手动下载，安装包下载会套用「设置 / 网络 - GitHub 加速」。'}
-        </p>
-        <div className="flex shrink-0 flex-wrap gap-2">
-          {result.canAutoUpdate && !isDownloaded ? (
-            <Button disabled={isDownloading} size="lg" onClick={onDownload}>
-              {isDownloading ? (
-                <RefreshCw className="animate-spin" data-icon="inline-start" />
-              ) : (
-                <Download data-icon="inline-start" />
-              )}
-              {isDownloading ? '下载中' : '下载更新'}
-            </Button>
-          ) : null}
-          {result.canAutoUpdate && isDownloaded ? (
-            <Button size="lg" onClick={onInstall}>
-              <Rocket data-icon="inline-start" />
-              安装并重启
-            </Button>
-          ) : null}
-          {manualDownloadUrl ? (
-            <Button size="lg" variant="outline" onClick={() => void openExternalUrl(manualDownloadUrl)}>
-              手动下载
-            </Button>
-          ) : null}
-        </div>
-      </div>
     </div>
   )
 }

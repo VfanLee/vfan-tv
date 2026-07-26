@@ -259,13 +259,9 @@ export function AboutPage(): React.JSX.Element {
 
           <div className="grid gap-5 p-6 sm:grid-cols-2">
             <VersionItem label="当前版本" value={currentVersion ? `v${currentVersion}` : '读取中'} />
-            <VersionItem label="最新版本" value={updateResult ? `v${updateResult.latestVersion}` : '尚未检查'} />
-          </div>
-
-          {updateResult?.updateAvailable ? (
-            <div className="border-border border-t px-6 py-5">
-              <h3 className="text-sm font-semibold">{updateResult.releaseName}</h3>
-              {updateResult.manualDownloadUrl || updateResult.canAutoUpdate ? (
+            <div className="sm:flex sm:items-end sm:justify-between sm:gap-4">
+              <VersionItem label="最新版本" value={updateResult ? `v${updateResult.latestVersion}` : '尚未检查'} />
+              {updateResult?.updateAvailable && (updateResult.manualDownloadUrl || updateResult.canAutoUpdate) ? (
                 <UpdateOptions
                   downloadProgress={downloadProgress}
                   isDownloaded={isUpdateDownloaded}
@@ -274,7 +270,14 @@ export function AboutPage(): React.JSX.Element {
                   onDownload={() => void handleDownloadUpdate()}
                   onInstall={() => void handleInstallUpdate()}
                 />
-              ) : (
+              ) : null}
+            </div>
+          </div>
+
+          {updateResult?.updateAvailable ? (
+            <div className="border-border border-t px-6 py-5">
+              <h3 className="text-sm font-semibold">{updateResult.releaseName}</h3>
+              {!(updateResult.manualDownloadUrl || updateResult.canAutoUpdate) ? (
                 <button
                   type="button"
                   className="border-border bg-background hover:bg-accent hover:text-accent-foreground focus-visible:ring-ring mt-4 inline-flex h-9 items-center gap-2 rounded-xl border px-3 text-sm font-medium transition-colors outline-none focus-visible:ring-2"
@@ -283,7 +286,7 @@ export function AboutPage(): React.JSX.Element {
                   前往发布页
                   <SquareArrowOutUpRight className="shrink-0" size={14} />
                 </button>
-              )}
+              ) : null}
               <ReleaseNotes notes={updateResult.releaseNotes} />
             </div>
           ) : null}
