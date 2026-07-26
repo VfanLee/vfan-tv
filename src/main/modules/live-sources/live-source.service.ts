@@ -197,8 +197,12 @@ export class LiveSourceService {
   syncSubscription(items: LiveSourceImportItem[]): SourceSubscriptionSectionResult {
     const uniqueItems = [...new Map(items.map((item) => [item.url, item])).values()]
     const now = Date.now()
+    const manualOwner = this.repository
+      .list()
+      .find((source) => source.origin === 'manual' && uniqueItems.some((item) => item.url === source.url))
 
-    this.repository.clear()
+    if (manualOwner) throw new Error(`订阅源地址与手动源「${manualOwner.name}」冲突`)
+    this.repository.clearSubscription()
 
     for (const item of uniqueItems) {
       this.repository.upsert({

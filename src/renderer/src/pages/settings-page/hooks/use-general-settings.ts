@@ -93,6 +93,7 @@ export function useGeneralSettings({
   const addSubscription = async (rawUrl: string): Promise<void> => {
     const url = rawUrl.trim()
     if (!apiAvailable || !url) return
+    setIsSyncingSubscription(true)
     try {
       const parsedUrl = new URL(url)
       if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('订阅地址仅支持 HTTP 或 HTTPS')
@@ -100,11 +101,23 @@ export function useGeneralSettings({
       const item = { id: crypto.randomUUID(), url }
       const next = [...subscriptions, item]
       await updateSettings({ subscriptions: next, activeSubscriptionId: item.id })
+      let result: Awaited<ReturnType<typeof syncSourceSubscription>>
+      try {
+        result = await syncSourceSubscription(item.id)
+      } catch (error) {
+        await updateSettings({ subscriptions, activeSubscriptionId })
+        throw error
+      }
       setSubscriptions(next)
       setActiveSubscriptionId(item.id)
-      toast.success('订阅源已添加')
+      await Promise.all([refreshVodSources(), refreshLiveSources()])
+      toast.success('订阅源已添加', {
+        description: `已更新订阅点播源和直播源：点播 ${result.vod.created + result.vod.updated} 个，直播 ${result.live.created + result.live.updated} 个。`,
+      })
     } catch (error) {
       toast.error('添加失败', { description: error instanceof Error ? error.message : '订阅地址无效' })
+    } finally {
+      setIsSyncingSubscription(false)
     }
   }
 
@@ -113,7 +126,6 @@ export function useGeneralSettings({
     setIsSyncingSubscription(true)
     try {
       const result = await syncSourceSubscription(id)
-      await updateSettings({ activeSubscriptionId: id })
       setActiveSubscriptionId(id)
       await Promise.all([refreshVodSources(), refreshLiveSources()])
       toast.success('订阅源已切换', {

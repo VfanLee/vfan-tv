@@ -243,7 +243,7 @@ export class SourceService {
     const now = Date.now()
 
     this.assertSubscriptionEndpointUrlsAvailable(uniqueItems)
-    this.repository.clear()
+    this.repository.clearSubscription()
 
     for (const item of uniqueItems) {
       this.repository.upsert({
@@ -282,10 +282,15 @@ export class SourceService {
 
   private assertSubscriptionEndpointUrlsAvailable(items: VodSourceSubscriptionItem[]): void {
     const endpointUrls = new Set<string>()
+    const manualSources = this.repository.list().filter((source) => source.origin === 'manual')
 
     for (const item of items) {
       for (const endpointUrl of [item.url, ...(item.backups ?? []).map((backup) => backup.url)]) {
         if (endpointUrls.has(endpointUrl)) throw new Error(`订阅中存在重复的源地址：${endpointUrl}`)
+        const manualOwner = manualSources.find(
+          (source) => source.url === endpointUrl || source.backups.some((backup) => backup.url === endpointUrl),
+        )
+        if (manualOwner) throw new Error(`订阅源地址与手动源「${manualOwner.name}」冲突`)
         endpointUrls.add(endpointUrl)
       }
     }

@@ -71,11 +71,16 @@ export function registerSourcesIpc(context: ApplicationContext): void {
         // 订阅内容在解码后仍需 schema 校验，远程输入不能直接写入本地数据库。
         const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bs58.decode(encoded.trim()))
         const payload = sourceSubscriptionSchema.parse(JSON.parse(decoded))
-        return {
-          vod: source.syncSubscription(payload.vod),
-          live: liveSource.syncSubscription(payload.live),
-          updatedAt: payload.updatedAt,
-        }
+        // 点播源、直播源与当前订阅必须作为一次完整切换提交，防止任一步失败后留下混合数据。
+        return context.db.$client.transaction(() => {
+          const result = {
+            vod: source.syncSubscription(payload.vod),
+            live: liveSource.syncSubscription(payload.live),
+            updatedAt: payload.updatedAt,
+          }
+          settings.update({ activeSubscriptionId: subscriptionId })
+          return result
+        })()
       } catch (error) {
         if (error instanceof SyntaxError) throw new Error('订阅内容解码后不是有效的 JSON')
         if (isZodError(error)) throw new Error(`订阅配置格式无效：${formatZodError(error)}`)
@@ -87,8 +92,8 @@ export function registerSourcesIpc(context: ApplicationContext): void {
     const current = settings.get()
     if (!current.subscriptions.some((item) => item.id === subscriptionId)) throw new Error('订阅源不存在')
     if (current.activeSubscriptionId === subscriptionId) {
-      source.clear()
-      liveSource.clear()
+      context.repositories.source.clearSubscription()
+      context.repositories.liveSource.clearSubscription()
     }
     const subscriptions = current.subscriptions.filter((item) => item.id !== subscriptionId)
     settings.update({

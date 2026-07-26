@@ -113,4 +113,8 @@ export class VodSourceRepository {
   clear(): void {
     this.db.delete(vodSourcesTable).run()
   }
+
+  clearSubscription(): void {
+    this.db.delete(vodSourcesTable).where(eq(vodSourcesTable.origin, 'subscription')).run()
+  }
 }

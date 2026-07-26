@@ -151,9 +151,9 @@ export function SubscriptionSettingsCard({
   return (
     <SettingsCard description="选择一个订阅源后更新；手动源不会被覆盖。" title="订阅源管理">
       <div className="flex flex-col gap-3 px-5 py-5 sm:flex-row sm:items-center">
-        <label className="min-w-0 flex-1">
-          <span className="text-foreground mb-2 block text-sm font-medium">订阅地址</span>
+        <div className="min-w-0 flex-1">
           <Input
+            aria-label="订阅地址"
             disabled={!apiAvailable || isSyncing}
             placeholder="https://example.com/subscription"
             type="url"
@@ -163,7 +163,7 @@ export function SubscriptionSettingsCard({
               if (event.key === 'Enter') submit()
             }}
           />
-        </label>
+        </div>
         <Button className="sm:min-w-24" disabled={!apiAvailable || !url.trim() || isSyncing} onClick={submit}>
           <Rss data-icon="inline-start" />
           添加订阅

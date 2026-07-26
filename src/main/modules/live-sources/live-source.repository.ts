@@ -94,4 +94,8 @@ export class LiveSourceRepository {
   clear(): void {
     this.db.delete(liveSourcesTable).run()
   }
+
+  clearSubscription(): void {
+    this.db.delete(liveSourcesTable).where(eq(liveSourcesTable.origin, 'subscription')).run()
+  }
 }
