@@ -72,8 +72,8 @@ export function registerSourcesIpc(context: ApplicationContext): void {
         const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bs58.decode(encoded.trim()))
         const payload = sourceSubscriptionSchema.parse(JSON.parse(decoded))
         return {
-          vod: source.syncSubscription(subscriptionId, payload.vod),
-          live: liveSource.syncSubscription(subscriptionId, payload.live),
+          vod: source.syncSubscription(payload.vod),
+          live: liveSource.syncSubscription(payload.live),
           updatedAt: payload.updatedAt,
         }
       } catch (error) {
@@ -86,8 +86,10 @@ export function registerSourcesIpc(context: ApplicationContext): void {
   ipcMain.handle(IPC_CHANNELS.sources.deleteSubscription, (_event, subscriptionId: string) => {
     const current = settings.get()
     if (!current.subscriptions.some((item) => item.id === subscriptionId)) throw new Error('订阅源不存在')
-    source.clearSubscription(subscriptionId)
-    liveSource.clearSubscription(subscriptionId)
+    if (current.activeSubscriptionId === subscriptionId) {
+      source.clear()
+      liveSource.clear()
+    }
     const subscriptions = current.subscriptions.filter((item) => item.id !== subscriptionId)
     settings.update({
       subscriptions,

@@ -38,7 +38,6 @@ export interface VodSourceConfig {
   backups: VodSourceBackup[]
   sort: number
   origin: VodSourceOrigin
-  subscriptionId?: string
   remark?: string
   createdAt: number
   updatedAt: number

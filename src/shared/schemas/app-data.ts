@@ -56,7 +56,6 @@ export const appDataVodSourceSchema = z
     enabled: z.boolean(),
     backups: z.array(vodSourceBackupSchema).default([]),
     origin: z.enum(['manual', 'subscription']).default('manual'),
-    subscriptionId: z.string().optional(),
     sort: z.number().int().nonnegative().optional(),
   })
   .strict()
@@ -68,7 +67,6 @@ export const appDataLiveSourceSchema = z
     url: z.string().trim().url('直播源 URL 无效'),
     enabled: z.boolean(),
     origin: z.enum(['manual', 'subscription']).default('manual'),
-    subscriptionId: z.string().optional(),
     sort: z.number().int().nonnegative().optional(),
   })
   .strict()

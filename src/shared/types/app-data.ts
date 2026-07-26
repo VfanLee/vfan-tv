@@ -16,7 +16,6 @@ export interface AppDataVodSource {
   enabled: boolean
   backups: VodSourceBackup[]
   origin: VodSourceOrigin
-  subscriptionId?: string
   sort?: number
 }
 
@@ -25,7 +24,6 @@ export interface AppDataLiveSource {
   url: string
   enabled: boolean
   origin: LiveSourceOrigin
-  subscriptionId?: string
   sort?: number
 }
 

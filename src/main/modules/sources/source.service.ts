@@ -156,14 +156,6 @@ export class SourceService {
     this.repository.clear()
   }
 
-  clearSubscription(subscriptionId: string): void {
-    this.repository.clearSubscription(subscriptionId)
-  }
-
-  clearAllSubscriptions(): void {
-    this.repository.clearAllSubscriptions()
-  }
-
   exportItems(): VodSourceExportItem[] {
     return this.repository.list().map((source) => ({
       name: source.name,
@@ -246,7 +238,7 @@ export class SourceService {
     }
   }
 
-  syncSubscription(subscriptionId: string, items: VodSourceSubscriptionItem[]): SourceSubscriptionSectionResult {
+  syncSubscription(items: VodSourceSubscriptionItem[]): SourceSubscriptionSectionResult {
     const uniqueItems = [...new Map(items.map((item) => [item.name, item])).values()]
     const now = Date.now()
 
@@ -263,7 +255,6 @@ export class SourceService {
         enabled: item.enabled ?? false,
         sort: this.repository.list().length,
         origin: 'subscription',
-        subscriptionId,
         createdAt: now,
         updatedAt: now,
       })

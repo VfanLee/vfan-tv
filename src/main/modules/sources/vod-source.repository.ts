@@ -11,7 +11,6 @@ function toVodSourceConfig(row: VodSourceRow): VodSourceConfig {
     referer: row.referer ?? undefined,
     backups: row.backups ?? [],
     remark: row.remark ?? undefined,
-    subscriptionId: row.subscriptionId ?? undefined,
   }
 }
 
@@ -50,7 +49,6 @@ export class VodSourceRepository {
           enabled: source.enabled,
           sort: source.sort,
           origin: source.origin,
-          subscriptionId: source.subscriptionId,
           remark: source.remark,
           updatedAt: source.updatedAt,
         },
@@ -88,7 +86,6 @@ export class VodSourceRepository {
         backups: source.backups,
         enabled: source.enabled,
         origin: 'subscription',
-        subscriptionId: source.subscriptionId,
         updatedAt: source.updatedAt,
       })
       .where(eq(vodSourcesTable.id, source.id))
@@ -115,13 +112,5 @@ export class VodSourceRepository {
 
   clear(): void {
     this.db.delete(vodSourcesTable).run()
-  }
-
-  clearSubscription(subscriptionId: string): void {
-    this.db.delete(vodSourcesTable).where(eq(vodSourcesTable.subscriptionId, subscriptionId)).run()
-  }
-
-  clearAllSubscriptions(): void {
-    this.db.delete(vodSourcesTable).where(eq(vodSourcesTable.origin, 'subscription')).run()
   }
 }

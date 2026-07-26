@@ -118,14 +118,6 @@ export class LiveSourceService {
     this.repository.clear()
   }
 
-  clearSubscription(subscriptionId: string): void {
-    this.repository.clearSubscription(subscriptionId)
-  }
-
-  clearAllSubscriptions(): void {
-    this.repository.clearAllSubscriptions()
-  }
-
   exportItems(): LiveSourceExportItem[] {
     return this.repository.list().map((source) => ({
       name: source.name,
@@ -202,7 +194,7 @@ export class LiveSourceService {
     }
   }
 
-  syncSubscription(subscriptionId: string, items: LiveSourceImportItem[]): SourceSubscriptionSectionResult {
+  syncSubscription(items: LiveSourceImportItem[]): SourceSubscriptionSectionResult {
     const uniqueItems = [...new Map(items.map((item) => [item.url, item])).values()]
     const now = Date.now()
 
@@ -216,7 +208,6 @@ export class LiveSourceService {
         enabled: item.enabled ?? true,
         sort: this.repository.list().length,
         origin: 'subscription',
-        subscriptionId,
         createdAt: now,
         updatedAt: now,
       })

@@ -25,7 +25,6 @@ const createSchemaSql = `
     enabled INTEGER NOT NULL,
     sort INTEGER NOT NULL,
     origin TEXT NOT NULL DEFAULT 'manual',
-    subscription_id TEXT,
     remark TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
@@ -38,7 +37,6 @@ const createSchemaSql = `
     enabled INTEGER NOT NULL,
     sort INTEGER NOT NULL,
     origin TEXT NOT NULL DEFAULT 'manual',
-    subscription_id TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
   );
@@ -102,21 +100,8 @@ export function createDatabase(): AppDatabase {
   sqlite.pragma('journal_mode = WAL')
   sqlite.exec(createSchemaSql)
   ensureVodSourceBackupsColumn(sqlite)
-  ensureSubscriptionIdColumns(sqlite)
 
   return drizzle(sqlite, { schema })
-}
-
-function ensureSubscriptionIdColumns(sqlite: Database.Database): void {
-  for (const table of ['vod_sources', 'live_sources']) {
-    const columns = sqlite.prepare(`PRAGMA table_info('${table}')`).all() as Array<{ name: string }>
-    if (!columns.some((column) => column.name === 'subscription_id')) {
-      sqlite.exec(`ALTER TABLE ${table} ADD COLUMN subscription_id TEXT`)
-    }
-    sqlite.exec(
-      `UPDATE ${table} SET subscription_id = 'legacy-subscription' WHERE origin = 'subscription' AND subscription_id IS NULL`,
-    )
-  }
 }
 
 function ensureVodSourceBackupsColumn(sqlite: Database.Database): void {

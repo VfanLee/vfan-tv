@@ -6,7 +6,7 @@ import { liveSourcesTable } from '../../infrastructure/database/schema'
 type LiveSourceRow = typeof liveSourcesTable.$inferSelect
 
 function toLiveSourceConfig(row: LiveSourceRow): LiveSourceConfig {
-  return { ...row, subscriptionId: row.subscriptionId ?? undefined }
+  return row
 }
 
 export class LiveSourceRepository {
@@ -37,7 +37,6 @@ export class LiveSourceRepository {
           enabled: source.enabled,
           sort: source.sort,
           origin: source.origin,
-          subscriptionId: source.subscriptionId,
           updatedAt: source.updatedAt,
         },
       })
@@ -68,7 +67,6 @@ export class LiveSourceRepository {
         name: source.name,
         enabled: source.enabled,
         origin: 'subscription',
-        subscriptionId: source.subscriptionId,
         updatedAt: source.updatedAt,
       })
       .where(eq(liveSourcesTable.id, source.id))
@@ -95,13 +93,5 @@ export class LiveSourceRepository {
 
   clear(): void {
     this.db.delete(liveSourcesTable).run()
-  }
-
-  clearSubscription(subscriptionId: string): void {
-    this.db.delete(liveSourcesTable).where(eq(liveSourcesTable.subscriptionId, subscriptionId)).run()
-  }
-
-  clearAllSubscriptions(): void {
-    this.db.delete(liveSourcesTable).where(eq(liveSourcesTable.origin, 'subscription')).run()
   }
 }

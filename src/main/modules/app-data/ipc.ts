@@ -26,22 +26,20 @@ export function registerAppDataIpc(context: ApplicationContext): void {
         subscription: { url: '', updatedAt: undefined },
         subscriptions: appSettings.subscriptions,
         activeSubscriptionId: appSettings.activeSubscriptionId,
-        vod: source.list().map(({ name, url, referer, enabled, backups, origin, subscriptionId, sort }) => ({
+        vod: source.list().map(({ name, url, referer, enabled, backups, origin, sort }) => ({
           name,
           url,
           referer,
           enabled,
           backups,
           origin,
-          subscriptionId,
           sort,
         })),
-        live: liveSource.list().map(({ name, url, enabled, origin, subscriptionId, sort }) => ({
+        live: liveSource.list().map(({ name, url, enabled, origin, sort }) => ({
           name,
           url,
           enabled,
           origin,
-          subscriptionId,
           sort,
         })),
         recent: recentPlay.list(Number.MAX_SAFE_INTEGER),
@@ -90,7 +88,6 @@ export function registerAppDataIpc(context: ApplicationContext): void {
       sourceRepository.upsert({
         id: randomUUID(),
         ...item,
-        subscriptionId: item.subscriptionId ?? (item.origin === 'subscription' ? 'legacy-subscription' : undefined),
         sort,
         createdAt: now,
         updatedAt: now,
@@ -99,7 +96,6 @@ export function registerAppDataIpc(context: ApplicationContext): void {
       liveSourceRepository.upsert({
         id: randomUUID(),
         ...item,
-        subscriptionId: item.subscriptionId ?? (item.origin === 'subscription' ? 'legacy-subscription' : undefined),
         sort,
         createdAt: now,
         updatedAt: now,
