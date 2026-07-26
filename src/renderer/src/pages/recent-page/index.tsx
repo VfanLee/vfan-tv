@@ -62,8 +62,7 @@ export function RecentPage(): React.JSX.Element {
       </div>
       {pendingDeleteItem ? (
         <ConfirmDialog
-          confirmText="删除"
-          description={`确定删除「${pendingDeleteItem.title}」的播放记录吗？`}
+          description={`确定删除该播放记录吗？`}
           title="删除播放记录"
           onCancel={() => setPendingDeleteItem(undefined)}
           onConfirm={async () => {

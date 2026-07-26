@@ -59,6 +59,10 @@ export async function exportSourcesToFile(): Promise<VodSourceExportResult> {
   return requireRuntimeApi().sources.exportToFile()
 }
 
-export async function syncSourceSubscription(url: string): Promise<SourceSubscriptionResult> {
-  return requireRuntimeApi().sources.syncSubscription(url)
+export async function syncSourceSubscription(subscriptionId: string): Promise<SourceSubscriptionResult> {
+  return requireRuntimeApi().sources.syncSubscription(subscriptionId)
+}
+
+export async function deleteSourceSubscription(subscriptionId: string): Promise<void> {
+  return requireRuntimeApi().sources.deleteSubscription(subscriptionId)
 }

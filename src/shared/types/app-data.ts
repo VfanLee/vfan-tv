@@ -2,6 +2,7 @@ import type { FavoriteItem } from './favorite'
 import type { LiveSourceOrigin } from './live'
 import type { RecentPlayItem } from './recent'
 import type { VodSourceBackup, VodSourceOrigin } from './source'
+import type { SubscriptionConfig } from './settings'
 
 export interface AppDataSubscription {
   url: string
@@ -15,6 +16,7 @@ export interface AppDataVodSource {
   enabled: boolean
   backups: VodSourceBackup[]
   origin: VodSourceOrigin
+  subscriptionId?: string
   sort?: number
 }
 
@@ -23,6 +25,7 @@ export interface AppDataLiveSource {
   url: string
   enabled: boolean
   origin: LiveSourceOrigin
+  subscriptionId?: string
   sort?: number
 }
 
@@ -31,6 +34,8 @@ export interface AppDataBackup {
   schemaVersion: 1
   exportedAt: number
   subscription: AppDataSubscription
+  subscriptions?: SubscriptionConfig[]
+  activeSubscriptionId?: string
   vod: AppDataVodSource[]
   live: AppDataLiveSource[]
   recent: RecentPlayItem[]

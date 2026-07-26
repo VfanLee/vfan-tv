@@ -78,7 +78,6 @@ export function FavoritesPage(): React.JSX.Element {
       </div>
       {pendingDeleteItem ? (
         <ConfirmDialog
-          confirmText="删除"
           description={`确定删除收藏「${pendingDeleteItem.title}」吗？`}
           title="删除收藏"
           onCancel={() => setPendingDeleteItem(undefined)}

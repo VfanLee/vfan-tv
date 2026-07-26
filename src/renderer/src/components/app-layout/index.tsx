@@ -236,11 +236,8 @@ function SidebarLink({
 function openSearch(keyword: string, navigate: ReturnType<typeof useNavigate>): void {
   const trimmedKeyword = keyword.trim()
 
-  if (trimmedKeyword) {
-    navigate(`/search?keyword=${encodeURIComponent(trimmedKeyword)}`)
-  } else {
-    navigate('/search')
-  }
+  if (!trimmedKeyword) return
+  navigate(`/search?keyword=${encodeURIComponent(trimmedKeyword)}`)
 }
 
 function readSidebarCollapsed(): boolean {

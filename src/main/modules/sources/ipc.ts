@@ -10,7 +10,7 @@ import { formatZodError, isZodError } from '../../ipc/utils'
 
 // 点播源 IPC：文件导入导出留在 main，以避免 renderer 获得任意文件系统权限。
 export function registerSourcesIpc(context: ApplicationContext): void {
-  const { source, liveSource } = context.services
+  const { source, liveSource, settings } = context.services
   const { httpClient } = context.utilities
   ipcMain.handle(IPC_CHANNELS.sources.list, () => source.list())
   ipcMain.handle(IPC_CHANNELS.sources.create, (_event, input: Parameters<AppApi['sources']['create']>[0]) =>
@@ -58,8 +58,10 @@ export function registerSourcesIpc(context: ApplicationContext): void {
   })
   ipcMain.handle(
     IPC_CHANNELS.sources.syncSubscription,
-    async (_event, url: Parameters<AppApi['sources']['syncSubscription']>[0]) => {
-      const parsedUrl = new URL(url)
+    async (_event, subscriptionId: Parameters<AppApi['sources']['syncSubscription']>[0]) => {
+      const subscription = settings.get().subscriptions.find((item) => item.id === subscriptionId)
+      if (!subscription) throw new Error('订阅源不存在')
+      const parsedUrl = new URL(subscription.url)
       if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('订阅地址仅支持 HTTP 或 HTTPS')
       const encoded = await httpClient.get<string>(parsedUrl.toString(), {
         responseType: 'text',
@@ -68,11 +70,11 @@ export function registerSourcesIpc(context: ApplicationContext): void {
       try {
         // 订阅内容在解码后仍需 schema 校验，远程输入不能直接写入本地数据库。
         const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bs58.decode(encoded.trim()))
-        const subscription = sourceSubscriptionSchema.parse(JSON.parse(decoded))
+        const payload = sourceSubscriptionSchema.parse(JSON.parse(decoded))
         return {
-          vod: source.syncSubscription(subscription.vod),
-          live: liveSource.syncSubscription(subscription.live),
-          updatedAt: subscription.updatedAt,
+          vod: source.syncSubscription(subscriptionId, payload.vod),
+          live: liveSource.syncSubscription(subscriptionId, payload.live),
+          updatedAt: payload.updatedAt,
         }
       } catch (error) {
         if (error instanceof SyntaxError) throw new Error('订阅内容解码后不是有效的 JSON')
@@ -81,6 +83,18 @@ export function registerSourcesIpc(context: ApplicationContext): void {
       }
     },
   )
+  ipcMain.handle(IPC_CHANNELS.sources.deleteSubscription, (_event, subscriptionId: string) => {
+    const current = settings.get()
+    if (!current.subscriptions.some((item) => item.id === subscriptionId)) throw new Error('订阅源不存在')
+    source.clearSubscription(subscriptionId)
+    liveSource.clearSubscription(subscriptionId)
+    const subscriptions = current.subscriptions.filter((item) => item.id !== subscriptionId)
+    settings.update({
+      subscriptions,
+      activeSubscriptionId:
+        current.activeSubscriptionId === subscriptionId ? subscriptions[0]?.id : current.activeSubscriptionId,
+    })
+  })
 }
 
 function requireWindow(context: ApplicationContext): BrowserWindow {

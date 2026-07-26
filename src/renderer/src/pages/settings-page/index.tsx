@@ -38,7 +38,9 @@ export function SettingsPage(): React.JSX.Element {
     else if (confirmState.type === 'initializeAppData') await appData.initializeData()
     else if (confirmState.type === 'importAppData') await appData.importData()
     else if (confirmState.type === 'deleteSource') await vod.deleteItem(confirmState.source)
-    else await live.deleteItem(confirmState.source)
+    else if (confirmState.type === 'deleteLiveSource') await live.deleteItem(confirmState.source)
+    else if (confirmState.type === 'deleteSubscription') await general.deleteSubscription(confirmState.subscription.id)
+    else await general.selectSubscription(confirmState.subscriptionId)
     setConfirmState(undefined)
   }
 
@@ -63,9 +65,11 @@ export function SettingsPage(): React.JSX.Element {
         <SubscriptionSettingsCard
           apiAvailable={apiAvailable}
           isSyncing={general.isSyncingSubscription}
-          subscriptionUrl={general.subscriptionUrl}
-          subscriptionUpdatedAt={general.subscriptionUpdatedAt}
-          onChange={general.setSubscriptionUrl}
+          subscriptions={general.subscriptions}
+          activeSubscriptionId={general.activeSubscriptionId}
+          onAdd={(url) => void general.addSubscription(url)}
+          onDelete={(subscription) => setConfirmState({ type: 'deleteSubscription', subscription })}
+          onSelect={(subscriptionId) => setConfirmState({ type: 'selectSubscription', subscriptionId })}
           onSync={() => void general.syncSubscription()}
         />
 
@@ -163,7 +167,7 @@ export function SettingsPage(): React.JSX.Element {
 
       {confirmState ? (
         <ConfirmDialog
-          confirmText={getConfirmText(confirmState)}
+          destructive={confirmState.type !== 'selectSubscription'}
           description={getConfirmDescription(confirmState, vod.sources.length, live.sources.length)}
           title={getConfirmTitle(confirmState)}
           onCancel={() => setConfirmState(undefined)}
@@ -172,11 +176,4 @@ export function SettingsPage(): React.JSX.Element {
       ) : null}
     </div>
   )
-}
-
-function getConfirmText(confirmState: ConfirmState): string {
-  if (confirmState.type === 'clearSources' || confirmState.type === 'clearLiveSources') return '清空'
-  if (confirmState.type === 'initializeAppData') return '初始化'
-  if (confirmState.type === 'importAppData') return '导入'
-  return '删除'
 }

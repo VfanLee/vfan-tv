@@ -19,6 +19,7 @@ export class VodSearchService {
   ) {}
 
   search(keyword: string): { searchId: string } {
+    if (!keyword.trim()) throw new Error('搜索关键词不能为空')
     const searchId = randomUUID()
     const signal = this.taskManager.create(searchId)
     const sources = this.sourceService.list().filter((source) => source.enabled)

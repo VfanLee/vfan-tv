@@ -20,6 +20,7 @@ export const vodSourcesTable = sqliteTable(
     origin: text('origin', { enum: ['manual', 'subscription'] })
       .notNull()
       .default('manual'),
+    subscriptionId: text('subscription_id'),
     remark: text('remark'),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
@@ -38,6 +39,7 @@ export const liveSourcesTable = sqliteTable(
     origin: text('origin', { enum: ['manual', 'subscription'] })
       .notNull()
       .default('manual'),
+    subscriptionId: text('subscription_id'),
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },

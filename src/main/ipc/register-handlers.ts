@@ -23,5 +23,5 @@ export function registerIpcHandlers(context: ApplicationContext): void {
   registerAppDataIpc(context)
   registerUpdatesIpc(context)
   registerWindowIpc(context)
-  registerShellIpc(context)
+  registerShellIpc()
 }

@@ -118,6 +118,14 @@ export class LiveSourceService {
     this.repository.clear()
   }
 
+  clearSubscription(subscriptionId: string): void {
+    this.repository.clearSubscription(subscriptionId)
+  }
+
+  clearAllSubscriptions(): void {
+    this.repository.clearAllSubscriptions()
+  }
+
   exportItems(): LiveSourceExportItem[] {
     return this.repository.list().map((source) => ({
       name: source.name,
@@ -194,16 +202,11 @@ export class LiveSourceService {
     }
   }
 
-  syncSubscription(items: LiveSourceImportItem[]): SourceSubscriptionSectionResult {
+  syncSubscription(subscriptionId: string, items: LiveSourceImportItem[]): SourceSubscriptionSectionResult {
     const uniqueItems = [...new Map(items.map((item) => [item.url, item])).values()]
     const now = Date.now()
 
-    for (const item of uniqueItems) {
-      const owner = this.repository.list().find((source) => source.origin === 'manual' && source.url === item.url)
-      if (owner) throw new Error(`订阅地址已存在于手动直播源「${owner.name}」`)
-    }
-
-    this.repository.clearSubscription()
+    this.repository.clear()
 
     for (const item of uniqueItems) {
       this.repository.upsert({
@@ -213,11 +216,16 @@ export class LiveSourceService {
         enabled: item.enabled ?? true,
         sort: this.repository.list().length,
         origin: 'subscription',
+        subscriptionId,
         createdAt: now,
         updatedAt: now,
       })
     }
 
-    return { created: uniqueItems.length, updated: 0, unchanged: 0 }
+    return {
+      created: uniqueItems.length,
+      updated: 0,
+      unchanged: 0,
+    }
   }
 }

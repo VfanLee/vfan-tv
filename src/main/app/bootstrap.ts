@@ -155,7 +155,7 @@ async function runUpdateCheck(interactive: boolean): Promise<void> {
     })
 
     if (response.response === 0) {
-      await openExternalUrl(result.manualDownloadUrl ?? result.downloadUrl ?? result.releaseUrl, settings)
+      await openExternalUrl(result.manualDownloadUrl ?? result.downloadUrl ?? result.releaseUrl)
     }
   } catch (error) {
     if (!interactive) return
@@ -308,7 +308,6 @@ function createWindow(): void {
   const context = getApplicationContext()
   createMainWindow({
     icon,
-    getSettings: () => context.services.settings.get(),
     onCreated: (window) => {
       context.setMainWindow(window)
       window.once('closed', () => {

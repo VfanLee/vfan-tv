@@ -1,4 +1,4 @@
-import type { LiveSourceConfig, VodSourceConfig } from '@shared/types'
+import type { LiveSourceConfig, SubscriptionConfig, VodSourceConfig } from '@shared/types'
 
 export type SourceDialogState = { mode: 'create' } | { mode: 'edit'; source: VodSourceConfig }
 
@@ -23,3 +23,5 @@ export type ConfirmState =
   | { type: 'importAppData' }
   | { type: 'deleteSource'; source: VodSourceConfig }
   | { type: 'deleteLiveSource'; source: LiveSourceConfig }
+  | { type: 'deleteSubscription'; subscription: SubscriptionConfig }
+  | { type: 'selectSubscription'; subscriptionId: string }

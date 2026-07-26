@@ -17,7 +17,9 @@ export function createSourcesApi(): Pick<AppApi, 'sources' | 'liveSources'> {
       confirmImport: (payload) => ipcRenderer.invoke(IPC_CHANNELS.sources.confirmImport, payload),
       importFromFile: () => ipcRenderer.invoke(IPC_CHANNELS.sources.importFromFile),
       exportToFile: () => ipcRenderer.invoke(IPC_CHANNELS.sources.exportToFile),
-      syncSubscription: (url) => ipcRenderer.invoke(IPC_CHANNELS.sources.syncSubscription, url),
+      syncSubscription: (subscriptionId) => ipcRenderer.invoke(IPC_CHANNELS.sources.syncSubscription, subscriptionId),
+      deleteSubscription: (subscriptionId) =>
+        ipcRenderer.invoke(IPC_CHANNELS.sources.deleteSubscription, subscriptionId),
     },
     liveSources: {
       list: () => ipcRenderer.invoke(IPC_CHANNELS.liveSources.list),

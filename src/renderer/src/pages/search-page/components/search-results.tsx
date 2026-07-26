@@ -148,10 +148,9 @@ export function SourceResults({
 
 export function SearchEmptyState(): React.JSX.Element {
   return (
-    <div className="border-input bg-card flex h-80 items-center justify-center rounded-xl border border-dashed">
+    <div className="border-input bg-card flex h-80 items-center justify-center">
       <div className="text-center">
         <Search className="text-muted-foreground mx-auto" size={30} />
-        <div className="text-foreground mt-3 text-sm font-semibold">聚合搜索</div>
         <p className="text-muted-foreground mt-1 text-sm">
           搜索后可以按影片分组查看，也可以切到单个数据源确认返回状态。
         </p>

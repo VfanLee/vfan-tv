@@ -14,6 +14,7 @@ interface ConfirmDialogProps {
   cancelText?: string
   confirmText?: string
   description?: string
+  destructive?: boolean
   title: string
   onCancel: () => void
   onConfirm: () => Promise<void> | void
@@ -21,7 +22,8 @@ interface ConfirmDialogProps {
 
 export function ConfirmDialog({
   cancelText = '取消',
-  confirmText = '确定',
+  confirmText = '确认',
+  destructive = true,
   description,
   title,
   onCancel,
@@ -58,7 +60,7 @@ export function ConfirmDialog({
           </AlertDialogCancel>
           <AlertDialogAction
             disabled={isConfirming}
-            variant="destructive"
+            variant={destructive ? 'destructive' : 'default'}
             onClick={(event) => {
               event.preventDefault()
               void confirm()

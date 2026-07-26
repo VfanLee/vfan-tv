@@ -8,10 +8,15 @@ export interface GitHubProxyTestResult {
   status: 'success' | 'error'
 }
 
+export interface SubscriptionConfig {
+  id: string
+  url: string
+}
+
 export interface AppSettings {
   githubProxyCustomPrefix: string
   githubProxyRoute: GitHubProxyRouteId
   theme: ThemeMode
-  subscriptionUrl: string
-  subscriptionUpdatedAt?: number
+  subscriptions: SubscriptionConfig[]
+  activeSubscriptionId?: string
 }

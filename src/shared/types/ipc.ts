@@ -84,7 +84,8 @@ export interface AppApi {
     confirmImport: (payload: unknown) => Promise<VodSourceImportResult>
     importFromFile: () => Promise<VodSourceFileResult>
     exportToFile: () => Promise<VodSourceExportResult>
-    syncSubscription: (url: string) => Promise<SourceSubscriptionResult>
+    syncSubscription: (subscriptionId: string) => Promise<SourceSubscriptionResult>
+    deleteSubscription: (subscriptionId: string) => Promise<void>
   }
   liveSources: {
     list: () => Promise<LiveSourceConfig[]>

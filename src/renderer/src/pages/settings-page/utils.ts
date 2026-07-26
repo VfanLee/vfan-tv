@@ -81,6 +81,8 @@ export function getConfirmTitle(confirmState: ConfirmState): string {
   if (confirmState.type === 'initializeAppData') return '初始化应用数据'
   if (confirmState.type === 'importAppData') return '导入应用数据'
   if (confirmState.type === 'deleteSource') return '删除点播源'
+  if (confirmState.type === 'deleteSubscription') return '删除订阅源'
+  if (confirmState.type === 'selectSubscription') return '切换订阅源'
   return '删除直播源'
 }
 
@@ -103,6 +105,12 @@ export function getConfirmDescription(
   }
   if (confirmState.type === 'deleteSource') {
     return `确定删除点播源「${confirmState.source.name}」吗？`
+  }
+  if (confirmState.type === 'deleteSubscription') {
+    return '确定删除该订阅源吗？'
+  }
+  if (confirmState.type === 'selectSubscription') {
+    return '确定切换订阅源吗？'
   }
   return `确定删除直播源「${confirmState.source.name}」吗？`
 }

@@ -14,6 +14,7 @@ export const IPC_CHANNELS = {
     importFromFile: 'sources:import-from-file',
     exportToFile: 'sources:export-to-file',
     syncSubscription: 'sources:sync-subscription',
+    deleteSubscription: 'sources:delete-subscription',
   },
   liveSources: {
     list: 'live-sources:list',

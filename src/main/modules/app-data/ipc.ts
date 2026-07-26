@@ -23,17 +23,27 @@ export function registerAppDataIpc(context: ApplicationContext): void {
         app: 'vfan-tv',
         schemaVersion: 1,
         exportedAt: Date.now(),
-        subscription: { url: appSettings.subscriptionUrl, updatedAt: appSettings.subscriptionUpdatedAt },
-        vod: source.list().map(({ name, url, referer, enabled, backups, origin, sort }) => ({
+        subscription: { url: '', updatedAt: undefined },
+        subscriptions: appSettings.subscriptions,
+        activeSubscriptionId: appSettings.activeSubscriptionId,
+        vod: source.list().map(({ name, url, referer, enabled, backups, origin, subscriptionId, sort }) => ({
           name,
           url,
           referer,
           enabled,
           backups,
           origin,
+          subscriptionId,
           sort,
         })),
-        live: liveSource.list().map(({ name, url, enabled, origin, sort }) => ({ name, url, enabled, origin, sort })),
+        live: liveSource.list().map(({ name, url, enabled, origin, subscriptionId, sort }) => ({
+          name,
+          url,
+          enabled,
+          origin,
+          subscriptionId,
+          sort,
+        })),
         recent: recentPlay.list(Number.MAX_SAFE_INTEGER),
         favorites: favorite.list(),
         searchHistory: payload.searchHistory,
@@ -65,11 +75,35 @@ export function registerAppDataIpc(context: ApplicationContext): void {
     const { source: sourceRepository, liveSource: liveSourceRepository, recentPlay, favorite } = context.repositories
     // 先清空再按备份顺序恢复，确保导入结果不会与旧数据混合。
     resetAppDatabase(context.db)
-    settings.update({ subscriptionUrl: backup.subscription.url, subscriptionUpdatedAt: backup.subscription.updatedAt })
+    const subscriptions = backup.subscriptions?.length
+      ? backup.subscriptions
+      : backup.subscription.url
+        ? [{ id: 'legacy-subscription', url: backup.subscription.url }]
+        : []
+    settings.update({
+      subscriptions,
+      activeSubscriptionId: subscriptions.some((item) => item.id === backup.activeSubscriptionId)
+        ? backup.activeSubscriptionId
+        : subscriptions[0]?.id,
+    })
     for (const [sort, item] of backup.vod.entries())
-      sourceRepository.upsert({ id: randomUUID(), ...item, sort, createdAt: now, updatedAt: now })
+      sourceRepository.upsert({
+        id: randomUUID(),
+        ...item,
+        subscriptionId: item.subscriptionId ?? (item.origin === 'subscription' ? 'legacy-subscription' : undefined),
+        sort,
+        createdAt: now,
+        updatedAt: now,
+      })
     for (const [sort, item] of backup.live.entries())
-      liveSourceRepository.upsert({ id: randomUUID(), ...item, sort, createdAt: now, updatedAt: now })
+      liveSourceRepository.upsert({
+        id: randomUUID(),
+        ...item,
+        subscriptionId: item.subscriptionId ?? (item.origin === 'subscription' ? 'legacy-subscription' : undefined),
+        sort,
+        createdAt: now,
+        updatedAt: now,
+      })
     for (const item of backup.recent) recentPlay.upsert(item)
     for (const item of backup.favorites) favorite.importItem(item)
     return { cancelled: false, filePath, counts: getAppDataCounts(backup), searchHistory: backup.searchHistory }

@@ -156,6 +156,14 @@ export class SourceService {
     this.repository.clear()
   }
 
+  clearSubscription(subscriptionId: string): void {
+    this.repository.clearSubscription(subscriptionId)
+  }
+
+  clearAllSubscriptions(): void {
+    this.repository.clearAllSubscriptions()
+  }
+
   exportItems(): VodSourceExportItem[] {
     return this.repository.list().map((source) => ({
       name: source.name,
@@ -238,12 +246,12 @@ export class SourceService {
     }
   }
 
-  syncSubscription(items: VodSourceSubscriptionItem[]): SourceSubscriptionSectionResult {
+  syncSubscription(subscriptionId: string, items: VodSourceSubscriptionItem[]): SourceSubscriptionSectionResult {
     const uniqueItems = [...new Map(items.map((item) => [item.name, item])).values()]
     const now = Date.now()
 
     this.assertSubscriptionEndpointUrlsAvailable(uniqueItems)
-    this.repository.clearSubscription()
+    this.repository.clear()
 
     for (const item of uniqueItems) {
       this.repository.upsert({
@@ -255,12 +263,17 @@ export class SourceService {
         enabled: item.enabled ?? false,
         sort: this.repository.list().length,
         origin: 'subscription',
+        subscriptionId,
         createdAt: now,
         updatedAt: now,
       })
     }
 
-    return { created: uniqueItems.length, updated: 0, unchanged: 0 }
+    return {
+      created: uniqueItems.length,
+      updated: 0,
+      unchanged: 0,
+    }
   }
 
   private assertEndpointUrlsAvailable(url: string, backups: Array<{ url: string }>, excludedSourceId?: string): void {
@@ -277,18 +290,12 @@ export class SourceService {
   }
 
   private assertSubscriptionEndpointUrlsAvailable(items: VodSourceSubscriptionItem[]): void {
-    const manualSources = this.repository.list().filter((source) => source.origin === 'manual')
     const endpointUrls = new Set<string>()
 
     for (const item of items) {
       for (const endpointUrl of [item.url, ...(item.backups ?? []).map((backup) => backup.url)]) {
         if (endpointUrls.has(endpointUrl)) throw new Error(`订阅中存在重复的源地址：${endpointUrl}`)
         endpointUrls.add(endpointUrl)
-
-        const owner = manualSources.find(
-          (source) => source.url === endpointUrl || source.backups.some((backup) => backup.url === endpointUrl),
-        )
-        if (owner) throw new Error(`订阅地址已存在于手动源「${owner.name}」`)
       }
     }
   }

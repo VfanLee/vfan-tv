@@ -7,6 +7,7 @@ export interface LiveSourceConfig {
   enabled: boolean
   sort: number
   origin: LiveSourceOrigin
+  subscriptionId?: string
   createdAt: number
   updatedAt: number
 }
