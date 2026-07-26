@@ -78,7 +78,7 @@ export function getSpeedResultTagClassName(result: GitHubProxySpeedState | undef
 export function getConfirmTitle(confirmState: ConfirmState): string {
   if (confirmState.type === 'clearSources') return '清空点播源'
   if (confirmState.type === 'clearLiveSources') return '清空直播源'
-  if (confirmState.type === 'initializeAppData') return '初始化应用数据'
+  if (confirmState.type === 'clearAppCache') return '清理本地缓存'
   if (confirmState.type === 'importAppData') return '导入应用数据'
   if (confirmState.type === 'deleteSource') return '删除点播源'
   if (confirmState.type === 'deleteSubscription') return '删除订阅源'
@@ -97,8 +97,8 @@ export function getConfirmDescription(
   if (confirmState.type === 'clearLiveSources') {
     return `确定清空全部 ${liveSourceCount} 个直播源吗？此操作不可恢复。`
   }
-  if (confirmState.type === 'initializeAppData') {
-    return '确定初始化吗？这会清空设置、VOD 源、直播源、最近播放、收藏、搜索历史和本地缓存，回到新安装状态。此操作不可恢复。'
+  if (confirmState.type === 'clearAppCache') {
+    return '确定清理本地缓存吗？不会影响数据源、观看记录、收藏、搜索历史或应用设置。'
   }
   if (confirmState.type === 'importAppData') {
     return '确定导入应用数据吗？导入会覆盖当前订阅、VOD 源、直播源、最近播放、收藏和搜索历史，不会合并当前数据。'

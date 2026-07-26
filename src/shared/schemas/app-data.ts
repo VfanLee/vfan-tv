@@ -36,8 +36,18 @@ function validateVodSourceBackups(
   }
 }
 
+export const appDataSelectionSchema = z
+  .object({
+    favorites: z.boolean(),
+    recent: z.boolean(),
+    searchHistory: z.boolean(),
+    sources: z.boolean(),
+  })
+  .strict()
+
 export const appDataClientPayloadSchema = z
   .object({
+    selection: appDataSelectionSchema,
     searchHistory: z.array(z.string()),
   })
   .strict()

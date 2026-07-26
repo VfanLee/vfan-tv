@@ -16,6 +16,7 @@ export function registerAppDataIpc(context: ApplicationContext): void {
     async (_event, clientData: Parameters<AppApi['settings']['exportAppData']>[0]) => {
       const window = requireWindow(context)
       const payload = appDataClientPayloadSchema.parse(clientData)
+      const { selection } = payload
       const { source, liveSource, settings } = context.services
       const { recentPlay, favorite } = context.repositories
       const appSettings = settings.get()
@@ -24,9 +25,9 @@ export function registerAppDataIpc(context: ApplicationContext): void {
         schemaVersion: 1,
         exportedAt: Date.now(),
         subscription: { url: '', updatedAt: undefined },
-        subscriptions: appSettings.subscriptions,
-        activeSubscriptionId: appSettings.activeSubscriptionId,
-        vod: source.list().map(({ name, url, referer, enabled, backups, origin, sort }) => ({
+        subscriptions: selection.sources ? appSettings.subscriptions : [],
+        activeSubscriptionId: selection.sources ? appSettings.activeSubscriptionId : undefined,
+        vod: (selection.sources ? source.list() : []).map(({ name, url, referer, enabled, backups, origin, sort }) => ({
           name,
           url,
           referer,
@@ -35,16 +36,16 @@ export function registerAppDataIpc(context: ApplicationContext): void {
           origin,
           sort,
         })),
-        live: liveSource.list().map(({ name, url, enabled, origin, sort }) => ({
+        live: (selection.sources ? liveSource.list() : []).map(({ name, url, enabled, origin, sort }) => ({
           name,
           url,
           enabled,
           origin,
           sort,
         })),
-        recent: recentPlay.list(Number.MAX_SAFE_INTEGER),
-        favorites: favorite.list(),
-        searchHistory: payload.searchHistory,
+        recent: selection.recent ? recentPlay.list(Number.MAX_SAFE_INTEGER) : [],
+        favorites: selection.favorites ? favorite.list() : [],
+        searchHistory: selection.searchHistory ? payload.searchHistory : [],
       }
       const result = await dialog.showSaveDialog(window, {
         title: '导出应用数据 JSON',

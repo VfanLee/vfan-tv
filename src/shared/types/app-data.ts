@@ -42,7 +42,15 @@ export interface AppDataBackup {
 }
 
 export interface AppDataClientPayload {
+  selection: AppDataSelection
   searchHistory: string[]
+}
+
+export interface AppDataSelection {
+  favorites: boolean
+  recent: boolean
+  searchHistory: boolean
+  sources: boolean
 }
 
 export interface AppDataOperationCounts {

@@ -11,7 +11,8 @@ export function createSystemApi(): Pick<AppApi, 'settings' | 'updates' | 'window
       update: (input) => ipcRenderer.invoke(IPC_CHANNELS.settings.update, input),
       testGitHubProxy: (routeId, customPrefix) =>
         ipcRenderer.invoke(IPC_CHANNELS.settings.testGitHubProxy, routeId, customPrefix),
-      initializeAppData: () => ipcRenderer.invoke(IPC_CHANNELS.settings.initializeAppData),
+      initializeAppData: (options) => ipcRenderer.invoke(IPC_CHANNELS.settings.initializeAppData, options),
+      clearAppCache: () => ipcRenderer.invoke(IPC_CHANNELS.settings.clearAppCache),
       exportAppData: (clientData) => ipcRenderer.invoke(IPC_CHANNELS.settings.exportAppData, clientData),
       importAppData: () => ipcRenderer.invoke(IPC_CHANNELS.settings.importAppData),
     },

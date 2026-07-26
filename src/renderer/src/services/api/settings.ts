@@ -2,6 +2,7 @@ import type {
   AppDataClientPayload,
   AppDataExportResult,
   AppDataImportResult,
+  AppDataSelection,
   AppSettings,
   GitHubProxyRouteId,
   GitHubProxyTestResult,
@@ -24,8 +25,12 @@ export async function testGitHubProxy(
   return requireRuntimeApi().settings.testGitHubProxy(routeId, customPrefix)
 }
 
-export async function initializeAppData(): Promise<AppSettings> {
-  return requireRuntimeApi().settings.initializeAppData()
+export async function initializeAppData(options: AppDataSelection): Promise<void> {
+  return requireRuntimeApi().settings.initializeAppData(options)
+}
+
+export async function clearAppCache(): Promise<void> {
+  return requireRuntimeApi().settings.clearAppCache()
 }
 
 export async function exportAppData(clientData: AppDataClientPayload): Promise<AppDataExportResult> {

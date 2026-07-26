@@ -111,6 +111,10 @@ export class FavoriteRepository {
       .run()
   }
 
+  clear(): void {
+    this.db.delete(favoritesTable).run()
+  }
+
   private get(sourceId: string, vodId: string): FavoriteItem | undefined {
     const row = this.db
       .select()

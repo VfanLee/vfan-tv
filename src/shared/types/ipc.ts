@@ -8,7 +8,7 @@ import type {
   VodSourceInput,
   VodSourceSpeedResult,
 } from './source'
-import type { AppDataClientPayload, AppDataExportResult, AppDataImportResult } from './app-data'
+import type { AppDataClientPayload, AppDataExportResult, AppDataImportResult, AppDataSelection } from './app-data'
 import type { AppSettings, GitHubProxyRouteId, GitHubProxyTestResult } from './settings'
 import type { FavoriteInput, FavoriteItem } from './favorite'
 import type {
@@ -140,7 +140,8 @@ export interface AppApi {
     get: () => Promise<AppSettings>
     update: (input: Partial<AppSettings>) => Promise<AppSettings>
     testGitHubProxy: (routeId: GitHubProxyRouteId, customPrefix?: string) => Promise<GitHubProxyTestResult>
-    initializeAppData: () => Promise<AppSettings>
+    initializeAppData: (options: AppDataSelection) => Promise<void>
+    clearAppCache: () => Promise<void>
     exportAppData: (clientData: AppDataClientPayload) => Promise<AppDataExportResult>
     importAppData: () => Promise<AppDataImportResult>
   }

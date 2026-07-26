@@ -61,6 +61,10 @@ export class RecentPlayRepository {
   deleteByTitle(title: string): void {
     this.db.delete(recentPlaysTable).where(eq(recentPlaysTable.title, title)).run()
   }
+
+  clear(): void {
+    this.db.delete(recentPlaysTable).run()
+  }
 }
 
 function dedupeByTitle(items: RecentPlayItem[]): RecentPlayItem[] {

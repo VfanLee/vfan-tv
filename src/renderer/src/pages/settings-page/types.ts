@@ -19,7 +19,7 @@ export type VodSourceSpeedState =
 export type ConfirmState =
   | { type: 'clearSources' }
   | { type: 'clearLiveSources' }
-  | { type: 'initializeAppData' }
+  | { type: 'clearAppCache' }
   | { type: 'importAppData' }
   | { type: 'deleteSource'; source: VodSourceConfig }
   | { type: 'deleteLiveSource'; source: LiveSourceConfig }

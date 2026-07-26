@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ConfirmDialog, ThemeSettings } from '@renderer/components'
 import { isApiAvailable } from '@renderer/services/api'
 import { DataManagementCard, NetworkSettingsCard, SubscriptionSettingsCard } from './components/settings-cards'
+import { DataSelectionDialog } from './components/data-selection-dialog'
 import { SettingsSidebar } from './components/settings-sidebar'
 import { LiveSourceDialog, SourceDialog } from './components/source-dialogs'
 import { SourceTableCard } from './components/source-table-card'
@@ -32,6 +33,7 @@ export function SettingsPage(): React.JSX.Element {
   const [dialog, setDialog] = useState<SourceDialogState>()
   const [liveSourceDialog, setLiveSourceDialog] = useState<LiveSourceDialogState>()
   const [confirmState, setConfirmState] = useState<ConfirmState>()
+  const [dataSelectionMode, setDataSelectionMode] = useState<'export' | 'initialize'>()
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('appearance')
   const isNavigatingRef = useRef(false)
   const navigationCleanupRef = useRef<() => void>(() => undefined)
@@ -92,7 +94,7 @@ export function SettingsPage(): React.JSX.Element {
     if (!confirmState) return
     if (confirmState.type === 'clearSources') await vod.clearAll()
     else if (confirmState.type === 'clearLiveSources') await live.clearAll()
-    else if (confirmState.type === 'initializeAppData') await appData.initializeData()
+    else if (confirmState.type === 'clearAppCache') await appData.clearCache()
     else if (confirmState.type === 'importAppData') await appData.importData()
     else if (confirmState.type === 'deleteSource') await vod.deleteItem(confirmState.source)
     else if (confirmState.type === 'deleteLiveSource') await live.deleteItem(confirmState.source)
@@ -204,11 +206,13 @@ export function SettingsPage(): React.JSX.Element {
             <DataManagementCard
               apiAvailable={apiAvailable}
               isExporting={appData.isExporting}
+              isClearingCache={appData.isClearingCache}
               isImporting={appData.isImporting}
               isInitializing={appData.isInitializing}
-              onExport={() => void appData.exportData()}
+              onExport={() => setDataSelectionMode('export')}
+              onClearCache={() => setConfirmState({ type: 'clearAppCache' })}
               onImport={() => setConfirmState({ type: 'importAppData' })}
-              onInitialize={() => setConfirmState({ type: 'initializeAppData' })}
+              onInitialize={() => setDataSelectionMode('initialize')}
             />
           </section>
         </div>
@@ -238,11 +242,24 @@ export function SettingsPage(): React.JSX.Element {
 
       {confirmState ? (
         <ConfirmDialog
-          destructive={confirmState.type !== 'selectSubscription'}
+          destructive={confirmState.type !== 'selectSubscription' && confirmState.type !== 'clearAppCache'}
           description={getConfirmDescription(confirmState, vod.sources.length, live.sources.length)}
           title={getConfirmTitle(confirmState)}
           onCancel={() => setConfirmState(undefined)}
           onConfirm={() => void confirm()}
+        />
+      ) : null}
+
+      {dataSelectionMode ? (
+        <DataSelectionDialog
+          isPending={dataSelectionMode === 'export' ? appData.isExporting : appData.isInitializing}
+          mode={dataSelectionMode}
+          onCancel={() => setDataSelectionMode(undefined)}
+          onConfirm={async (selection) => {
+            if (dataSelectionMode === 'export') await appData.exportData(selection)
+            else await appData.initializeData(selection)
+            setDataSelectionMode(undefined)
+          }}
         />
       ) : null}
     </div>

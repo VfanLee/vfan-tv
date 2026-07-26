@@ -241,17 +241,21 @@ export function SubscriptionSettingsCard({
 export function DataManagementCard({
   apiAvailable,
   isExporting,
+  isClearingCache,
   isImporting,
   isInitializing,
   onExport,
+  onClearCache,
   onImport,
   onInitialize,
 }: {
   apiAvailable: boolean
   isExporting: boolean
+  isClearingCache: boolean
   isImporting: boolean
   isInitializing: boolean
   onExport: () => void
+  onClearCache: () => void
   onImport: () => void
   onInitialize: () => void
 }): React.JSX.Element {
@@ -274,6 +278,10 @@ export function DataManagementCard({
         >
           <Trash2 data-icon="inline-start" />
           {isInitializing ? '初始化中' : '初始化'}
+        </Button>
+        <Button disabled={!apiAvailable || isClearingCache} variant="outline" onClick={onClearCache}>
+          <RefreshCw className={isClearingCache ? 'animate-spin' : undefined} data-icon="inline-start" />
+          {isClearingCache ? '清理中' : '清理缓存'}
         </Button>
       </div>
     </SettingsCard>

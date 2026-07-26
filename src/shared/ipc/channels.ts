@@ -58,6 +58,7 @@ export const IPC_CHANNELS = {
     update: 'settings:update',
     testGitHubProxy: 'settings:test-github-proxy',
     initializeAppData: 'settings:initialize-app-data',
+    clearAppCache: 'settings:clear-app-cache',
     exportAppData: 'settings:export-app-data',
     importAppData: 'settings:import-app-data',
   },
