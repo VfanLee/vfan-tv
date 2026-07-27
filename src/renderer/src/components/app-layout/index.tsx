@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { NavLink, Outlet, useLocation, useMatches, useNavigate, useSearchParams } from 'react-router'
 import { ChevronLeft, ChevronRight, Clock3, Heart, Home, Info, Link, Radio, Settings, Tv } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -43,6 +43,8 @@ export function AppLayout(): React.JSX.Element {
   const location = useLocation()
   const mainRef = useRef<HTMLElement>(null)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => readSidebarCollapsed())
+  const isCompactWindow = useMediaQuery('(max-width: 1279px)')
+  const isSidebarCompact = isSidebarCollapsed || isCompactWindow
   const showRadioBottomPlayer = location.pathname === '/radio'
   const toggleSidebar = (): void => {
     setIsSidebarCollapsed((current) => {
@@ -72,13 +74,13 @@ export function AppLayout(): React.JSX.Element {
     <div
       className={cn(
         'bg-background text-foreground grid h-screen overflow-hidden transition-[grid-template-columns] duration-200',
-        isSidebarCollapsed ? 'grid-cols-[76px_1fr]' : 'grid-cols-[252px_1fr]',
+        isSidebarCompact ? 'grid-cols-[76px_1fr]' : 'grid-cols-[252px_1fr]',
       )}
     >
       <aside
         className={cn(
           'border-sidebar-border bg-sidebar text-sidebar-foreground relative isolate z-20 flex h-screen flex-col border-r py-4 transition-[padding] duration-200',
-          isSidebarCollapsed ? 'px-2' : 'px-4',
+          isSidebarCompact ? 'px-2' : 'px-4',
         )}
       >
         <div
@@ -91,39 +93,39 @@ export function AppLayout(): React.JSX.Element {
           className="pointer-events-none absolute inset-0 -z-10 hidden bg-cover bg-center dark:block"
           style={{ backgroundImage: `url(${sidebarBackgroundDarkUrl})` }}
         />
-        <div className={cn('mb-4 flex items-center justify-center px-1', isSidebarCollapsed && 'justify-center px-0')}>
-          <Logo collapsed={isSidebarCollapsed} />
+        <div className={cn('mb-4 flex items-center justify-center px-1', isSidebarCompact && 'justify-center px-0')}>
+          <Logo collapsed={isSidebarCompact} />
         </div>
 
         <div
-          aria-label={isSidebarCollapsed ? '双击展开侧边栏' : '双击收起侧边栏'}
-          className="group absolute top-0 right-0 z-30 h-full w-5 translate-x-1/2 cursor-col-resize"
+          aria-label={isSidebarCompact ? '双击展开侧边栏' : '双击收起侧边栏'}
+          className="group absolute top-0 right-0 z-30 hidden h-full w-5 translate-x-1/2 cursor-col-resize xl:block"
           role="separator"
-          title={isSidebarCollapsed ? '双击展开侧边栏' : '双击收起侧边栏'}
+          title={isSidebarCompact ? '双击展开侧边栏' : '双击收起侧边栏'}
           onDoubleClick={toggleSidebar}
         >
           <div className="bg-sidebar-border absolute top-0 right-1/2 h-full w-px translate-x-1/2 transform-gpu transition-transform duration-150 group-hover:scale-x-[3]" />
         </div>
 
         <button
-          aria-label={isSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
-          className="border-sidebar-border bg-background text-muted-foreground hover:bg-accent hover:text-primary focus-visible:ring-ring absolute top-1/2 right-0 z-40 flex size-9 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border shadow-sm transition-colors outline-none focus-visible:ring-2"
-          title={isSidebarCollapsed ? '展开侧边栏' : '收起侧边栏'}
+          aria-label={isSidebarCompact ? '展开侧边栏' : '收起侧边栏'}
+          className="border-sidebar-border bg-background text-muted-foreground hover:bg-accent hover:text-primary focus-visible:ring-ring absolute top-1/2 right-0 z-40 hidden size-9 translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border shadow-sm transition-colors outline-none focus-visible:ring-2 xl:flex"
+          title={isSidebarCompact ? '展开侧边栏' : '收起侧边栏'}
           type="button"
           onClick={toggleSidebar}
         >
-          {isSidebarCollapsed ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}
+          {isSidebarCompact ? <ChevronRight size={17} /> : <ChevronLeft size={17} />}
         </button>
 
         <nav className="flex flex-col gap-1.5">
           {primaryNavItems.map((item) => (
-            <SidebarLink key={item.to} collapsed={isSidebarCollapsed} item={item} />
+            <SidebarLink key={item.to} collapsed={isSidebarCompact} item={item} />
           ))}
         </nav>
 
         <nav className="mt-auto flex flex-col gap-1.5">
           {secondaryNavItems.map((item) => (
-            <SidebarLink key={item.to} collapsed={isSidebarCollapsed} item={item} />
+            <SidebarLink key={item.to} collapsed={isSidebarCompact} item={item} />
           ))}
         </nav>
       </aside>
@@ -157,6 +159,21 @@ export function AppLayout(): React.JSX.Element {
       </section>
     </div>
   )
+}
+
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() => window.matchMedia(query).matches)
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(query)
+    const updateMatches = (): void => setMatches(mediaQuery.matches)
+
+    updateMatches()
+    mediaQuery.addEventListener('change', updateMatches)
+    return () => mediaQuery.removeEventListener('change', updateMatches)
+  }, [query])
+
+  return matches
 }
 
 function TopBar({ searchKey, showSearch }: { searchKey: string; showSearch: boolean }): React.JSX.Element {

@@ -11,7 +11,7 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { LiveSourceConfig, VodSourceConfig } from '@shared/types'
 import { SettingsCard } from '@renderer/components'
 import { Badge } from '@/ui/badge'
@@ -21,11 +21,21 @@ import { Input } from '@/ui/input'
 import { Popover, PopoverContent, PopoverDescription, PopoverHeader, PopoverTitle, PopoverTrigger } from '@/ui/popover'
 import { RadioGroup, RadioGroupItem } from '@/ui/radio-group'
 import { Switch } from '@/ui/switch'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/ui/table'
 import { cn } from '@/utils'
 import type { VodSourceSpeedState } from '../types'
 
 type SourceConfig = VodSourceConfig | LiveSourceConfig
 type SpeedSortOrder = 'asc' | 'desc' | 'default'
+interface TableDragState {
+  pointerId: number
+  scrollLeft: number
+  startX: number
+}
+interface TableScrollEdges {
+  left: boolean
+  right: boolean
+}
 
 interface SourceTableCardProps<T extends SourceConfig> {
   addText: string
@@ -92,6 +102,10 @@ export function SourceTableCard<T extends SourceConfig>({
 }: SourceTableCardProps<T>): React.JSX.Element {
   const [speedSortOrder, setSpeedSortOrder] = useState<SpeedSortOrder>('default')
   const [filterKeyword, setFilterKeyword] = useState('')
+  const [isDragging, setIsDragging] = useState(false)
+  const [scrollEdges, setScrollEdges] = useState<TableScrollEdges>({ left: false, right: false })
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const dragStateRef = useRef<TableDragState | undefined>(undefined)
   const showBackups = Boolean(onSwitchBackup)
   const sortedSources = useMemo(() => {
     if (!onTestSingle || speedSortOrder === 'default') return sources
@@ -117,6 +131,72 @@ export function SourceTableCard<T extends SourceConfig>({
 
   const cycleSpeedSortOrder = (): void => {
     setSpeedSortOrder((current) => (current === 'default' ? 'asc' : current === 'asc' ? 'desc' : 'default'))
+  }
+
+  const updateScrollEdges = useCallback((): void => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    const nextEdges = {
+      left: container.scrollLeft > 1,
+      right: container.scrollLeft + container.clientWidth < container.scrollWidth - 1,
+    }
+    setScrollEdges((current) =>
+      current.left === nextEdges.left && current.right === nextEdges.right ? current : nextEdges,
+    )
+  }, [])
+
+  useLayoutEffect(() => {
+    const container = scrollContainerRef.current
+    if (!container) return
+
+    updateScrollEdges()
+    const resizeObserver = new ResizeObserver(updateScrollEdges)
+    resizeObserver.observe(container)
+    return () => resizeObserver.disconnect()
+  }, [displayedSources.length, showBackups, updateScrollEdges])
+
+  const startHorizontalDrag = (event: React.PointerEvent<HTMLDivElement>): void => {
+    if (event.button !== 0 || event.pointerType !== 'mouse') return
+    const target = event.target as HTMLElement
+    if (
+      target.closest(
+        'button, a, input, textarea, select, [role="button"], [role="checkbox"], [role="switch"], [data-table-drag-ignore]',
+      )
+    )
+      return
+
+    const container = scrollContainerRef.current
+    if (!container || container.scrollWidth <= container.clientWidth) return
+
+    dragStateRef.current = {
+      pointerId: event.pointerId,
+      scrollLeft: container.scrollLeft,
+      startX: event.clientX,
+    }
+    container.setPointerCapture(event.pointerId)
+    setIsDragging(true)
+    event.preventDefault()
+  }
+
+  const moveHorizontalDrag = (event: React.PointerEvent<HTMLDivElement>): void => {
+    const dragState = dragStateRef.current
+    const container = scrollContainerRef.current
+    if (!dragState || !container || dragState.pointerId !== event.pointerId) return
+
+    container.scrollLeft = dragState.scrollLeft - (event.clientX - dragState.startX)
+    updateScrollEdges()
+    event.preventDefault()
+  }
+
+  const stopHorizontalDrag = (event: React.PointerEvent<HTMLDivElement>): void => {
+    const dragState = dragStateRef.current
+    const container = scrollContainerRef.current
+    if (!dragState || dragState.pointerId !== event.pointerId) return
+
+    if (container?.hasPointerCapture(event.pointerId)) container.releasePointerCapture(event.pointerId)
+    dragStateRef.current = undefined
+    setIsDragging(false)
   }
 
   return (
@@ -149,57 +229,117 @@ export function SourceTableCard<T extends SourceConfig>({
       />
 
       {sources.length > 0 ? (
-        <div className={cn(heightClassName, 'overflow-auto')}>
-          <div className="min-w-[1160px]">
-            <TableHeader
-              allSelected={allSelected}
-              showBackups={showBackups}
-              showSpeed={Boolean(onTestSingle)}
-              speedSortOrder={speedSortOrder}
-              onSpeedSort={cycleSpeedSortOrder}
-              onToggleAll={onToggleAll}
-            />
+        <Table
+          className="isolate min-w-[1140px] table-fixed border-separate border-spacing-0"
+          containerClassName={cn(
+            heightClassName,
+            'isolate overscroll-x-contain overflow-auto',
+            isDragging ? 'cursor-grabbing select-none' : 'cursor-grab',
+          )}
+          containerProps={{
+            'aria-label': `${title}列表，可按住并左右拖动`,
+            'role': 'region',
+            'tabIndex': 0,
+            'onLostPointerCapture': () => {
+              dragStateRef.current = undefined
+              setIsDragging(false)
+            },
+            'onPointerCancel': stopHorizontalDrag,
+            'onPointerDown': startHorizontalDrag,
+            'onPointerMove': moveHorizontalDrag,
+            'onPointerUp': stopHorizontalDrag,
+            'onScroll': updateScrollEdges,
+          }}
+          containerRef={scrollContainerRef}
+        >
+          <colgroup>
+            <col className="w-9" />
+            <col className="w-24" />
+            <col className="w-[68px]" />
+            <col className="w-[150px]" />
+            <col />
+            {showBackups ? <col className="w-[104px]" /> : null}
+            {onTestSingle ? <col className="w-[126px]" /> : null}
+            <col className="w-[164px]" />
+          </colgroup>
+          <SourceTableHeader
+            allSelected={allSelected}
+            scrollEdges={scrollEdges}
+            showBackups={showBackups}
+            showSpeed={Boolean(onTestSingle)}
+            speedSortOrder={speedSortOrder}
+            onSpeedSort={cycleSpeedSortOrder}
+            onToggleAll={onToggleAll}
+          />
+          <TableBody>
             {displayedSources.length > 0 ? (
               displayedSources.map((source) => (
-                <div
-                  key={source.id}
-                  className={cn(
-                    'border-border hover:bg-muted/30 grid items-center border-b px-5 py-3 transition-colors',
-                    getTableGridClassName(Boolean(onTestSingle), showBackups),
-                  )}
-                >
-                  <SelectionCheckbox
-                    checked={selectedSourceIds.has(source.id)}
-                    label={`选择 ${source.name}`}
-                    onChange={() => onToggleSelection(source.id)}
-                  />
-                  <StatusCell checked={source.enabled} onCheckedChange={(checked) => onToggle(source, checked)} />
-                  <OriginCell origin={source.origin} />
-                  <NameCell name={source.name} />
-                  <div className="text-muted-foreground min-w-0 truncate font-mono text-xs" title={source.url}>
-                    {source.url}
-                  </div>
+                <TableRow key={source.id} className="group hover:bg-muted h-14 border-0 [&>td]:border-b">
+                  <TableCell className="bg-card group-hover:bg-muted sticky left-0 z-20 px-2 transition-colors">
+                    <SelectionCheckbox
+                      checked={selectedSourceIds.has(source.id)}
+                      label={`选择 ${source.name}`}
+                      onChange={() => onToggleSelection(source.id)}
+                    />
+                  </TableCell>
+                  <TableCell className="bg-card group-hover:bg-muted sticky left-9 z-20 px-2 transition-colors">
+                    <StatusCell checked={source.enabled} onCheckedChange={(checked) => onToggle(source, checked)} />
+                  </TableCell>
+                  <TableCell
+                    className={cn(
+                      'bg-card group-hover:bg-muted sticky left-[132px] z-20 px-2 transition-[background-color,box-shadow]',
+                      scrollEdges.left && 'shadow-[5px_0_8px_-8px_rgba(0,0,0,0.45)]',
+                    )}
+                  >
+                    <OriginCell origin={source.origin} />
+                  </TableCell>
+                  <TableCell className="max-w-[150px] px-3">
+                    <NameCell name={source.name} />
+                  </TableCell>
+                  <TableCell className="max-w-0 px-3">
+                    <div className="text-muted-foreground truncate font-mono text-xs" title={source.url}>
+                      {source.url}
+                    </div>
+                  </TableCell>
                   {isVodSource(source) && onSwitchBackup ? (
-                    <BackupCell source={source} onSwitchBackup={onSwitchBackup} />
+                    <TableCell className="px-2">
+                      <BackupCell source={source} onSwitchBackup={onSwitchBackup} />
+                    </TableCell>
                   ) : null}
                   {isVodSource(source) && onTestSingle ? (
-                    <SpeedCell result={speedResults?.[source.id]} onTest={() => onTestSingle(source.id)} />
+                    <TableCell className="px-2">
+                      <SpeedCell result={speedResults?.[source.id]} onTest={() => onTestSingle(source.id)} />
+                    </TableCell>
                   ) : null}
-                  <ActionCell
-                    disabled={isReordering}
-                    isFirst={sources[0]?.id === source.id}
-                    isLast={sources.at(-1)?.id === source.id}
-                    onDelete={() => onDelete(source)}
-                    onEdit={() => onEdit(source)}
-                    onMoveToEdge={(edge) => onMoveToEdge(source.id, edge)}
-                  />
-                </div>
+                  <TableCell
+                    className={cn(
+                      'bg-card group-hover:bg-muted sticky right-0 z-20 px-2 transition-[background-color,box-shadow]',
+                      scrollEdges.right && 'shadow-[-5px_0_8px_-8px_rgba(0,0,0,0.45)]',
+                    )}
+                  >
+                    <ActionCell
+                      disabled={isReordering}
+                      isFirst={sources[0]?.id === source.id}
+                      isLast={sources.at(-1)?.id === source.id}
+                      onDelete={() => onDelete(source)}
+                      onEdit={() => onEdit(source)}
+                      onMoveToEdge={(edge) => onMoveToEdge(source.id, edge)}
+                    />
+                  </TableCell>
+                </TableRow>
               ))
             ) : (
-              <EmptyTableState text="未找到匹配的源" />
+              <TableRow>
+                <TableCell
+                  className="text-muted-foreground h-32 text-center"
+                  colSpan={6 + Number(showBackups) + Number(Boolean(onTestSingle))}
+                >
+                  未找到匹配的源
+                </TableCell>
+              </TableRow>
             )}
-          </div>
-        </div>
+          </TableBody>
+        </Table>
       ) : (
         <EmptyTableState text={emptyText} />
       )}
@@ -412,8 +552,9 @@ function SourceToolbar({
   )
 }
 
-function TableHeader({
+function SourceTableHeader({
   allSelected,
+  scrollEdges,
   showBackups,
   showSpeed,
   speedSortOrder,
@@ -421,6 +562,7 @@ function TableHeader({
   onToggleAll,
 }: {
   allSelected: boolean
+  scrollEdges: TableScrollEdges
   showBackups: boolean
   showSpeed: boolean
   speedSortOrder: SpeedSortOrder
@@ -428,34 +570,47 @@ function TableHeader({
   onToggleAll: () => void
 }): React.JSX.Element {
   return (
-    <div
-      className={cn(
-        'border-border bg-muted text-muted-foreground sticky top-0 z-10 grid items-center border-b px-5 py-3 font-medium',
-        getTableGridClassName(showSpeed, showBackups),
-      )}
-    >
-      <SelectionCheckbox checked={allSelected} label={allSelected ? '取消全选' : '全选源'} onChange={onToggleAll} />
-      <div>状态</div>
-      <div>来源</div>
-      <div>名称</div>
-      <div>URL</div>
-      {showBackups ? <div>备用地址</div> : null}
-      {showSpeed ? (
-        <div>
-          <button
-            className="hover:text-foreground inline-flex items-center gap-1 rounded-sm outline-none focus-visible:ring-2"
-            title={getSpeedSortTitle(speedSortOrder)}
-            type="button"
-            onClick={onSpeedSort}
-          >
-            API 延迟
-            {speedSortOrder === 'asc' ? <ArrowUpToLine size={15} /> : null}
-            {speedSortOrder === 'desc' ? <ArrowDownToLine size={15} /> : null}
-          </button>
-        </div>
-      ) : null}
-      <div className="text-right">操作</div>
-    </div>
+    <TableHeader className="bg-muted text-muted-foreground">
+      <TableRow className="hover:bg-muted border-0 [&>th]:border-b">
+        <TableHead className="bg-muted sticky top-0 left-0 z-40 px-2">
+          <SelectionCheckbox checked={allSelected} label={allSelected ? '取消全选' : '全选源'} onChange={onToggleAll} />
+        </TableHead>
+        <TableHead className="bg-muted sticky top-0 left-9 z-40 px-2">状态</TableHead>
+        <TableHead
+          className={cn(
+            'bg-muted sticky top-0 left-[132px] z-40 px-2 transition-shadow',
+            scrollEdges.left && 'shadow-[5px_0_8px_-8px_rgba(0,0,0,0.45)]',
+          )}
+        >
+          来源
+        </TableHead>
+        <TableHead className="bg-muted sticky top-0 z-30 px-3">名称</TableHead>
+        <TableHead className="bg-muted sticky top-0 z-30 px-3">URL</TableHead>
+        {showBackups ? <TableHead className="bg-muted sticky top-0 z-30 px-2">备用地址</TableHead> : null}
+        {showSpeed ? (
+          <TableHead className="bg-muted sticky top-0 z-30 px-2">
+            <button
+              className="hover:text-foreground inline-flex items-center gap-1 rounded-sm outline-none focus-visible:ring-2"
+              title={getSpeedSortTitle(speedSortOrder)}
+              type="button"
+              onClick={onSpeedSort}
+            >
+              API 延迟
+              {speedSortOrder === 'asc' ? <ArrowUpToLine size={15} /> : null}
+              {speedSortOrder === 'desc' ? <ArrowDownToLine size={15} /> : null}
+            </button>
+          </TableHead>
+        ) : null}
+        <TableHead
+          className={cn(
+            'bg-muted sticky top-0 right-0 z-40 px-2 text-right transition-shadow',
+            scrollEdges.right && 'shadow-[-5px_0_8px_-8px_rgba(0,0,0,0.45)]',
+          )}
+        >
+          操作
+        </TableHead>
+      </TableRow>
+    </TableHeader>
   )
 }
 
@@ -544,9 +699,9 @@ function ActionCell({
   onMoveToEdge: (edge: 'start' | 'end') => void
 }): React.JSX.Element {
   return (
-    <div className="flex justify-end gap-2">
+    <div className="flex justify-end gap-1">
       <Button
-        className="h-8 px-2"
+        className="size-8 p-0"
         disabled={disabled || isFirst}
         title="置顶"
         variant="ghost"
@@ -555,7 +710,7 @@ function ActionCell({
         <ArrowUpToLine />
       </Button>
       <Button
-        className="h-8 px-2"
+        className="size-8 p-0"
         disabled={disabled || isLast}
         title="置底"
         variant="ghost"
@@ -563,10 +718,10 @@ function ActionCell({
       >
         <ArrowDownToLine />
       </Button>
-      <Button className="h-8 px-2" title="编辑" variant="ghost" onClick={onEdit}>
+      <Button className="size-8 p-0" title="编辑" variant="ghost" onClick={onEdit}>
         <Pencil />
       </Button>
-      <Button className="h-8 px-2" title="删除" variant="destructive" onClick={onDelete}>
+      <Button className="size-8 p-0" title="删除" variant="destructive" onClick={onDelete}>
         <Trash2 />
       </Button>
     </div>
@@ -581,13 +736,6 @@ function EmptyTableState({ text }: { text: string }): React.JSX.Element {
       </div>
     </div>
   )
-}
-
-function getTableGridClassName(showSpeed: boolean, showBackups: boolean): string {
-  if (showBackups && showSpeed) return 'grid-cols-[40px_112px_80px_1.1fr_1.8fr_120px_150px_196px]'
-  if (showBackups) return 'grid-cols-[40px_112px_80px_1.1fr_1.8fr_120px_196px]'
-  if (showSpeed) return 'grid-cols-[40px_112px_80px_1.1fr_2fr_150px_196px]'
-  return 'grid-cols-[40px_112px_80px_1.1fr_2fr_196px]'
 }
 
 function getSpeedSortTitle(order: SpeedSortOrder): string {

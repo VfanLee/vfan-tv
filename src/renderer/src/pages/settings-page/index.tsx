@@ -104,11 +104,11 @@ export function SettingsPage(): React.JSX.Element {
   }
 
   return (
-    <div className="min-h-full px-8 py-8">
-      <div className="grid min-w-0 grid-cols-[176px_minmax(0,1fr)] gap-8">
+    <div className="min-h-full px-4 py-5 sm:px-6 sm:py-6 xl:px-8 xl:py-8">
+      <div className="grid min-w-0 grid-cols-[132px_minmax(0,1fr)] gap-4 sm:grid-cols-[144px_minmax(0,1fr)] sm:gap-5">
         <SettingsSidebar activeSection={activeSection} onSelect={selectSection} />
 
-        <div className="grid min-w-0 gap-5">
+        <div className="grid min-w-0 gap-5 [&>section]:min-w-0">
           <section id="appearance" className="scroll-mt-8">
             <ThemeSettings />
           </section>
@@ -147,7 +147,7 @@ export function SettingsPage(): React.JSX.Element {
               description="管理应用的点播源。"
               emptyText="暂无数据"
               enabledCount={vod.enabledCount}
-              heightClassName="h-[460px]"
+              heightClassName="max-h-[min(60vh,460px)]"
               isBatchUpdating={vod.isBatchUpdating}
               isClearing={vod.isClearing}
               isReordering={vod.isReordering}
@@ -181,7 +181,7 @@ export function SettingsPage(): React.JSX.Element {
               description="管理应用的直播源。"
               emptyText="暂无直播源"
               enabledCount={live.enabledCount}
-              heightClassName="h-[360px]"
+              heightClassName="max-h-[min(55vh,360px)]"
               isBatchUpdating={live.isBatchUpdating}
               isClearing={live.isClearing}
               isReordering={live.isReordering}
