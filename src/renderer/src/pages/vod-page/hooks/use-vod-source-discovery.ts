@@ -10,7 +10,6 @@ import type {
   SourceRefreshState,
 } from '../types'
 import {
-  dedupeCandidates,
   getCandidateKey,
   getCorrespondingEpisodeUrl,
   getEpisodeCount,
@@ -25,7 +24,6 @@ interface SourceDiscoveryOptions {
   currentTitleKey: string
   locationState: PlayerLocationState | null
   sameTitleCandidates: VodSearchResult[]
-  sourceRows: Array<{ item: VodSearchResult; count: number; isActive: boolean }>
 }
 
 interface VodSourceDiscoveryState {
@@ -34,7 +32,7 @@ interface VodSourceDiscoveryState {
   sourceProbeStates: Record<string, SourceProbeState>
   openSources: () => void
   probeSources: (items?: VodSearchResult[]) => void
-  refreshSources: (shouldProbe?: boolean) => Promise<void>
+  refreshSources: () => Promise<void>
 }
 
 export function useVodSourceDiscovery({
@@ -43,7 +41,6 @@ export function useVodSourceDiscovery({
   currentTitleKey,
   locationState,
   sameTitleCandidates,
-  sourceRows,
 }: SourceDiscoveryOptions): VodSourceDiscoveryState {
   const mergeCandidates = useSearchContextStore((state) => state.mergeCandidates)
   const [isRefreshingSources, setIsRefreshingSources] = useState(false)
@@ -51,36 +48,24 @@ export function useVodSourceDiscovery({
   const [sourceProbeRequest, setSourceProbeRequest] = useState<SourceProbeRequest>()
   const [refreshState, setRefreshState] = useState<SourceRefreshState>({ found: 0, failed: 0, finished: 0 })
   const refreshSearchIdRef = useRef<string | undefined>(undefined)
-  const probeAfterRefreshRef = useRef(false)
   const autoRefreshedSourcesRef = useRef<Set<string>>(new Set())
   const autoHydratedTitleRef = useRef<Set<string>>(new Set())
 
-  const refreshSources = useCallback(
-    async (shouldProbe = false): Promise<void> => {
-      if (!isApiAvailable() || !current?.title || isRefreshingSources) return
-      // 同一页面只允许一个补源搜索，先取消旧任务以免事件混入新结果。
-      if (refreshSearchIdRef.current) await cancelVodSearch(refreshSearchIdRef.current)
-      setRefreshState({ found: 0, failed: 0, finished: 0 })
-      setSourceProbeRequest(undefined)
-      setSourceProbeStates({})
-      probeAfterRefreshRef.current = shouldProbe
-      if (shouldProbe) {
-        setSourceProbeStates(
-          Object.fromEntries(sourceRows.map(({ item }) => [getCandidateKey(item), { status: 'loading' as const }])),
-        )
-      }
-      setIsRefreshingSources(true)
-      const result = await searchVod(current.title)
-      if (!result) {
-        probeAfterRefreshRef.current = false
-        setIsRefreshingSources(false)
-        if (shouldProbe) setSourceProbeStates({})
-        return
-      }
-      refreshSearchIdRef.current = result.searchId
-    },
-    [current, isRefreshingSources, sourceRows],
-  )
+  const refreshSources = useCallback(async (): Promise<void> => {
+    if (!isApiAvailable() || !current?.title || isRefreshingSources) return
+    // 同一页面只允许一个补源搜索，先取消旧任务以免事件混入新结果。
+    if (refreshSearchIdRef.current) await cancelVodSearch(refreshSearchIdRef.current)
+    setRefreshState({ found: 0, failed: 0, finished: 0 })
+    setSourceProbeRequest(undefined)
+    setSourceProbeStates({})
+    setIsRefreshingSources(true)
+    const result = await searchVod(current.title)
+    if (!result) {
+      setIsRefreshingSources(false)
+      return
+    }
+    refreshSearchIdRef.current = result.searchId
+  }, [current, isRefreshingSources])
 
   const probeSources = useCallback(
     (items = sameTitleCandidates): void => {
@@ -105,14 +90,8 @@ export function useVodSourceDiscovery({
     const refreshKey = `${activeSelection.resourceKey}:${currentTitleKey}`
     if (!currentTitleKey || autoRefreshedSourcesRef.current.has(refreshKey)) return
     autoRefreshedSourcesRef.current.add(refreshKey)
-    if (isRefreshingSources) {
-      probeAfterRefreshRef.current = true
-      setSourceProbeStates(
-        Object.fromEntries(sourceRows.map(({ item }) => [getCandidateKey(item), { status: 'loading' as const }])),
-      )
-      return
-    }
-    void refreshSources(true)
+    if (isRefreshingSources) return
+    void refreshSources()
   }
 
   useEffect(() => {
@@ -160,25 +139,9 @@ export function useVodSourceDiscovery({
       if (event.type === 'done') {
         refreshSearchIdRef.current = undefined
         setIsRefreshingSources(false)
-        if (probeAfterRefreshRef.current) {
-          probeAfterRefreshRef.current = false
-          const latestItems = dedupeCandidates(
-            useSearchContextStore
-              .getState()
-              .candidates.filter((item) => normalizeTitle(item.title) === currentTitleKey),
-          )
-          setSourceProbeStates(
-            Object.fromEntries(latestItems.map((item) => [getCandidateKey(item), { status: 'loading' as const }])),
-          )
-          setSourceProbeRequest({
-            items: latestItems,
-            lineIndex: activeSelection.lineIndex,
-            episodeIndex: activeSelection.episodeIndex,
-          })
-        }
       }
     })
-  }, [activeSelection.episodeIndex, activeSelection.lineIndex, currentTitleKey, mergeCandidates])
+  }, [currentTitleKey, mergeCandidates])
 
   useEffect(() => {
     if (!sourceProbeRequest) return

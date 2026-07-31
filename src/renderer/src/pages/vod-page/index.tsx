@@ -118,7 +118,6 @@ export function VodPage(): React.JSX.Element {
     currentTitleKey,
     locationState,
     sameTitleCandidates,
-    sourceRows,
   })
   const { isRefreshingSources, sourceProbeStates, refreshState, probeSources, refreshSources } = sourceDiscovery
   const openSourcesTab = (): void => {

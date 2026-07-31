@@ -1,4 +1,4 @@
-import { ArrowUpDown, CheckCircle2, Loader2, Radio, RefreshCw } from 'lucide-react'
+import { ArrowUpDown, CheckCircle2, CircleAlert, Gauge, Loader2, Monitor, Radio, RefreshCw } from 'lucide-react'
 import type { PlayLine, VodSearchResult } from '@shared/types'
 import { cn } from '@/utils'
 import type { EpisodeSelection, SourceProbeState, SourceRefreshState } from '../types'
@@ -145,7 +145,7 @@ export function SourcesPanel({
               <button
                 key={`${item.sourceId}-${item.vodId}`}
                 className={cn(
-                  'focus-visible:ring-ring grid h-auto w-full grid-cols-[24px_minmax(0,1fr)_auto] items-start gap-3 rounded-xl border p-3 text-left transition-colors outline-none focus-visible:ring-2',
+                  'focus-visible:ring-ring grid h-[104px] w-full grid-cols-[24px_minmax(0,1fr)_auto] items-start gap-3 rounded-xl border p-3 text-left transition-colors outline-none focus-visible:ring-2',
                   isActive ? 'border-primary bg-accent' : 'border-border bg-muted hover:border-input',
                 )}
                 type="button"
@@ -159,21 +159,16 @@ export function SourcesPanel({
                 >
                   <CheckCircle2 size={14} />
                 </span>
-                <span className="min-w-0">
-                  <span className="flex min-w-0 items-center gap-2">
-                    <span className="text-foreground truncate text-sm font-semibold">{item.sourceName}</span>
-                    <span className="bg-card text-primary shrink-0 rounded-xl px-1.5 py-0.5 text-xs font-semibold">
-                      缓存
-                    </span>
-                  </span>
-                  {probeState ? <SourceProbeTags state={probeState} /> : null}
+                <span className="flex min-w-0 flex-col">
+                  <span className="text-foreground truncate text-sm font-semibold">{item.sourceName}</span>
                   <span className="text-muted-foreground mt-1 block truncate text-xs font-medium">
                     {[item.year, item.area, item.remarks || item.category].filter(Boolean).join(' · ') ||
                       keyword ||
                       '同名资源'}
                   </span>
+                  <SourceProbeStatus state={probeState} />
                 </span>
-                <span className="bg-card text-muted-foreground mt-0.5 shrink-0 rounded-xl px-2 py-1 text-xs font-semibold">
+                <span className="text-muted-foreground mt-0.5 shrink-0 text-xs font-semibold tabular-nums">
                   {count} 集
                 </span>
               </button>
@@ -189,32 +184,46 @@ export function SourcesPanel({
   )
 }
 
-function SourceProbeTags({ state }: { state: SourceProbeState }): React.JSX.Element {
-  const latencyText =
-    state.status === 'loading' ? '延迟检测中' : state.latencyMs === null ? '延迟检测失败' : `${state.latencyMs}ms`
-  const qualityText = state.status === 'loading' ? '清晰度检测中' : (state.quality ?? '清晰度检测失败')
-  const qualityClassName =
-    state.status === 'loading'
-      ? 'animate-pulse border-sky-500/30 bg-sky-500/15 text-sky-700 dark:text-sky-300'
-      : state.quality
-        ? 'border-violet-500/30 bg-violet-500/15 text-violet-700 dark:text-violet-300'
-        : 'border-red-500/30 bg-red-500/15 text-red-700 dark:text-red-300'
-  return (
-    <span className="mt-2 flex flex-wrap gap-1.5">
-      <span className={cn('rounded-lg border px-1.5 py-0.5 text-[11px] font-semibold', getLatencyTagClassName(state))}>
-        {latencyText}
+function SourceProbeStatus({ state }: { state?: SourceProbeState }): React.JSX.Element {
+  const isLoading = state?.status === 'loading'
+  const hasFailed = state?.status === 'complete' && state.latencyMs === null && state.quality === null
+  const latencyValue = state?.status === 'complete' && state.latencyMs !== null ? `${state.latencyMs}ms` : '--'
+  const qualityValue = state?.status === 'complete' ? (state.quality ?? '--') : '--'
+
+  if (hasFailed) {
+    return (
+      <span className="mt-2.5 flex h-5 items-center gap-1.5 text-xs font-semibold text-red-700 dark:text-red-300">
+        <CircleAlert size={15} />
+        测速失败
       </span>
-      <span className={cn('rounded-lg border px-1.5 py-0.5 text-[11px] font-semibold', qualityClassName)}>
-        {qualityText}
+    )
+  }
+
+  return (
+    <span className="text-muted-foreground mt-2.5 flex h-5 min-w-0 items-center gap-3 text-xs font-medium">
+      <span className={cn('flex min-w-0 items-center gap-1.5', getLatencyValueClassName(state))}>
+        {isLoading ? <Loader2 className="animate-spin" size={15} /> : <Gauge size={15} />}
+        <span className="truncate font-semibold tabular-nums">{isLoading ? '测速中' : latencyValue}</span>
+      </span>
+      <span className="bg-border h-3 w-px shrink-0" />
+      <span className={cn('flex min-w-0 items-center gap-1.5', getQualityValueClassName(state))}>
+        <Monitor size={15} />
+        <span className="truncate font-semibold">{qualityValue}</span>
       </span>
     </span>
   )
 }
 
-function getLatencyTagClassName(state: SourceProbeState): string {
-  if (state.status === 'loading') return 'animate-pulse border-sky-500/30 bg-sky-500/15 text-sky-700 dark:text-sky-300'
-  if (state.latencyMs === null || state.latencyMs > 1000)
-    return 'border-red-500/30 bg-red-500/15 text-red-700 dark:text-red-300'
-  if (state.latencyMs > 500) return 'border-amber-500/30 bg-amber-500/15 text-amber-700 dark:text-amber-300'
-  return 'border-emerald-500/30 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+function getLatencyValueClassName(state?: SourceProbeState): string {
+  if (!state) return 'text-muted-foreground'
+  if (state.status === 'loading') return 'animate-pulse text-sky-700 dark:text-sky-300'
+  if (state.latencyMs === null || state.latencyMs > 1000) return 'text-red-700 dark:text-red-300'
+  if (state.latencyMs > 500) return 'text-amber-700 dark:text-amber-300'
+  return 'text-emerald-700 dark:text-emerald-300'
+}
+
+function getQualityValueClassName(state?: SourceProbeState): string {
+  if (!state) return 'text-muted-foreground'
+  if (state.status === 'loading') return 'text-muted-foreground'
+  return state.quality ? 'text-violet-700 dark:text-violet-300' : 'text-red-700 dark:text-red-300'
 }
