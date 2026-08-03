@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router'
 import { AlertCircle, ChevronRight, Clapperboard, Loader2, Search, ServerCog, Settings2, X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { toast } from 'sonner'
+import { VOD_CATALOG_SELECTED_SOURCE_STORAGE_KEY } from '@shared/constants'
 import type { VodCatalogCategory, VodSearchResult, VodSourceConfig } from '@shared/types'
 import { MediaPoster, PosterCardSkeleton, VodSourceBackupSwitcher } from '@renderer/components'
 import { getVodDetail } from '@renderer/services/api'
@@ -32,8 +33,12 @@ export function CatalogHomePage(): React.JSX.Element {
   const [searchParams, setSearchParams] = useSearchParams()
   const setContext = useSearchContextStore((state) => state.setContext)
   const sourcesState = useEnabledVodSources()
+  const requestedSourceId = searchParams.get('source')
+  const storedSourceId = window.localStorage.getItem(VOD_CATALOG_SELECTED_SOURCE_STORAGE_KEY)
   const selectedSource =
-    sourcesState.sources.find((source) => source.id === searchParams.get('source')) ?? sourcesState.sources[0]
+    sourcesState.sources.find((source) => source.id === requestedSourceId) ??
+    sourcesState.sources.find((source) => source.id === storedSourceId) ??
+    sourcesState.sources[0]
   const categoryId = searchParams.get('category')?.trim() || undefined
   const keyword = searchParams.get('keyword')?.trim() || undefined
   const requestedPage = normalizePage(searchParams.get('page'))
@@ -43,8 +48,16 @@ export function CatalogHomePage(): React.JSX.Element {
 
   useEffect(() => {
     if (!selectedSource || searchParams.get('source') === selectedSource.id) return
-    setSearchParams({ source: selectedSource.id }, { replace: true })
+    const next = new URLSearchParams(searchParams)
+    next.set('source', selectedSource.id)
+    setSearchParams(next, { replace: true })
   }, [searchParams, selectedSource, setSearchParams])
+
+  useEffect(() => {
+    if (selectedSource) {
+      window.localStorage.setItem(VOD_CATALOG_SELECTED_SOURCE_STORAGE_KEY, selectedSource.id)
+    }
+  }, [selectedSource])
 
   useEffect(() => {
     if (!selectedSource || catalog.redirectPage === null || catalog.redirectPage === requestedPage) return
@@ -78,7 +91,9 @@ export function CatalogHomePage(): React.JSX.Element {
   const switchBackup = async (source: VodSourceConfig, backupUrl: string): Promise<void> => {
     try {
       const updated = await sourcesState.switchBackup(source.id, backupUrl)
-      setSearchParams({ source: updated.id }, { replace: true })
+      const next = new URLSearchParams(searchParams)
+      next.set('source', updated.id)
+      setSearchParams(next, { replace: true })
       toast.success('已切换备用地址', { description: updated.url })
     } catch (error) {
       toast.error('备用地址切换失败', { description: error instanceof Error ? error.message : String(error) })
@@ -124,7 +139,11 @@ export function CatalogHomePage(): React.JSX.Element {
                 <Select
                   value={selectedSource?.id}
                   onValueChange={(sourceId) => {
-                    setSearchParams({ source: sourceId })
+                    const next = new URLSearchParams(searchParams)
+                    next.set('source', sourceId)
+                    next.delete('category')
+                    next.delete('page')
+                    setSearchParams(next)
                   }}
                 >
                   <SelectTrigger className="border-input bg-background hover:bg-accent h-12 min-w-0 flex-1 px-4">
@@ -159,7 +178,7 @@ export function CatalogHomePage(): React.JSX.Element {
 
           <div className="border-border bg-muted/35 border-t px-6 py-5 lg:px-9">
             <CatalogSearchForm
-              key={`${selectedSource?.id ?? 'loading'}:${keyword ?? ''}`}
+              key={keyword ?? ''}
               initialValue={keyword ?? ''}
               onClear={() => updateFilters({ keyword: null })}
               onSubmit={(value) => updateFilters({ keyword: value })}
