@@ -12,25 +12,16 @@ import applicationBackgroundDarkUrl from '@renderer/assets/application-backgroun
 import sidebarBackgroundUrl from '@renderer/assets/sidebar-background.png'
 import sidebarBackgroundDarkUrl from '@renderer/assets/sidebar-background-dark.png'
 import { RadioBottomPlayer } from '../radio-player'
+import { useLayoutPreferencesStore } from '@/stores'
 
 // 应用级壳层维护导航、顶部栏、主内容滚动状态，以及仅在电台页常驻的底部播放器容器。
-const primaryNavItems: Array<{ to: string; label: string; icon: LucideIcon }> = [
-  { to: '/', label: '首页', icon: Home },
+const homeNavItem = { to: '/', label: '首页', icon: Home }
+const trendingNavItems: Array<{ to: string; label: string; icon: LucideIcon }> = [
   { to: '/hot/movie', label: '电影', icon: categoryIcons.movie },
   { to: '/hot/tv', label: '电视剧', icon: categoryIcons.tv },
   { to: '/hot/animation', label: '动画', icon: categoryIcons.animation },
   { to: '/hot/documentary', label: '纪录片', icon: categoryIcons.documentary },
   { to: '/hot/show', label: '综艺', icon: categoryIcons.show },
-  { to: '/live', label: '直播', icon: Tv },
-  { to: '/radio', label: '电台', icon: Radio },
-  { to: '/link-player', label: '直链播放', icon: Link },
-]
-
-const secondaryNavItems: Array<{ to: string; label: string; icon: LucideIcon }> = [
-  { to: '/recent', label: '最近播放', icon: Clock3 },
-  { to: '/favorites', label: '我的收藏', icon: Heart },
-  { to: '/settings', label: '设置', icon: Settings },
-  { to: '/about', label: '关于', icon: Info },
 ]
 
 interface LayoutRouteHandle {
@@ -43,6 +34,8 @@ export function AppLayout(): React.JSX.Element {
   const location = useLocation()
   const mainRef = useRef<HTMLElement>(null)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => readSidebarCollapsed())
+  const appStyle = useLayoutPreferencesStore((state) => state.appStyle)
+  const navigationVisibility = useLayoutPreferencesStore((state) => state.navigationVisibility)
   const isCompactWindow = useMediaQuery('(max-width: 1279px)')
   const isSidebarCompact = isSidebarCollapsed || isCompactWindow
   const showRadioBottomPlayer = location.pathname === '/radio'
@@ -53,14 +46,31 @@ export function AppLayout(): React.JSX.Element {
       return next
     })
   }
-  const showGlobalSearch = matches.some((match) => {
-    const handle = match.handle as LayoutRouteHandle | undefined
-    return handle?.showGlobalSearch === true
-  })
-  const hideTopBar = matches.some((match) => {
-    const handle = match.handle as LayoutRouteHandle | undefined
-    return handle?.hideTopBar === true
-  })
+  const showGlobalSearch =
+    (location.pathname === '/' && appStyle === 'trending') ||
+    matches.some((match) => {
+      const handle = match.handle as LayoutRouteHandle | undefined
+      return handle?.showGlobalSearch === true
+    })
+  const hideTopBar =
+    (location.pathname === '/' && appStyle === 'catalog') ||
+    matches.some((match) => {
+      const handle = match.handle as LayoutRouteHandle | undefined
+      return handle?.hideTopBar === true
+    })
+  const primaryNavItems = [
+    homeNavItem,
+    ...(appStyle === 'trending' ? trendingNavItems : []),
+    { to: '/live', label: '直播', icon: Tv },
+    ...(navigationVisibility.radio ? [{ to: '/radio', label: '电台', icon: Radio }] : []),
+    ...(navigationVisibility.linkPlayer ? [{ to: '/link-player', label: '直链播放', icon: Link }] : []),
+  ]
+  const secondaryNavItems = [
+    ...(navigationVisibility.recent ? [{ to: '/recent', label: '最近播放', icon: Clock3 }] : []),
+    ...(navigationVisibility.favorites ? [{ to: '/favorites', label: '我的收藏', icon: Heart }] : []),
+    { to: '/settings', label: '设置', icon: Settings },
+    { to: '/about', label: '关于', icon: Info },
+  ]
 
   useLayoutEffect(() => {
     const main = mainRef.current

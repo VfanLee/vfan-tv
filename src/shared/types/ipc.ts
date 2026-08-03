@@ -30,7 +30,14 @@ import type {
   MiniWindowResizeInput,
 } from './mini-window'
 import type { SearchEvent } from './search'
-import type { MediaProbeInput, MediaProbeResult, RecommendationItem } from './vod'
+import type {
+  MediaProbeInput,
+  MediaProbeResult,
+  RecommendationItem,
+  VodCatalogPage,
+  VodCatalogRequest,
+  VodSearchResult,
+} from './vod'
 import type { UpdateCheckResult, UpdateEvent } from './update'
 
 export interface HomeData {
@@ -117,6 +124,8 @@ export interface AppApi {
   vod: {
     search: (keyword: string) => Promise<{ searchId: string }>
     cancelSearch: (searchId: string) => Promise<void>
+    getCatalogPage: (input: VodCatalogRequest) => Promise<VodCatalogPage>
+    getDetail: (sourceId: string, vodId: string) => Promise<VodSearchResult>
     probeMedia: (input: MediaProbeInput) => Promise<MediaProbeResult>
     onSearchEvent: (listener: (event: SearchEvent) => void) => () => void
   }

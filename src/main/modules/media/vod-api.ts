@@ -1,10 +1,24 @@
-import type { VodApiItem, VodApiResponse, VodSearchResult, VodSourceConfig } from '@shared/types'
+import type {
+  VodApiCategory,
+  VodApiItem,
+  VodApiResponse,
+  VodCatalogPage,
+  VodCatalogRequest,
+  VodSearchResult,
+  VodSourceConfig,
+} from '@shared/types'
 
 // 兼容不同 CMS 返回形态：本模块只做协议归一化，不承担网络请求和业务筛选。
 export function buildVodSearchUrl(sourceUrl: string, keyword: string): string {
+  return buildVodCatalogUrl(sourceUrl, { sourceId: '', keyword, page: 1 })
+}
+
+export function buildVodCatalogUrl(sourceUrl: string, input: VodCatalogRequest): string {
   const url = new URL(sourceUrl)
   url.searchParams.set('ac', 'list')
-  url.searchParams.set('wd', keyword)
+  url.searchParams.set('pg', String(Math.max(1, Math.floor(input.page))))
+  if (input.categoryId?.trim()) url.searchParams.set('t', input.categoryId.trim())
+  if (input.keyword?.trim()) url.searchParams.set('wd', input.keyword.trim())
   return url.toString()
 }
 
@@ -27,6 +41,34 @@ export function normalizeVodApiResponse(
     .filter(isRecord)
     .map((item) => normalizeVodItem(keepOnlyM3u8PlayUrls(item as VodApiItem), source))
     .filter((item) => item.title.length > 0)
+}
+
+export function normalizeVodCatalogPage(response: VodApiResponse | unknown, source: VodSourceConfig): VodCatalogPage {
+  const record = isRecord(response) ? response : {}
+  return {
+    categories: normalizeCategories(record.class),
+    items: normalizeVodApiResponse(response, source),
+    page: getPositiveNumber(record.page, 1),
+    pageCount: getPositiveNumber(record.pagecount, 1),
+    pageSize: getPositiveNumber(record.limit, 0),
+    total: getPositiveNumber(record.total, 0),
+  }
+}
+
+function normalizeCategories(value: unknown): VodCatalogPage['categories'] {
+  if (!Array.isArray(value)) return []
+  const categories = new Map<string, VodCatalogPage['categories'][number]>()
+
+  for (const item of value) {
+    if (!isRecord(item)) continue
+    const category = item as unknown as VodApiCategory
+    const id = getString(category.type_id)
+    const name = getString(category.type_name)
+    if (!id || !name) continue
+    categories.set(id, { id, name, parentId: getString(category.type_pid) || '0' })
+  }
+
+  return [...categories.values()]
 }
 
 function keepOnlyM3u8PlayUrls(item: VodApiItem): VodApiItem {
@@ -110,6 +152,11 @@ function getString(value: unknown): string {
 function getOptionalString(value: unknown): string | undefined {
   const nextValue = getString(value)
   return nextValue.length > 0 ? nextValue : undefined
+}
+
+function getPositiveNumber(value: unknown, fallback: number): number {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback
 }
 
 function stripHtml(value: string | undefined): string | undefined {

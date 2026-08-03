@@ -4,10 +4,16 @@ import type { AppApi } from '@shared/types'
 import type { ApplicationContext } from '../../app/composition-root'
 
 export function registerMediaIpc(context: ApplicationContext): void {
-  const { vodSearch, mediaProxy } = context.services
+  const { vodCatalog, vodSearch, mediaProxy } = context.services
   const { probeMediaSource, detectMediaStreamType } = context.utilities
   ipcMain.handle(IPC_CHANNELS.vod.search, (_event, keyword: string) => vodSearch.search(keyword))
   ipcMain.handle(IPC_CHANNELS.vod.cancelSearch, (_event, searchId: string) => vodSearch.cancel(searchId))
+  ipcMain.handle(IPC_CHANNELS.vod.getCatalogPage, (_event, input: Parameters<AppApi['vod']['getCatalogPage']>[0]) =>
+    vodCatalog.getPage(input),
+  )
+  ipcMain.handle(IPC_CHANNELS.vod.getDetail, (_event, sourceId: string, vodId: string) =>
+    vodCatalog.getDetail(sourceId, vodId),
+  )
   ipcMain.handle(IPC_CHANNELS.vod.probeMedia, (_event, input: Parameters<AppApi['vod']['probeMedia']>[0]) =>
     probeMediaSource(input),
   )

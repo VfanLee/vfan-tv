@@ -9,6 +9,8 @@ export function createMediaApi(): Pick<AppApi, 'vod' | 'live' | 'media'> {
     vod: {
       search: (keyword) => ipcRenderer.invoke(IPC_CHANNELS.vod.search, keyword),
       cancelSearch: (searchId) => ipcRenderer.invoke(IPC_CHANNELS.vod.cancelSearch, searchId),
+      getCatalogPage: (input) => ipcRenderer.invoke(IPC_CHANNELS.vod.getCatalogPage, input),
+      getDetail: (sourceId, vodId) => ipcRenderer.invoke(IPC_CHANNELS.vod.getDetail, sourceId, vodId),
       probeMedia: (input) => ipcRenderer.invoke(IPC_CHANNELS.vod.probeMedia, input),
       onSearchEvent: (listener) => subscribe<SearchEvent>(IPC_CHANNELS.vod.searchEvent, listener),
     },

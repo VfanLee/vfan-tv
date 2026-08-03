@@ -39,6 +39,8 @@ export const IPC_CHANNELS = {
   vod: {
     search: 'vod:search',
     cancelSearch: 'vod:cancel-search',
+    getCatalogPage: 'vod:get-catalog-page',
+    getDetail: 'vod:get-detail',
     probeMedia: 'vod:probe-media',
     searchEvent: 'vod:search-event',
   },

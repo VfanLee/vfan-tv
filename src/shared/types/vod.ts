@@ -18,6 +18,28 @@ export interface VodSearchResult {
   rawJson?: string
 }
 
+export interface VodCatalogCategory {
+  id: string
+  name: string
+  parentId: string
+}
+
+export interface VodCatalogRequest {
+  sourceId: string
+  page: number
+  categoryId?: string
+  keyword?: string
+}
+
+export interface VodCatalogPage {
+  categories: VodCatalogCategory[]
+  items: VodSearchResult[]
+  page: number
+  pageCount: number
+  pageSize: number
+  total: number
+}
+
 export interface RecommendationItem {
   id: string
   title: string
@@ -57,7 +79,14 @@ export interface VodApiResponse {
   pagecount: number
   limit: number
   total: number
+  class?: VodApiCategory[]
   list: VodApiItem[]
+}
+
+export interface VodApiCategory {
+  type_id: number | string
+  type_name: string
+  type_pid: number | string
 }
 
 export interface VodApiItem {

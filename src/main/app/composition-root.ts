@@ -15,6 +15,7 @@ import { MediaProxyServer } from '../modules/media/media-proxy-server'
 import { probeMediaSource } from '../modules/media/media-probe.service'
 import { SearchTaskManager } from '../modules/media/search-task-manager'
 import { VodSearchService } from '../modules/media/vod-search.service'
+import { VodCatalogService } from '../modules/media/vod-catalog.service'
 import { SourceService } from '../modules/sources/source.service'
 import { VodSourceRepository } from '../modules/sources/vod-source.repository'
 import { SettingsRepository } from '../modules/settings/settings.repository'
@@ -42,6 +43,7 @@ export interface ApplicationContext {
     settings: SettingsService
     mediaProxy: MediaProxyServer
     vodSearch: VodSearchService
+    vodCatalog: VodCatalogService
     updates: UpdateService
     radio: RadioService
   }
@@ -87,6 +89,7 @@ export function createApplicationContext(): ApplicationContext {
       settings,
       mediaProxy,
       vodSearch: new VodSearchService(sourceService, httpClient, new SearchTaskManager(), emitSearchEvent),
+      vodCatalog: new VodCatalogService(sourceService, httpClient),
       updates: new UpdateService(settings, emitUpdateEvent),
       radio: new RadioService(httpClient, mediaProxy),
     },

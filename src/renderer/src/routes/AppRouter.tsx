@@ -2,6 +2,7 @@ import { createHashRouter, Navigate, RouterProvider } from 'react-router'
 import { AppLayout, AppRouteErrorPage } from '@renderer/components'
 import {
   AboutPage,
+  CatalogHomePage,
   HomePage,
   FavoritesPage,
   HotPage,
@@ -14,6 +15,7 @@ import {
   SearchPage,
   SettingsPage,
 } from '@renderer/pages'
+import { useLayoutPreferencesStore } from '@/stores'
 
 const router = createHashRouter([
   { path: 'mini-window', element: <MiniWindowPage /> },
@@ -22,7 +24,7 @@ const router = createHashRouter([
     element: <AppLayout />,
     errorElement: <AppRouteErrorPage />,
     children: [
-      { index: true, element: <HomePage />, handle: { showGlobalSearch: true } },
+      { index: true, element: <StyleHomePage /> },
       { path: 'hot', element: <Navigate replace to="/hot/movie" /> },
       { path: 'hot/:category', element: <HotPage />, handle: { showGlobalSearch: true } },
 
@@ -43,4 +45,9 @@ const router = createHashRouter([
 
 export function AppRouter(): React.JSX.Element {
   return <RouterProvider router={router} />
+}
+
+function StyleHomePage(): React.JSX.Element {
+  const appStyle = useLayoutPreferencesStore((state) => state.appStyle)
+  return appStyle === 'catalog' ? <CatalogHomePage /> : <HomePage />
 }

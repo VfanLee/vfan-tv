@@ -3,6 +3,7 @@ import { toast } from 'sonner'
 import { SEARCH_HISTORY_STORAGE_KEY } from '@shared/constants'
 import type { AppDataSelection } from '@shared/types'
 import { clearAppCache, exportAppData, importAppData, initializeAppData } from '@renderer/services/api'
+import { clearVodCategoryCache } from '@renderer/services/cache/vod-catalog-categories'
 import { loadSearchHistoriesForBackup } from '../utils'
 
 // 应用数据的文件操作在 main 执行；renderer 仅负责同步自己的 localStorage 与页面状态。
@@ -60,6 +61,7 @@ export function useAppData({
     setIsClearingCache(true)
     try {
       await clearAppCache()
+      clearVodCategoryCache()
       toast.success('本地缓存已清理')
     } catch (error) {
       toast.error('清理缓存失败', { description: error instanceof Error ? error.message : String(error) })

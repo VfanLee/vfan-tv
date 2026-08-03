@@ -1,4 +1,8 @@
 const DOUBAN_IMAGE_REFERER = 'https://movie.douban.com/explore'
+const IMAGE_HOST_ALIASES: Readonly<Record<string, string>> = {
+  'img.ffzy888.com': 'pps.vodfeiss.com',
+  'img.image8899.net': 'pps.vodfeiss.com',
+}
 
 // 图片代理基地址由应用启动后注入，避免 shared 层依赖 Electron 运行时。
 let mediaProxyBaseUrl = ''
@@ -9,6 +13,7 @@ export function setMediaProxyBaseUrl(baseUrl: string): void {
 
 export interface ImageProxyOptions {
   baseUrl?: string
+  referer?: string
 }
 
 export function isDoubanImageUrl(url: string): boolean {
@@ -29,6 +34,9 @@ export function resolveImageUrl(url: string, options: ImageProxyOptions = {}): s
     return url
   }
 
+  const replacementHost = IMAGE_HOST_ALIASES[targetUrl.hostname.toLowerCase()]
+  if (replacementHost) targetUrl.hostname = replacementHost
+
   if (!mediaProxyBaseUrl) {
     return targetUrl.toString()
   }
@@ -37,7 +45,9 @@ export function resolveImageUrl(url: string, options: ImageProxyOptions = {}): s
   proxyUrl.searchParams.set('url', targetUrl.toString())
   proxyUrl.searchParams.set(
     'referer',
-    isDoubanImageUrl(targetUrl.toString()) ? DOUBAN_IMAGE_REFERER : (options.baseUrl ?? targetUrl.origin),
+    isDoubanImageUrl(targetUrl.toString())
+      ? DOUBAN_IMAGE_REFERER
+      : options.referer?.trim() || options.baseUrl || targetUrl.origin,
   )
 
   return proxyUrl.toString()

@@ -8,6 +8,7 @@ interface MediaPosterProps {
   className?: string
   overlay?: ReactNode
   poster?: string
+  referer?: string
   showHoverScrim?: boolean
   title: string
 }
@@ -17,11 +18,12 @@ export function MediaPoster({
   className,
   overlay,
   poster,
+  referer,
   showHoverScrim = true,
   title,
 }: MediaPosterProps): React.JSX.Element {
   const [failedPoster, setFailedPoster] = useState<string>()
-  const imageSrc = poster && poster !== failedPoster ? resolveImageUrl(poster, { baseUrl }) : undefined
+  const imageSrc = poster && poster !== failedPoster ? resolveImageUrl(poster, { baseUrl, referer }) : undefined
 
   return (
     <div className={`border-border bg-muted relative overflow-hidden rounded-xl border shadow-sm ${className ?? ''}`}>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { ConfirmDialog, ThemeSettings } from '@renderer/components'
+import { ConfirmDialog, LayoutPreferencesSettings, ThemeSettings } from '@renderer/components'
 import { isApiAvailable } from '@renderer/services/api'
 import { DataManagementCard, NetworkSettingsCard, SubscriptionSettingsCard } from './components/settings-cards'
 import { DataSelectionDialog } from './components/data-selection-dialog'
@@ -110,7 +110,10 @@ export function SettingsPage(): React.JSX.Element {
 
         <div className="grid min-w-0 gap-5 [&>section]:min-w-0">
           <section id="appearance" className="scroll-mt-8">
-            <ThemeSettings />
+            <div className="grid gap-5">
+              <LayoutPreferencesSettings />
+              <ThemeSettings />
+            </div>
           </section>
 
           <section id="network" className="scroll-mt-8">

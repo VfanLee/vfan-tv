@@ -1,4 +1,5 @@
 export * from './about-page'
+export * from './catalog-home-page'
 export * from './favorites-page'
 export * from './hot-page'
 export * from './home-page'

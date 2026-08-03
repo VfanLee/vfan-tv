@@ -4,16 +4,17 @@ import { setMediaProxyBaseUrl } from '@shared/utils/media-image'
 import { ThemeProvider } from './components/theme-provider'
 import { AppRouter } from './routes/AppRouter'
 import { getMediaProxyBaseUrl } from './services/api'
-import { useAppDataStore, useThemeStore } from '@/stores'
+import { useAppDataStore, useLayoutPreferencesStore, useThemeStore } from '@/stores'
 
 function App(): React.JSX.Element {
   const mode = useThemeStore((state) => state.mode)
+  const appStyle = useLayoutPreferencesStore((state) => state.appStyle)
   const initializeAppData = useAppDataStore((state) => state.initialize)
   const [isMediaProxyReady, setIsMediaProxyReady] = useState(false)
 
   useEffect(() => {
-    void initializeAppData()
-  }, [initializeAppData])
+    if (appStyle === 'trending') void initializeAppData()
+  }, [appStyle, initializeAppData])
 
   useEffect(() => {
     let active = true

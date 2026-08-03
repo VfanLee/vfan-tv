@@ -20,6 +20,15 @@ export { Checkbox } from './checkbox'
 export { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './card'
 export { Input } from './input'
 export {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from './pagination'
+export {
   Popover,
   PopoverAnchor,
   PopoverContent,
