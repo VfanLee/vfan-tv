@@ -4,7 +4,7 @@ import type { SearchEvent } from '@shared/types'
 import type { HttpClient } from '../../infrastructure/http/http-client'
 import type { SourceService } from '../sources/source.service'
 import type { SearchTaskManager } from './search-task-manager'
-import { buildVodSearchUrl, normalizeVodApiResponse } from './vod-api'
+import { buildVodDetailUrl, buildVodSearchUrl, normalizeVodApiResponse } from './vod-api'
 
 const SEARCH_CONCURRENCY = 6
 const SOURCE_TIMEOUT_MS = 15_000
@@ -92,12 +92,17 @@ export class VodSearchService {
     })
 
     try {
-      const response = await this.httpClient.get(buildVodSearchUrl(source.url, keyword), {
+      const requestOptions = {
         headers: source.referer ? { Referer: source.referer } : undefined,
         signal,
         timeout: SOURCE_TIMEOUT_MS,
-      })
-      const items = normalizeVodApiResponse(response, source)
+      }
+      const listResponse = await this.httpClient.get(buildVodSearchUrl(source.url, keyword), requestOptions)
+      const listItems = normalizeVodApiResponse(listResponse, source)
+      const vodIds = [...new Set(listItems.map((item) => item.vodId).filter(Boolean))]
+      const detailResponse =
+        vodIds.length > 0 ? await this.httpClient.get(buildVodDetailUrl(source.url, vodIds), requestOptions) : undefined
+      const items = detailResponse ? normalizeVodApiResponse(detailResponse, source) : []
 
       this.emit({
         type: 'source-result',

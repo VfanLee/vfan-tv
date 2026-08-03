@@ -3,9 +3,15 @@ import type { VodApiItem, VodApiResponse, VodSearchResult, VodSourceConfig } fro
 // 兼容不同 CMS 返回形态：本模块只做协议归一化，不承担网络请求和业务筛选。
 export function buildVodSearchUrl(sourceUrl: string, keyword: string): string {
   const url = new URL(sourceUrl)
-  url.searchParams.set('ac', 'detail')
+  url.searchParams.set('ac', 'list')
   url.searchParams.set('wd', keyword)
-  url.searchParams.set('pagesize', '30')
+  return url.toString()
+}
+
+export function buildVodDetailUrl(sourceUrl: string, vodIds: string[]): string {
+  const url = new URL(sourceUrl)
+  url.searchParams.set('ac', 'detail')
+  url.searchParams.set('ids', vodIds.join(','))
   return url.toString()
 }
 

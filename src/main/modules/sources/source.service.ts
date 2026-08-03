@@ -303,7 +303,6 @@ function buildVodSourceProbeUrl(sourceUrl: string): string {
   if (!['http:', 'https:'].includes(url.protocol)) throw new Error('仅支持 HTTP 或 HTTPS 地址')
   url.searchParams.set('ac', 'list')
   url.searchParams.set('pg', '1')
-  url.searchParams.set('limit', '1')
   return url.toString()
 }
 
