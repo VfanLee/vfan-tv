@@ -183,6 +183,7 @@ jobs:
           ## 下载与安装
 
           - **macOS Apple Silicon**：下载 `*-arm64.dmg`。
+          - **macOS Intel**：下载 `*-x64.dmg`。
           - **Windows x64**：下载 `*-x64-setup.exe`。
           - **Windows ARM64**：下载 `*-arm64-setup.exe`。
 
