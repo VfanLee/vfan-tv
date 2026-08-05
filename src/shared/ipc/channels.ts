@@ -74,6 +74,7 @@ export const IPC_CHANNELS = {
   window: {
     isMaximized: 'window:is-maximized',
     toggleMaximize: 'window:toggle-maximize',
+    quitApp: 'window:quit-app',
     enterMiniWindowMode: 'window:enter-mini-window-mode',
     getMiniWindowPlayback: 'window:get-mini-window-playback',
     updateMiniWindowPlayback: 'window:update-mini-window-playback',

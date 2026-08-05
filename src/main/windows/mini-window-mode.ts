@@ -1,7 +1,4 @@
 import { BrowserWindow, screen, type Rectangle } from 'electron'
-import { is } from '@electron-toolkit/utils'
-import { dirname, join } from 'path'
-import { fileURLToPath } from 'url'
 import { IPC_CHANNELS } from '@shared/ipc'
 import type {
   MiniWindowMoveInput,
@@ -11,7 +8,6 @@ import type {
   MiniWindowBounds,
 } from '@shared/types'
 
-const currentDirectory = dirname(fileURLToPath(import.meta.url))
 const MINI_WINDOW_MARGIN = 16
 
 interface MiniWindowConfig {
@@ -80,7 +76,7 @@ export function enterMiniWindowMode(mainWindow: BrowserWindow, context: MiniWind
     minimizable: false,
     fullscreenable: false,
     backgroundColor: context.variant === 'radio' ? '#00000000' : '#000000',
-    webPreferences: { preload: join(currentDirectory, '../preload/index.mjs'), sandbox: false },
+    webPreferences: { preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY, sandbox: false },
   })
   const state: MiniWindowModeState = {
     context,
@@ -98,11 +94,9 @@ export function enterMiniWindowMode(mainWindow: BrowserWindow, context: MiniWind
   })
   miniWindow.once('closed', () => restoreMiniWindowMode(mainWindow, state.exit))
 
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    void miniWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}/#/mini-window`)
-  } else {
-    void miniWindow.loadFile(join(currentDirectory, '../renderer/index.html'), { hash: 'mini-window' })
-  }
+  const miniWindowUrl = new URL(MAIN_WINDOW_WEBPACK_ENTRY)
+  miniWindowUrl.hash = '/mini-window'
+  void miniWindow.loadURL(miniWindowUrl.toString())
 }
 
 export function getMiniWindowPlayback(

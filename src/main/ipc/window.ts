@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron'
+import { app, ipcMain } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc'
 import type { ApplicationContext } from '../app/composition-root'
 import {
@@ -60,5 +60,8 @@ export function registerWindowIpc(context: ApplicationContext): void {
     }
     window.maximize()
     return true
+  })
+  ipcMain.handle(IPC_CHANNELS.window.quitApp, () => {
+    app.quit()
   })
 }

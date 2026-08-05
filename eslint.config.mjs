@@ -11,13 +11,20 @@ export default defineConfig(
       '**/node_modules',
       '**/dist',
       '**/out',
+      '**/.webpack',
       'components.json',
-      'src/renderer/src/styles/main.css',
-      'src/renderer/src/ui/**',
-      'src/renderer/src/lib/utils.ts',
+      'src/renderer/styles/main.css',
+      'src/renderer/ui/**',
     ],
   },
   tseslint.configs.recommended,
+  {
+    files: ['config/webpack/**/*.cjs', 'postcss.config.cjs'],
+    rules: {
+      '@typescript-eslint/explicit-function-return-type': 'off',
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
   eslintPluginReact.configs.flat.recommended,
   eslintPluginReact.configs.flat['jsx-runtime'],
   {
@@ -35,7 +42,7 @@ export default defineConfig(
     },
     rules: {
       ...eslintPluginReactHooks.configs.recommended.rules,
-      ...eslintPluginReactRefresh.configs.vite.rules,
+      ...eslintPluginReactRefresh.configs.recommended.rules,
     },
   },
   eslintConfigPrettier,

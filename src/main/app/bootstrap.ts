@@ -1,20 +1,19 @@
-import { app, BrowserWindow, Menu, nativeImage, dialog } from 'electron'
-import type { MenuItemConstructorOptions, MessageBoxOptions, MessageBoxReturnValue } from 'electron'
-import { join } from 'path'
+import { app, BrowserWindow, Menu, nativeImage } from 'electron'
+import type { MenuItemConstructorOptions } from 'electron'
+import { join, resolve } from 'path'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
-import icon from '../../../resources/icon.png?asset'
+import iconAsset from '../../../resources/icon.png'
 import { registerIpcHandlers } from '../ipc/register-handlers'
 import { createApplicationContext, type ApplicationContext } from './composition-root'
-import { openExternalUrl } from '../infrastructure/external/external-link'
-import { checkLatestRelease } from '../modules/updates/update-checker'
 import { createMainWindow } from '../windows/main-window'
 import { showActiveMiniWindow } from '../windows/mini-window-mode'
 import { APP_DISPLAY_NAME, APP_ID, USER_DATA_DIR_NAME } from '@shared/constants'
 import packageJson from '../../../package.json'
 
+// webpack 输出的资源路径相对于 main 产物目录，Electron 的图标 API 需要绝对路径。
+const icon = resolve(__dirname, iconAsset)
+
 let aboutWindow: BrowserWindow | null = null
-let updateCheckPromise: Promise<void> | null = null
-let hasRunStartupUpdateCheck = false
 let applicationContext: ApplicationContext | null = null
 
 configureAppIdentityAndPaths()
@@ -87,7 +86,7 @@ function showAboutWindow(): void {
       <img src="${iconDataUrl}" alt="${APP_DISPLAY_NAME}" />
       <h1>${APP_DISPLAY_NAME}</h1>
       <p class="version">v${getCurrentVersion()}</p>
-      <p class="description">Vfan TV 是一款免费开源、跨平台、开箱即用的桌面影视聚合播放器。</p>
+      <p class="description">Vfan TV 是一款免费开源、跨平台的桌面端影视聚合客户端（空壳）。</p>
       <p class="copyright">Copyright © 2026 VfanLee</p>
     </main>
   </body>
@@ -118,71 +117,6 @@ function showAboutWindow(): void {
     aboutWindow = null
   })
   void aboutWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`)
-}
-
-function showMessageBox(options: MessageBoxOptions): Promise<MessageBoxReturnValue> {
-  const parent = BrowserWindow.getFocusedWindow()
-  return parent ? dialog.showMessageBox(parent, options) : dialog.showMessageBox(options)
-}
-
-async function runUpdateCheck(interactive: boolean): Promise<void> {
-  try {
-    const settings = getApplicationContext().services.settings.get()
-    const currentVersion = getCurrentVersion()
-    const result = await checkLatestRelease(currentVersion, settings)
-
-    if (!result.updateAvailable) {
-      if (interactive) {
-        await showMessageBox({
-          type: 'info',
-          title: '检查更新',
-          message: '当前已是最新版本',
-          detail: `当前版本：v${currentVersion}`,
-          buttons: ['好'],
-        })
-      }
-      return
-    }
-
-    const response = await showMessageBox({
-      type: 'info',
-      title: '发现新版本',
-      message: '有新版本可用',
-      detail: `当前版本：v${result.currentVersion}\n最新版本：v${result.latestVersion}`,
-      buttons: ['前往下载', '稍后'],
-      defaultId: 0,
-      cancelId: 1,
-    })
-
-    if (response.response === 0) {
-      await openExternalUrl(result.manualDownloadUrl ?? result.downloadUrl ?? result.releaseUrl)
-    }
-  } catch (error) {
-    if (!interactive) return
-
-    const message = error instanceof Error ? error.message : '未知错误'
-    await showMessageBox({
-      type: 'warning',
-      title: '检查更新失败',
-      message: '暂时无法检查更新',
-      detail: `${message}\n\n请检查网络连接后重试。`,
-      buttons: ['好'],
-    })
-  }
-}
-
-function checkForUpdates(interactive: boolean): void {
-  if (updateCheckPromise) return
-
-  updateCheckPromise = runUpdateCheck(interactive).finally(() => {
-    updateCheckPromise = null
-  })
-}
-
-function scheduleStartupUpdateCheck(): void {
-  if (hasRunStartupUpdateCheck) return
-  hasRunStartupUpdateCheck = true
-  setTimeout(() => checkForUpdates(false), 3_000)
 }
 
 function createApplicationMenu(): void {
@@ -230,8 +164,6 @@ function createApplicationMenu(): void {
   ]
   const helpMenu: MenuItemConstructorOptions[] = [
     { label: `${APP_DISPLAY_NAME} v${getCurrentVersion()}`, enabled: false },
-    { type: 'separator' },
-    { label: '检查更新…', click: () => checkForUpdates(true) },
   ]
   const template: MenuItemConstructorOptions[] = [
     ...(isMac ? ([{ label: APP_DISPLAY_NAME, submenu: appMenu }] satisfies MenuItemConstructorOptions[]) : []),
@@ -282,7 +214,6 @@ app.whenReady().then(() => {
   })
 
   createWindow()
-  scheduleStartupUpdateCheck()
 
   app.on('activate', function () {
     showOrCreateApplicationWindow()

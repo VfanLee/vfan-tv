@@ -32,39 +32,32 @@ jobs:
           node -e "const version = require('./package.json').version; const expected = 'v' + version; if (process.env.RELEASE_TAG !== expected) { console.error('Tag ' + process.env.RELEASE_TAG + ' does not match package version ' + expected); process.exit(1); }"
 
   release:
-    name: Build ${{ matrix.platform }}
+    name: Build and publish ${{ matrix.platform }}
     needs: validate
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         include:
           - platform: macOS arm64
             os: macos-14
-            script: build:mac:arm64
-            artifact: release-macos-arm64
-            files: |
-              dist/*-arm64.dmg
-              dist/*.dmg.blockmap
-              dist/latest-mac.yml
+            script: publish:mac:arm64
+          - platform: macOS x64
+            os: macos-14
+            script: publish:mac:x64
           - platform: Windows x64
             os: windows-2022
-            script: build:win:x64
-            artifact: release-windows-x64
-            files: |
-              dist/*-x64-setup.exe
-              dist/*-x64-setup.exe.blockmap
-              dist/latest.yml
+            script: publish:win:x64
           - platform: Windows arm64
             os: windows-11-arm
-            script: build:win:arm64
-            artifact: release-windows-arm64
-            files: |
-              dist/*-arm64-setup.exe
-              dist/*-arm64-setup.exe.blockmap
+            script: publish:win:arm64
 
     env:
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      GITHUB_TOKEN: ${{ github.token }}
 
     steps:
       - name: Check out repository
@@ -73,7 +66,7 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 11.11.0
+          version: 11.20.0
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -84,16 +77,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build Electron app
+      - name: Build and upload Forge artifacts
         run: pnpm run ${{ matrix.script }}
-
-      - name: Upload installers and update metadata
-        uses: actions/upload-artifact@v7
-        with:
-          name: ${{ matrix.artifact }}
-          path: ${{ matrix.files }}
-          if-no-files-found: error
-          retention-days: 7
 
   publish:
     name: Publish GitHub Release
@@ -107,12 +92,32 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download installers
-        uses: actions/download-artifact@v8
-        with:
-          pattern: release-*
-          path: release-assets
-          merge-multiple: true
+      - name: Verify published artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          version="${RELEASE_TAG#v}"
+          assets="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          expected_assets=(
+            "vfan-tv-v${version}-arm64.dmg"
+            "vfan-tv-v${version}-x64.dmg"
+            "vfan-tv-v${version}-arm64-setup.exe"
+            "vfan-tv-v${version}-arm64-setup.exe.blockmap"
+            "vfan-tv-v${version}-x64-setup.exe"
+            "vfan-tv-v${version}-x64-setup.exe.blockmap"
+            "latest-arm64.yml"
+            "latest-x64.yml"
+          )
+
+          for expected in "${expected_assets[@]}"; do
+            if ! grep -Fxq "$expected" <<< "$assets"; then
+              echo "Missing release artifact: $expected" >&2
+              exit 1
+            fi
+          done
 
       - name: Generate release notes
         env:
@@ -180,14 +185,13 @@ jobs:
           - **macOS Apple Silicon**：下载 `*-arm64.dmg`。
           - **Windows x64**：下载 `*-x64-setup.exe`。
           - **Windows ARM64**：下载 `*-arm64-setup.exe`。
+
+          > Windows 用户若从 v0.9.0 或更早版本升级，应用内自动升级不再可用，请按上面的架构手动下载安装包覆盖安装一次；之后的版本即可继续使用自动升级。
           EOF
 
-      - name: Create or update release
+      - name: Finalize Forge draft release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release delete "$RELEASE_TAG" --yes --repo "$GITHUB_REPOSITORY"
-          fi
-          gh release create "$RELEASE_TAG" release-assets/* --verify-tag --notes-file release-notes.md --title "Vfan TV $RELEASE_TAG" --repo "$GITHUB_REPOSITORY"
+          gh release edit "$RELEASE_TAG" --draft=false --notes-file release-notes.md --title "Vfan TV $RELEASE_TAG" --repo "$GITHUB_REPOSITORY"

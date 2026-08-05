@@ -26,6 +26,7 @@ export function createSystemApi(): Pick<AppApi, 'settings' | 'updates' | 'window
     window: {
       isMaximized: () => ipcRenderer.invoke(IPC_CHANNELS.window.isMaximized),
       toggleMaximize: () => ipcRenderer.invoke(IPC_CHANNELS.window.toggleMaximize),
+      quitApp: () => ipcRenderer.invoke(IPC_CHANNELS.window.quitApp),
       enterMiniWindowMode: (context) => ipcRenderer.invoke(IPC_CHANNELS.window.enterMiniWindowMode, context),
       getMiniWindowPlayback: () => ipcRenderer.invoke(IPC_CHANNELS.window.getMiniWindowPlayback),
       updateMiniWindowPlayback: (input) => ipcRenderer.invoke(IPC_CHANNELS.window.updateMiniWindowPlayback, input),

@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { NsisUpdater } from 'electron-updater'
 import type { ProgressInfo, UpdateDownloadedEvent, UpdateInfo } from 'electron-updater'
-import { resolveGitHubUrl } from '@shared/constants'
+import { getWindowsUpdateChannel, resolveGitHubUrl } from '@shared/constants'
 import type { UpdateCheckResult, UpdateEvent } from '@shared/types'
 import type { SettingsService } from '../settings/settings.service'
 import { checkLatestRelease, isNewerVersion } from './update-checker'
@@ -15,7 +15,7 @@ type UpdateEventEmitter = (event: UpdateEvent) => void
 // 手动 Release 检查适用于所有平台；Windows 才额外尝试 electron-updater 的下载安装流程。
 export class UpdateService {
   private lastResult?: UpdateCheckResult
-  private suppressUpdaterErrorEvent = false
+  private suppressUpdaterEvents = false
   private updater?: NsisUpdater
 
   constructor(
@@ -73,7 +73,10 @@ export class UpdateService {
       throw new Error('当前平台不支持自动下载更新')
     }
 
-    await this.configureUpdater(true).downloadUpdate()
+    // electron-updater 下载时沿用上一次检查解析出的地址，因此下载前必须用最终下载源重新检查一次。
+    const updater = this.configureUpdater(this.lastResult?.latestVersion)
+    await this.runWithoutUpdaterEvents(() => updater.checkForUpdates())
+    await updater.downloadUpdate()
   }
 
   install(): void {
@@ -81,19 +84,21 @@ export class UpdateService {
       throw new Error('当前平台不支持自动安装更新')
     }
 
-    this.configureUpdater().quitAndInstall(false, true)
+    this.getUpdater().quitAndInstall(false, true)
   }
 
   private canUseAutoUpdater(): boolean {
     return process.platform === 'win32' && !process.env.PORTABLE_EXECUTABLE_DIR
   }
 
-  private configureUpdater(useGitHubProxy = false): NsisUpdater {
+  // 已知目标版本时使用带 tag 的下载地址：它能被 GitHub 加速服务识别，`releases/latest/download` 则不能。
+  private configureUpdater(version?: string): NsisUpdater {
     const settings = this.settingsService.get()
-    const feedUrl = useGitHubProxy ? resolveGitHubUrl(RELEASE_DOWNLOAD_BASE_URL, settings) : RELEASE_DOWNLOAD_BASE_URL
+    const baseUrl = version ? `${REPOSITORY_URL}/releases/download/v${version}/` : RELEASE_DOWNLOAD_BASE_URL
     const updater = this.getUpdater()
 
-    updater.setFeedURL({ provider: 'generic', url: feedUrl })
+    updater.channel = getWindowsUpdateChannel(process.arch)
+    updater.setFeedURL({ provider: 'generic', url: resolveGitHubUrl(baseUrl, settings) })
     return updater
   }
 
@@ -104,11 +109,16 @@ export class UpdateService {
     updater.autoDownload = false
     updater.autoInstallOnAppQuit = false
     updater.disableWebInstaller = true
-    updater.on('checking-for-update', () => this.emitEvent({ status: 'checking' }))
+    // Release 只提供当前版本的资产，旧版本 blockmap 必然 404，差量下载只会失败后回退整包。
+    updater.disableDifferentialDownload = true
+    updater.on('checking-for-update', () => {
+      if (this.suppressUpdaterEvents) return
+      this.emitEvent({ status: 'checking' })
+    })
     updater.on('download-progress', (progress) => this.emitProgress(progress))
     updater.on('update-downloaded', (event) => this.handleUpdateDownloaded(event))
     updater.on('error', (error) => {
-      if (this.suppressUpdaterErrorEvent) return
+      if (this.suppressUpdaterEvents) return
       this.emitEvent({ message: getErrorMessage(error), status: 'error' })
     })
 
@@ -146,7 +156,7 @@ export class UpdateService {
     }
 
     try {
-      const updateCheckResult = await this.checkForUpdatesSilently()
+      const updateCheckResult = await this.checkForUpdatesSilently(manualResult.latestVersion)
       const updateInfo = updateCheckResult?.updateInfo
       const updateAvailable = isUpdateInfoNewer(updateInfo, this.getCurrentVersion())
 
@@ -168,13 +178,17 @@ export class UpdateService {
     }
   }
 
-  private async checkForUpdatesSilently(): ReturnType<NsisUpdater['checkForUpdates']> {
-    // 手动检查失败后用于补充元数据的自动检查不应重复向 UI 报错。
-    this.suppressUpdaterErrorEvent = true
+  private async checkForUpdatesSilently(version?: string): ReturnType<NsisUpdater['checkForUpdates']> {
+    return this.runWithoutUpdaterEvents(() => this.configureUpdater(version).checkForUpdates())
+  }
+
+  // 仅用于补充元数据的内部检查不应改写 UI 状态，也不应重复报错。
+  private async runWithoutUpdaterEvents<T>(action: () => Promise<T>): Promise<T> {
+    this.suppressUpdaterEvents = true
     try {
-      return await this.configureUpdater().checkForUpdates()
+      return await action()
     } finally {
-      this.suppressUpdaterErrorEvent = false
+      this.suppressUpdaterEvents = false
     }
   }
   private createResultFromUpdateInfo(

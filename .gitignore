@@ -2,10 +2,14 @@
 node_modules/
 .pnpm-store/
 
-# Build outputs
-dist/
+# Electron Forge / build outputs
+.webpack/
 out/
+
+# Legacy and auxiliary outputs
+dist/
 release/
+coverage/
 
 # Caches
 .eslintcache

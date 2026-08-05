@@ -14,7 +14,7 @@ const DEFAULT_GITHUB_PROXY_SETTINGS: Pick<AppSettings, 'githubProxyCustomPrefix'
 }
 
 // 独立于 electron-updater 的 Release 检查，保证 macOS/Linux 也能展示可下载的新版本。
-interface LatestRelease {
+export interface LatestRelease {
   assets?: DownloadAsset[]
   name: string
   notes: string
@@ -89,7 +89,7 @@ function parseReleaseAssets(assets: unknown): DownloadAsset[] {
   })
 }
 
-function parseLatestReleasePayload(payload: GitHubReleasePayload): LatestRelease {
+export function parseLatestReleasePayload(payload: GitHubReleasePayload): LatestRelease {
   const tag = normalizeReleaseText(payload.tag_name)
 
   if (!tag) {
@@ -204,7 +204,7 @@ async function fetchLatestRelease(): Promise<LatestRelease> {
   }
 }
 
-function getAssetNames(version: string, platform: NodeJS.Platform, arch: string): string[] {
+export function getReleaseAssetNames(version: string, platform: NodeJS.Platform, arch: string): string[] {
   if (platform === 'win32') {
     return [`vfan-tv-v${version}-${arch}-setup.exe`]
   }
@@ -252,7 +252,7 @@ async function resolveDownloadAsset(
   settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'>,
   releaseAssets: DownloadAsset[] = [],
 ): Promise<DownloadAsset | undefined> {
-  const assetNames = getAssetNames(version, platform, arch)
+  const assetNames = getReleaseAssetNames(version, platform, arch)
 
   for (const name of assetNames) {
     const releaseAsset = releaseAssets.find((asset) => asset.name === name)

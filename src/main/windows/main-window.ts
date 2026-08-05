@@ -1,11 +1,6 @@
 import { BrowserWindow } from 'electron'
-import { dirname, join } from 'path'
-import { fileURLToPath } from 'url'
-import { is } from '@electron-toolkit/utils'
 import { APP_DISPLAY_NAME } from '@shared/constants'
 import { isAllowedExternalUrl, openExternalUrl } from '../infrastructure/external/external-link'
-
-const currentDirectory = dirname(fileURLToPath(import.meta.url))
 
 // 主窗口及其导航边界。窗口创建后通过回调登记，避免 IPC 层保存全局窗口引用。
 interface CreateMainWindowOptions {
@@ -21,7 +16,7 @@ export function createMainWindow({ icon, onCreated }: CreateMainWindowOptions): 
     show: false,
     autoHideMenuBar: true,
     icon,
-    webPreferences: { preload: join(currentDirectory, '../preload/index.mjs'), sandbox: false },
+    webPreferences: { preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY, sandbox: false },
   })
   onCreated(mainWindow)
   mainWindow.on('ready-to-show', () => {
@@ -42,8 +37,7 @@ export function createMainWindow({ icon, onCreated }: CreateMainWindowOptions): 
       void openExternalUrl(url).catch((error: unknown) => console.error('Failed to open external URL:', url, error))
     }
   })
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) void mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
-  else void mainWindow.loadFile(join(currentDirectory, '../renderer/index.html'))
+  void mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY)
 }
 
 function isSameAppOrigin(window: BrowserWindow, url: string): boolean {

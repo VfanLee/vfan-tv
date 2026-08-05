@@ -164,6 +164,7 @@ export interface AppApi {
   window: {
     isMaximized: () => Promise<boolean>
     toggleMaximize: () => Promise<boolean>
+    quitApp: () => Promise<void>
     enterMiniWindowMode: (context: MiniWindowPlaybackContext) => Promise<void>
     getMiniWindowPlayback: () => Promise<MiniWindowPlaybackContext | undefined>
     updateMiniWindowPlayback: (input: MiniWindowPlaybackExit) => Promise<void>

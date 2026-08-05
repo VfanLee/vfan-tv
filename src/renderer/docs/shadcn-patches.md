@@ -1,5 +1,15 @@
 # shadcn patches
 
+## 2026-08-05
+
+- Overwrote installed official UI components via `pnpm dlx shadcn@latest add … --overwrite --yes` (preset `bGW` / `radix-nova`).
+  - Covered: accordion, alert, alert-dialog, badge, button, card, checkbox, empty, input, pagination, popover, radio-group, select, skeleton, switch, table.
+  - Left local-only `search-box` / `segmented-tabs` untouched.
+  - Note: `init --force --reinstall` and `apply` fail on this Electron/manual project because framework detection is unsupported; use `add --overwrite` instead.
+  - Button pointer cursor remains in `styles/custom.css` (not in generated `button.tsx`).
+  - Reapplied `Table` local extensions after overwrite: `containerClassName` / `containerProps` / `containerRef` for scrollable source tables.
+    - Upgrade note: reapply these props on `Table` after regenerating `table`.
+
 ## 2026-07-16
 
 - Moved shadcn-generated components from `components/ui` to `ui` and updated `components.json` plus all renderer imports to use the `@/ui/*` alias.

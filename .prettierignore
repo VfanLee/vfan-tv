@@ -1,5 +1,6 @@
-out
-dist
+out/
+dist/
+.webpack/
 pnpm-lock.yaml
 LICENSE.md
 
@@ -7,6 +8,6 @@ tsconfig.json
 tsconfig.*.json
 
 components.json
-src/renderer/src/styles/main.css
-src/renderer/src/ui
-src/renderer/src/lib/utils.ts
+src/renderer/styles/main.css
+src/renderer/ui/
+src/renderer/utils/cn.ts
