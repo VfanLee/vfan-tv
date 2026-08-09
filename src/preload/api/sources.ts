@@ -2,7 +2,7 @@ import { ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc'
 import type { AppApi } from '@shared/types'
 
-export function createSourcesApi(): Pick<AppApi, 'sources' | 'liveSources'> {
+export function createSourcesApi(): Pick<AppApi, 'sources' | 'iptvSources'> {
   return {
     sources: {
       list: () => ipcRenderer.invoke(IPC_CHANNELS.sources.list),
@@ -21,17 +21,17 @@ export function createSourcesApi(): Pick<AppApi, 'sources' | 'liveSources'> {
       deleteSubscription: (subscriptionId) =>
         ipcRenderer.invoke(IPC_CHANNELS.sources.deleteSubscription, subscriptionId),
     },
-    liveSources: {
-      list: () => ipcRenderer.invoke(IPC_CHANNELS.liveSources.list),
-      create: (input) => ipcRenderer.invoke(IPC_CHANNELS.liveSources.create, input),
-      update: (id, input) => ipcRenderer.invoke(IPC_CHANNELS.liveSources.update, id, input),
-      reorder: (sourceIds) => ipcRenderer.invoke(IPC_CHANNELS.liveSources.reorder, sourceIds),
-      delete: (id) => ipcRenderer.invoke(IPC_CHANNELS.liveSources.delete, id),
-      clear: () => ipcRenderer.invoke(IPC_CHANNELS.liveSources.clear),
-      previewImport: (payload) => ipcRenderer.invoke(IPC_CHANNELS.liveSources.previewImport, payload),
-      confirmImport: (payload) => ipcRenderer.invoke(IPC_CHANNELS.liveSources.confirmImport, payload),
-      importFromFile: () => ipcRenderer.invoke(IPC_CHANNELS.liveSources.importFromFile),
-      exportToFile: () => ipcRenderer.invoke(IPC_CHANNELS.liveSources.exportToFile),
+    iptvSources: {
+      list: () => ipcRenderer.invoke(IPC_CHANNELS.iptvSources.list),
+      create: (input) => ipcRenderer.invoke(IPC_CHANNELS.iptvSources.create, input),
+      update: (id, input) => ipcRenderer.invoke(IPC_CHANNELS.iptvSources.update, id, input),
+      reorder: (sourceIds) => ipcRenderer.invoke(IPC_CHANNELS.iptvSources.reorder, sourceIds),
+      delete: (id) => ipcRenderer.invoke(IPC_CHANNELS.iptvSources.delete, id),
+      clear: () => ipcRenderer.invoke(IPC_CHANNELS.iptvSources.clear),
+      previewImport: (payload) => ipcRenderer.invoke(IPC_CHANNELS.iptvSources.previewImport, payload),
+      confirmImport: (payload) => ipcRenderer.invoke(IPC_CHANNELS.iptvSources.confirmImport, payload),
+      importFromFile: () => ipcRenderer.invoke(IPC_CHANNELS.iptvSources.importFromFile),
+      exportToFile: () => ipcRenderer.invoke(IPC_CHANNELS.iptvSources.exportToFile),
     },
   }
 }

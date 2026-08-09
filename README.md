@@ -15,7 +15,7 @@
 在下载、安装或使用本软件前，请仔细阅读并理解下列条款。继续使用即视为您已知悉并接受：
 
 1. **软件性质**  
-   本软件系影视聚合客户端（空壳），**不提供、不内置、不运营**任何点播源、直播源或视听内容。全部数据源、链接及播放内容均由用户自行获取、配置与使用。
+   本软件系影视聚合客户端（空壳），**不提供、不内置、不运营**任何 VOD 源、IPTV 源或视听内容。全部数据源、链接及播放内容均由用户自行获取、配置与使用。
 
 2. **使用范围**  
    本软件仅供个人学习与研究目的使用。**禁止**将本软件用于任何商业用途，**禁止**基于本软件对外提供公开服务、运营平台或有偿服务。
@@ -34,11 +34,11 @@
 
 ## ✨ 功能特性
 
-- 📦 **多源管理**：订阅源、点播源、直播源可添加、启用与同步
+- 📦 **多源管理**：订阅源、VOD 源、IPTV 源可添加、启用与同步
 - 🔍 **全源搜索**：一次搜索多个点播源
 - 🎬 **点播观看**：资源库分类浏览，或按热门内容发现
 - 🔀 **换源备用**：播放时可换源，支持备用地址切换
-- 📡 **直播**：播放 IPTV 直播频道
+- 📡 **IPTV**：浏览频道墙、节目单并播放 IPTV 频道
 - 📻 **电台**：收听网络电台
 - 🔗 **直链播放**：粘贴视频链接即可播放
 - ⭐ **收藏**：收藏喜欢的影视内容
@@ -77,33 +77,30 @@
 
 解码后必须是配置对象：
 
-```jsonc
+```json
 {
-  // 上次更新时间
-  "updatedAt": 1782518400000,
-  // 点播源
   "vod": [
     {
       "name": "示例点播源",
       "url": "https://example.com/api.php/provide/vod",
-      "referer": "https://example.com",
-      "enabled": true,
-      "backups": [
-        {
-          "url": "https://backup.example.com/api.php/provide/vod",
-          "referer": "https://backup.example.com",
-        },
-      ],
-    },
+      "headers": {
+        "User-Agent": "VfanTV",
+        "Referer": "https://example.com/"
+      },
+      "backups": ["https://backup.example.com/api.php/provide/vod"]
+    }
   ],
-  // 直播源
-  "live": [
+  "iptv": [
     {
-      "name": "示例直播源",
-      "url": "https://example.com/live.m3u",
-      "enabled": true,
-    },
-  ],
+      "name": "示例 IPTV 源",
+      "url": "https://example.com/iptv.m3u",
+      "headers": {
+        "User-Agent": "VfanTV",
+        "Referer": "https://example.com/",
+        "X-Custom-Header": "value"
+      }
+    }
+  ]
 }
 ```
 
@@ -111,9 +108,11 @@
 
 - `name`: 点播源名称
 - `url`: 点播源 URL
-- `referer`: 点播源 Referer。可选，默认为空
-- `enabled`: 是否启用。可选，默认为 `false`
+- `disabled`: 是否禁用。可选，默认为 `false`；不传即启用
+- `headers`: 点播请求 Header 字符串键值对象。可选，默认为 `{}`；支持 `User-Agent`、`Referer` 和自定义 Header
 - `backups`: 备用点播地址列表。可选，默认空数组；不能包含当前 `url`，切换时会与当前地址交换
+
+同一个点播源的当前地址和备用地址共用 `headers`。这些 Header 会用于点播 API、详情、搜索、测速、关联海报、视频地址探测、清单、分片和外挂音轨。
 
 示例：
 
@@ -122,23 +121,25 @@
   {
     "name": "示例源",
     "url": "https://example.com/api.php/provide/vod",
-    "referer": "https://example.com",
-    "enabled": true,
-    "backups": [
-      {
-        "url": "https://backup.example.com/api.php/provide/vod",
-        "referer": "https://backup.example.com"
-      }
-    ]
+    "headers": {
+      "User-Agent": "VfanTV",
+      "Referer": "https://example.com/"
+    },
+    "backups": ["https://backup.example.com/api.php/provide/vod"]
   }
 ]
 ```
 
-### 📡 直播源格式
+### 📡 IPTV 源格式
 
-- `name`: 直播源名称
-- `url`: 直播源 URL
-- `enabled`: 是否启用。可选，默认为 `true`
+- `name`: IPTV 源名称
+- `url`: IPTV 源 URL，支持远程 HTTP(S) M3U/M3U8/TXT 播放列表
+- `disabled`: 是否禁用。可选，默认为 `false`；不传即启用
+- `headers`: 请求 Header 字符串键值对象。可选，默认为 `{}`；支持 `User-Agent`、`Referer` 和自定义 Header
+
+`headers` 用于下载 IPTV 播放列表、加载台标、频道预览、正式播放和媒体分片。频道地址内嵌的 Header 优先于 IPTV 源 `headers`；EPG 与 IPTV Header 完全独立。
+
+`Host`、`Content-Length`、`Connection`、`Transfer-Encoding`、`Range` 等传输层 Header 不受支持；Header 名称不区分大小写，不能重复。未配置 `User-Agent` 时，应用不会主动向媒体上游设置该请求头。
 
 示例：
 
@@ -146,10 +147,71 @@
 [
   {
     "name": "示例源",
-    "url": "https://example.com/live.m3u",
-    "enabled": true
+    "url": "https://example.com/iptv.m3u",
+    "headers": {
+      "User-Agent": "VfanTV",
+      "Referer": "https://example.com/",
+      "X-Custom-Header": "value"
+    }
   }
 ]
+```
+
+不需要自定义请求参数时，可以省略 `headers`，或写为：
+
+```json
+"headers": {}
+```
+
+### 📅 IPTV 节目单设置
+
+IPTV 节目单是应用级全局设置，存储在 `iptvEpg`：
+
+- `source`：跟随 IPTV 源在 M3U 中声明的 EPG 地址
+- `query`：使用自定义频道查询接口，可使用 `{name}` 和 `{date}` 占位符
+- `xmltv`：使用自定义 XMLTV/XML.GZ 地址
+
+自定义 EPG 请求失败时，应用会尝试回退到当前 IPTV 源内嵌的 EPG。
+
+### 💾 应用备份格式
+
+应用数据备份使用 `schemaVersion: 3`。VOD/IPTV 的 `headers` 和 VOD 的字符串 `backups` 与上述格式一致。备份只接受当前 v3 结构，旧字段和旧版本会被拒绝。
+
+```json
+{
+  "app": "vfan-tv",
+  "schemaVersion": 3,
+  "exportedAt": 1782518400000,
+  "subscriptions": [],
+  "iptvEpg": {
+    "mode": "source",
+    "lastTest": { "status": "idle" }
+  },
+  "vod": [
+    {
+      "name": "示例点播源",
+      "url": "https://example.com/api.php/provide/vod",
+      "disabled": false,
+      "headers": { "Referer": "https://example.com/" },
+      "backups": ["https://backup.example.com/api.php/provide/vod"],
+      "origin": "manual",
+      "sort": 0
+    }
+  ],
+  "iptv": [
+    {
+      "name": "示例 IPTV 源",
+      "url": "https://example.com/iptv.m3u",
+      "disabled": false,
+      "headers": { "User-Agent": "VfanTV" },
+      "origin": "manual",
+      "sort": 0
+    }
+  ],
+  "recent": [],
+  "favorites": [],
+  "searchHistory": []
+}
 ```
 
 ## 📄 许可证

@@ -1,7 +1,8 @@
 import { useEffect } from 'react'
 import { create } from 'zustand'
 import { toast } from 'sonner'
-import type { UpdateCheckResult, UpdateDownloadProgress } from '@shared/types'
+import { applyReleaseDownloadRoute } from '@shared/constants'
+import type { ReleaseDownloadRouteId, UpdateCheckResult, UpdateDownloadProgress } from '@shared/types'
 import {
   checkForUpdates,
   downloadUpdate,
@@ -22,7 +23,7 @@ interface AppUpdateState {
   check: () => Promise<void>
   download: () => Promise<void>
   install: () => Promise<void>
-  openManualDownload: () => Promise<void>
+  openManualDownload: (routeId: ReleaseDownloadRouteId) => Promise<void>
   setCurrentVersion: (version: string) => void
 }
 
@@ -62,12 +63,17 @@ export const useAppUpdateStore = create<AppUpdateState>((set, get) => ({
       toast.error('安装更新失败', { description: getDisplayErrorMessage(error) })
     }
   },
-  openManualDownload: async () => {
+  openManualDownload: async (routeId) => {
     const result = get().result
     if (!result) return
-    const url = result.manualDownloadUrl ?? result.downloadUrl ?? result.releaseUrl
-    if (!url) return
-    await openExternalUrl(url)
+    const url = result.manualDownloadUrl
+      ? applyReleaseDownloadRoute(result.manualDownloadUrl, routeId)
+      : result.releaseUrl
+    try {
+      await openExternalUrl(url)
+    } catch (error) {
+      toast.error('无法打开下载地址', { description: getDisplayErrorMessage(error) })
+    }
   },
 }))
 

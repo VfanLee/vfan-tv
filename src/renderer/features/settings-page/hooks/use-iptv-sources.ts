@@ -1,58 +1,58 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import type { LiveSourceConfig } from '@shared/types'
+import type { IptvSourceConfig } from '@shared/types'
 import {
-  clearLiveSources,
-  deleteLiveSource,
-  exportLiveSourcesToFile,
-  importLiveSourcesFromFile,
-  listLiveSources,
-  reorderLiveSources,
-  updateLiveSource,
+  clearIptvSources,
+  deleteIptvSource,
+  exportIptvSourcesToFile,
+  importIptvSourcesFromFile,
+  listIptvSources,
+  reorderIptvSources,
+  updateIptvSource,
 } from '@renderer/platform/api'
 import { moveItemToEdge, toggleId } from '../utils'
 
-export interface LiveSourcesState {
+export interface IptvSourcesState {
   allSelected: boolean
   enabledCount: number
   isBatchUpdating: boolean
   isClearing: boolean
   isReordering: boolean
   selectedSourceIds: Set<string>
-  sources: LiveSourceConfig[]
-  applySources: (sources: LiveSourceConfig[]) => void
-  batchToggle: (enabled: boolean) => Promise<void>
+  sources: IptvSourceConfig[]
+  applySources: (sources: IptvSourceConfig[]) => void
+  batchSetDisabled: (disabled: boolean) => Promise<void>
   clearAll: () => Promise<void>
-  deleteItem: (source: LiveSourceConfig) => Promise<void>
+  deleteItem: (source: IptvSourceConfig) => Promise<void>
   exportItems: () => Promise<void>
   importItems: () => Promise<void>
   moveToEdge: (sourceId: string, edge: 'start' | 'end') => Promise<void>
   refresh: () => Promise<void>
-  toggle: (source: LiveSourceConfig, enabled: boolean) => Promise<void>
+  setDisabled: (source: IptvSourceConfig, disabled: boolean) => Promise<void>
   toggleAll: () => void
   toggleSelection: (sourceId: string) => void
 }
 
-export function useLiveSources(apiAvailable: boolean): LiveSourcesState {
-  const [sources, setSources] = useState<LiveSourceConfig[]>([])
+export function useIptvSources(apiAvailable: boolean): IptvSourcesState {
+  const [sources, setSources] = useState<IptvSourceConfig[]>([])
   const [selectedSourceIds, setSelectedSourceIds] = useState<Set<string>>(() => new Set())
   const [isBatchUpdating, setIsBatchUpdating] = useState(false)
   const [isClearing, setIsClearing] = useState(false)
   const [isReordering, setIsReordering] = useState(false)
 
-  const applySources = useCallback((nextSources: LiveSourceConfig[]): void => {
+  const applySources = useCallback((nextSources: IptvSourceConfig[]): void => {
     const sourceIds = new Set(nextSources.map((source) => source.id))
     setSources(nextSources)
     setSelectedSourceIds((current) => new Set([...current].filter((id) => sourceIds.has(id))))
   }, [])
 
   const refresh = useCallback(async (): Promise<void> => {
-    applySources(await listLiveSources())
+    applySources(await listIptvSources())
   }, [applySources])
 
   useEffect(() => {
     let active = true
-    void listLiveSources().then((nextSources) => {
+    void listIptvSources().then((nextSources) => {
       if (active) applySources(nextSources)
     })
     return () => {
@@ -63,7 +63,7 @@ export function useLiveSources(apiAvailable: boolean): LiveSourcesState {
   const importItems = async (): Promise<void> => {
     if (!apiAvailable) return
     try {
-      const result = await importLiveSourcesFromFile()
+      const result = await importIptvSourcesFromFile()
       if (result.cancelled) return
       toast.success('导入完成', {
         description: `新增 ${result.created.length}，覆盖 ${result.overwritten.length}，跳过 ${result.skipped.length}`,
@@ -77,9 +77,9 @@ export function useLiveSources(apiAvailable: boolean): LiveSourcesState {
   const exportItems = async (): Promise<void> => {
     if (!apiAvailable) return
     try {
-      const result = await exportLiveSourcesToFile()
+      const result = await exportIptvSourcesToFile()
       if (result.cancelled) return
-      toast.success('导出完成', { description: `已导出 ${result.count} 个直播源` })
+      toast.success('导出完成', { description: `已导出 ${result.count} 个 IPTV 源` })
     } catch (error) {
       toast.error('导出失败', { description: error instanceof Error ? error.message : String(error) })
     }
@@ -89,9 +89,9 @@ export function useLiveSources(apiAvailable: boolean): LiveSourcesState {
     if (!apiAvailable || sources.length === 0) return
     setIsClearing(true)
     try {
-      await clearLiveSources()
+      await clearIptvSources()
       applySources([])
-      toast.success('已清空全部直播源')
+      toast.success('已清空全部 IPTV 源')
     } catch (error) {
       toast.error('清空失败', { description: error instanceof Error ? error.message : String(error) })
     } finally {
@@ -99,23 +99,28 @@ export function useLiveSources(apiAvailable: boolean): LiveSourcesState {
     }
   }
 
-  const deleteItem = async (source: LiveSourceConfig): Promise<void> => {
+  const deleteItem = async (source: IptvSourceConfig): Promise<void> => {
     if (!apiAvailable) return
     try {
-      await deleteLiveSource(source.id)
-      toast.success('已删除直播源')
+      await deleteIptvSource(source.id)
+      toast.success('已删除 IPTV 源')
       await refresh()
     } catch (error) {
       toast.error('删除失败', { description: error instanceof Error ? error.message : String(error) })
     }
   }
 
-  const toggle = async (source: LiveSourceConfig, enabled: boolean): Promise<void> => {
+  const setDisabled = async (source: IptvSourceConfig, disabled: boolean): Promise<void> => {
     if (!apiAvailable) return
     const previousSources = sources
-    setSources((current) => current.map((item) => (item.id === source.id ? { ...item, enabled } : item)))
+    setSources((current) => current.map((item) => (item.id === source.id ? { ...item, disabled } : item)))
     try {
-      await updateLiveSource(source.id, { name: source.name, url: source.url, enabled })
+      await updateIptvSource(source.id, {
+        name: source.name,
+        url: source.url,
+        disabled,
+        headers: source.headers,
+      })
     } catch (error) {
       setSources(previousSources)
       toast.error('状态更新失败', { description: error instanceof Error ? error.message : String(error) })
@@ -127,22 +132,29 @@ export function useLiveSources(apiAvailable: boolean): LiveSourcesState {
     setSelectedSourceIds(allSelected ? new Set() : new Set(sources.map((source) => source.id)))
   }
 
-  const batchToggle = async (enabled: boolean): Promise<void> => {
+  const batchSetDisabled = async (disabled: boolean): Promise<void> => {
     const selectedSources = sources.filter((source) => selectedSourceIds.has(source.id))
     if (!apiAvailable || selectedSources.length === 0) return
     setIsBatchUpdating(true)
     setSources((current) =>
-      current.map((source) => (selectedSourceIds.has(source.id) ? { ...source, enabled } : source)),
+      current.map((source) => (selectedSourceIds.has(source.id) ? { ...source, disabled } : source)),
     )
     const results = await Promise.allSettled(
-      selectedSources.map((source) => updateLiveSource(source.id, { name: source.name, url: source.url, enabled })),
+      selectedSources.map((source) =>
+        updateIptvSource(source.id, {
+          name: source.name,
+          url: source.url,
+          disabled,
+          headers: source.headers,
+        }),
+      ),
     )
     const failedCount = results.filter((result) => result.status === 'rejected').length
     await refresh()
     setIsBatchUpdating(false)
     if (failedCount > 0)
-      toast.error('部分状态更新失败', { description: `${failedCount} 个直播源未能更新，请稍后重试。` })
-    else toast.success(`已${enabled ? '开启' : '关闭'} ${selectedSources.length} 个直播源`)
+      toast.error('部分状态更新失败', { description: `${failedCount} 个 IPTV 源未能更新，请稍后重试。` })
+    else toast.success(`已${disabled ? '关闭' : '开启'} ${selectedSources.length} 个 IPTV 源`)
   }
 
   const moveToEdge = async (sourceId: string, edge: 'start' | 'end'): Promise<void> => {
@@ -153,7 +165,7 @@ export function useLiveSources(apiAvailable: boolean): LiveSourcesState {
     setSources(nextSources)
     setIsReordering(true)
     try {
-      applySources(await reorderLiveSources(nextSources.map((source) => source.id)))
+      applySources(await reorderIptvSources(nextSources.map((source) => source.id)))
     } catch (error) {
       setSources(previousSources)
       toast.error('排序保存失败', { description: error instanceof Error ? error.message : String(error) })
@@ -164,21 +176,21 @@ export function useLiveSources(apiAvailable: boolean): LiveSourcesState {
 
   return {
     allSelected,
-    enabledCount: sources.filter((source) => source.enabled).length,
+    enabledCount: sources.filter((source) => !source.disabled).length,
     isBatchUpdating,
     isClearing,
     isReordering,
     selectedSourceIds,
     sources,
     applySources,
-    batchToggle,
+    batchSetDisabled,
     clearAll,
     deleteItem,
     exportItems,
     importItems,
     moveToEdge,
     refresh,
-    toggle,
+    setDisabled,
     toggleAll,
     toggleSelection: (sourceId) => setSelectedSourceIds((current) => toggleId(current, sourceId)),
   }

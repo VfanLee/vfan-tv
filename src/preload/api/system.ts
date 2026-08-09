@@ -4,17 +4,20 @@ import { IPC_CHANNELS } from '@shared/ipc'
 import type { AppApi, MiniWindowPlaybackExit, UpdateEvent } from '@shared/types'
 
 // 系统能力按白名单暴露，不向 renderer 透传 ipcRenderer 或任意 channel 调用权。
-export function createSystemApi(): Pick<AppApi, 'settings' | 'updates' | 'window' | 'shell'> {
+export function createSystemApi(): Pick<AppApi, 'settings' | 'network' | 'updates' | 'window' | 'shell'> {
   return {
     settings: {
       get: () => ipcRenderer.invoke(IPC_CHANNELS.settings.get),
       update: (input) => ipcRenderer.invoke(IPC_CHANNELS.settings.update, input),
-      testGitHubProxy: (routeId, customPrefix) =>
-        ipcRenderer.invoke(IPC_CHANNELS.settings.testGitHubProxy, routeId, customPrefix),
-      initializeAppData: (options) => ipcRenderer.invoke(IPC_CHANNELS.settings.initializeAppData, options),
-      clearAppCache: () => ipcRenderer.invoke(IPC_CHANNELS.settings.clearAppCache),
+      restoreFactorySettings: () => ipcRenderer.invoke(IPC_CHANNELS.settings.restoreFactorySettings),
+      clearAppData: (selection) => ipcRenderer.invoke(IPC_CHANNELS.settings.clearAppData, selection),
       exportAppData: (clientData) => ipcRenderer.invoke(IPC_CHANNELS.settings.exportAppData, clientData),
       importAppData: () => ipcRenderer.invoke(IPC_CHANNELS.settings.importAppData),
+    },
+    network: {
+      getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.network.getStatus),
+      save: (settings) => ipcRenderer.invoke(IPC_CHANNELS.network.save, settings),
+      test: (input) => ipcRenderer.invoke(IPC_CHANNELS.network.test, input),
     },
     updates: {
       getCurrentVersion: () => ipcRenderer.invoke(IPC_CHANNELS.updates.getCurrentVersion),
@@ -27,6 +30,7 @@ export function createSystemApi(): Pick<AppApi, 'settings' | 'updates' | 'window
       isMaximized: () => ipcRenderer.invoke(IPC_CHANNELS.window.isMaximized),
       toggleMaximize: () => ipcRenderer.invoke(IPC_CHANNELS.window.toggleMaximize),
       quitApp: () => ipcRenderer.invoke(IPC_CHANNELS.window.quitApp),
+      restartApp: () => ipcRenderer.invoke(IPC_CHANNELS.window.restartApp),
       enterMiniWindowMode: (context) => ipcRenderer.invoke(IPC_CHANNELS.window.enterMiniWindowMode, context),
       getMiniWindowPlayback: () => ipcRenderer.invoke(IPC_CHANNELS.window.getMiniWindowPlayback),
       updateMiniWindowPlayback: (input) => ipcRenderer.invoke(IPC_CHANNELS.window.updateMiniWindowPlayback, input),

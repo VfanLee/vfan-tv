@@ -21,4 +21,5 @@ export function registerRadioIpc(context: ApplicationContext): void {
   ipcMain.handle(IPC_CHANNELS.radio.getBillboard, (_event, categoryId: number, regionId: number) =>
     radio.getBillboard(categoryId, regionId),
   )
+  ipcMain.handle(IPC_CHANNELS.radio.getPlaybackUrl, (_event, channelId: number) => radio.getPlaybackUrl(channelId))
 }

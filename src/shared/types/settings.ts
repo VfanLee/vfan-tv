@@ -1,11 +1,47 @@
 export type ThemeMode = 'light' | 'dark' | 'system'
-export type GitHubProxyRouteId = 'direct' | 'gh-proxy' | 'cloudflare-v4' | 'cloudflare-v46' | 'fastly-v4' | 'custom'
+export type NetworkRouteMode = 'direct' | 'system' | 'custom'
+export type NetworkProxyProtocol = 'http' | 'https' | 'socks5'
+export type NetworkRouteKey = 'content' | 'playback'
 
-export interface GitHubProxyTestResult {
-  elapsedMs?: number
-  errorMessage?: string
-  routeId: GitHubProxyRouteId
+export interface NetworkProxyProfile {
+  id: string
+  name: string
+  protocol: NetworkProxyProtocol
+  host: string
+  port: number
+}
+
+export interface NetworkRouteSettings {
+  mode: NetworkRouteMode
+  activeProfileId?: string
+}
+
+export interface NetworkSettings {
+  profiles: NetworkProxyProfile[]
+  content: NetworkRouteSettings
+  playback: NetworkRouteSettings
+}
+
+export interface NetworkRouteStatus extends NetworkRouteSettings {
+  activeProfileName?: string
+}
+
+export interface NetworkStatus {
+  online: boolean
+  ipFamilies: Array<'ipv4' | 'ipv6'>
+  routes: Record<NetworkRouteKey, NetworkRouteStatus>
+}
+
+export interface NetworkProxyTestInput {
+  route: NetworkRouteKey
+  settings: NetworkSettings
+}
+
+export interface NetworkProxyTestResult {
   status: 'success' | 'error'
+  elapsedMs?: number
+  route?: string
+  errorMessage?: string
 }
 
 export interface SubscriptionConfig {
@@ -14,9 +50,9 @@ export interface SubscriptionConfig {
 }
 
 export interface AppSettings {
-  githubProxyCustomPrefix: string
-  githubProxyRoute: GitHubProxyRouteId
   theme: ThemeMode
   subscriptions: SubscriptionConfig[]
   activeSubscriptionId?: string
+  iptvEpg: import('./iptv').IptvEpgSettings
+  network: NetworkSettings
 }

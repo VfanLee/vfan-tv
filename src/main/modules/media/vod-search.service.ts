@@ -1,7 +1,6 @@
 import { randomUUID } from 'crypto'
-import axios from 'axios'
 import type { SearchEvent } from '@shared/types'
-import type { HttpClient } from '../../infrastructure/http/http-client'
+import { isHttpRequestError, type HttpClient } from '../../infrastructure/http/http-client'
 import type { SourceService } from '../sources/source.service'
 import type { SearchTaskManager } from './search-task-manager'
 import { buildVodDetailUrl, buildVodSearchUrl, normalizeVodApiResponse } from './vod-api'
@@ -22,7 +21,7 @@ export class VodSearchService {
     if (!keyword.trim()) throw new Error('搜索关键词不能为空')
     const searchId = randomUUID()
     const signal = this.taskManager.create(searchId)
-    const sources = this.sourceService.list().filter((source) => source.enabled)
+    const sources = this.sourceService.list().filter((source) => !source.disabled)
 
     void this.searchSources(searchId, keyword.trim(), signal, sources).finally(() => {
       this.emit({ type: 'done', searchId })
@@ -93,7 +92,8 @@ export class VodSearchService {
 
     try {
       const requestOptions = {
-        headers: source.referer ? { Referer: source.referer } : undefined,
+        headers: source.headers,
+        requestLabel: '点播 API',
         signal,
         timeout: SOURCE_TIMEOUT_MS,
       }
@@ -117,7 +117,7 @@ export class VodSearchService {
   }
 
   private emitSearchError(searchId: string, sourceId: string, sourceName: string, error: unknown): void {
-    if (axios.isCancel(error) || (axios.isAxiosError(error) && error.code === 'ERR_CANCELED')) {
+    if (isHttpRequestError(error) && error.code === 'ERR_CANCELED') {
       this.emit({
         type: 'source-cancelled',
         searchId,
@@ -129,7 +129,7 @@ export class VodSearchService {
 
     const message = getErrorMessage(error)
 
-    if (axios.isAxiosError(error) && error.code === 'ECONNABORTED') {
+    if (isHttpRequestError(error) && error.code === 'ECONNABORTED') {
       this.emit({
         type: 'source-timeout',
         searchId,
@@ -151,8 +151,8 @@ export class VodSearchService {
 }
 
 function getErrorMessage(error: unknown): string {
-  if (axios.isAxiosError(error)) {
-    return error.response ? `HTTP ${error.response.status}: ${error.response.statusText || '请求失败'}` : error.message
+  if (isHttpRequestError(error)) {
+    return error.status ? `HTTP ${error.status}: 请求失败` : error.message
   }
 
   return error instanceof Error ? error.message : String(error)

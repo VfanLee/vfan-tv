@@ -21,6 +21,11 @@ export async function quitApp(): Promise<void> {
   if (api) await api.window.quitApp()
 }
 
+export async function restartApp(): Promise<void> {
+  const api = getRuntimeApi()
+  if (api) await api.window.restartApp()
+}
+
 export async function enterMiniWindowMode(context: MiniWindowPlaybackContext): Promise<void> {
   const api = getRuntimeApi()
   if (api) await api.window.enterMiniWindowMode(context)

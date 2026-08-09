@@ -50,7 +50,7 @@ export function useEnabledVodSources(): {
       .then((items) => {
         if (!active) return
         pruneVodCategoryCache(items)
-        setSources(items.filter((item) => item.enabled))
+        setSources(items.filter((item) => !item.disabled))
       })
       .catch((error: unknown) => {
         if (active) setErrorMessage(toErrorMessage(error))

@@ -11,20 +11,7 @@ export class SettingsRepository {
 
   get(): AppSettings {
     const row = this.db.select().from(settingsTable).where(eq(settingsTable.key, settingsKey)).get()
-    const raw = (row?.value ?? {}) as Record<string, unknown>
-    const legacyUrl = typeof raw.subscriptionUrl === 'string' ? raw.subscriptionUrl.trim() : ''
-    const subscriptions = raw.subscriptions ?? (legacyUrl ? [{ id: 'legacy-subscription', url: legacyUrl }] : [])
-    const activeSubscriptionId =
-      typeof raw.activeSubscriptionId === 'string'
-        ? raw.activeSubscriptionId
-        : legacyUrl
-          ? 'legacy-subscription'
-          : undefined
-    const parsed = appSettingsSchema.parse({
-      ...raw,
-      subscriptions,
-      activeSubscriptionId,
-    })
+    const parsed = appSettingsSchema.parse(row?.value ?? {})
     return {
       ...parsed,
       activeSubscriptionId: parsed.subscriptions.some((item) => item.id === parsed.activeSubscriptionId)

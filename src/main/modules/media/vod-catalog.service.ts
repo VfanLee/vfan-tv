@@ -42,7 +42,7 @@ export class VodCatalogService {
   private getEnabledSource(sourceId: string): VodSourceConfig {
     const source = this.sourceService.list().find((item) => item.id === sourceId)
     if (!source) throw new Error('点播源不存在')
-    if (!source.enabled) throw new Error('点播源未启用')
+    if (source.disabled) throw new Error('点播源未启用')
     return source
   }
 
@@ -69,9 +69,14 @@ export class VodCatalogService {
     }
   }
 
-  private getRequestOptions(source: VodSourceConfig): { headers?: { Referer: string }; timeout: number } {
+  private getRequestOptions(source: VodSourceConfig): {
+    headers: VodSourceConfig['headers']
+    requestLabel: string
+    timeout: number
+  } {
     return {
-      headers: source.referer ? { Referer: source.referer } : undefined,
+      headers: source.headers,
+      requestLabel: '点播 API',
       timeout: CATALOG_TIMEOUT_MS,
     }
   }

@@ -58,7 +58,13 @@ export function RecentPlayCard({
         type="button"
         onClick={onClick}
       >
-        <MediaPoster className="aspect-[2/3]" poster={item.poster} title={item.title} overlay={<PosterPlayOverlay />} />
+        <MediaPoster
+          className="aspect-[2/3]"
+          poster={item.poster}
+          sourceId={item.sourceId}
+          title={item.title}
+          overlay={<PosterPlayOverlay />}
+        />
         <div className="mt-3 min-w-0">
           <h3 className="text-foreground truncate text-[15px] font-semibold">{item.title}</h3>
           <p className="text-muted-foreground mt-1 truncate text-sm">
@@ -102,7 +108,13 @@ export function RecommendationCard({
       onClick={onClick}
     >
       <div className="relative">
-        <MediaPoster className="aspect-[2/3]" poster={item.poster} showHoverScrim={false} title={item.title} />
+        <MediaPoster
+          className="aspect-[2/3]"
+          poster={item.poster}
+          showHoverScrim={false}
+          sourceType="douban"
+          title={item.title}
+        />
         {item.isNew ? (
           <span className="bg-primary text-primary-foreground absolute top-2 right-2 rounded-xl px-2 py-1 text-xs font-semibold shadow-sm">
             新

@@ -1,20 +1,25 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useLocation } from 'react-router'
 import { MonitorPlay, Video } from 'lucide-react'
 import { ConfirmDialog, LayoutPreferencesSettings, ThemeSettings } from '@renderer/components'
 import { isApiAvailable } from '@renderer/platform/api'
 import { AboutSettingsCard } from './components/about-settings-card'
-import { DataManagementCard, NetworkSettingsCard, SubscriptionSettingsCard } from './components/settings-cards'
+import { DataManagementCard, SubscriptionSettingsCard } from './components/settings-cards'
+import { NetworkSettingsCard } from './components/network-settings-card'
+import { DataClearDialog } from './components/data-clear-dialog'
 import { DataSelectionDialog } from './components/data-selection-dialog'
 import { SettingsSidebar } from './components/settings-sidebar'
-import { LiveSourceDialog, SourceDialog } from './components/source-dialogs'
+import { IptvSourceDialog, SourceDialog } from './components/source-dialogs'
+import { IptvEpgSettingsCard } from './components/iptv-settings-card'
 import { SourceTableCard } from './components/source-table-card'
 import { useAppData } from './hooks/use-app-data'
 import { useGeneralSettings } from './hooks/use-general-settings'
-import { useLiveSources } from './hooks/use-live-sources'
+import { useIptvSources } from './hooks/use-iptv-sources'
+import { useNetworkSettings } from './hooks/use-network-settings'
+import { useIptvSettings } from './hooks/use-iptv-settings'
 import { useVodSources } from './hooks/use-vod-sources'
 import { settingsSections, type SettingsSectionId } from './settings-sections'
-import type { ConfirmState, LiveSourceDialogState, SourceDialogState } from './types'
+import type { ConfirmState, IptvSourceDialogState, SourceDialogState } from './types'
 import { getConfirmDescription, getConfirmTitle } from './utils'
 
 // 设置页负责协调各设置领域 hook；具体数据读写仍由对应 hook 和 main IPC 完成。
@@ -22,22 +27,25 @@ export function SettingsPage(): React.JSX.Element {
   const location = useLocation()
   const apiAvailable = isApiAvailable()
   const vod = useVodSources(apiAvailable)
-  const live = useLiveSources(apiAvailable)
+  const iptv = useIptvSources(apiAvailable)
+  const iptvSettings = useIptvSettings(apiAvailable)
   const general = useGeneralSettings({
     apiAvailable,
-    refreshLiveSources: live.refresh,
+    refreshIptvSources: iptv.refresh,
     refreshVodSources: vod.refresh,
   })
+  const network = useNetworkSettings(apiAvailable)
   const appData = useAppData({
     apiAvailable,
-    resetLiveSources: () => live.applySources([]),
+    resetIptvSources: () => iptv.applySources([]),
     resetSubscription: general.resetSubscription,
     resetVodSources: () => vod.applySources([]),
   })
   const [dialog, setDialog] = useState<SourceDialogState>()
-  const [liveSourceDialog, setLiveSourceDialog] = useState<LiveSourceDialogState>()
+  const [iptvSourceDialog, setIptvSourceDialog] = useState<IptvSourceDialogState>()
   const [confirmState, setConfirmState] = useState<ConfirmState>()
-  const [dataSelectionMode, setDataSelectionMode] = useState<'export' | 'initialize'>()
+  const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
+  const [isClearDataDialogOpen, setIsClearDataDialogOpen] = useState(false)
   const [activeSection, setActiveSection] = useState<SettingsSectionId>('appearance')
   const isNavigatingRef = useRef(false)
   const navigationCleanupRef = useRef<() => void>(() => undefined)
@@ -64,7 +72,7 @@ export function SettingsPage(): React.JSX.Element {
     }
   }, [])
 
-  const selectSection = (sectionId: SettingsSectionId): void => {
+  const selectSection = useCallback((sectionId: SettingsSectionId): void => {
     navigationCleanupRef.current()
     isNavigatingRef.current = false
     setActiveSection(sectionId)
@@ -93,9 +101,11 @@ export function SettingsPage(): React.JSX.Element {
     const fallbackTimer = setTimeout(finishNavigation, 2_000)
     navigationCleanupRef.current = cleanup
     target.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }
+  }, [])
 
-  selectSectionRef.current = selectSection
+  useEffect(() => {
+    selectSectionRef.current = selectSection
+  }, [selectSection])
 
   useEffect(() => {
     const section = (location.state as { section?: SettingsSectionId } | null)?.section
@@ -107,11 +117,11 @@ export function SettingsPage(): React.JSX.Element {
   const confirm = async (): Promise<void> => {
     if (!confirmState) return
     if (confirmState.type === 'clearSources') await vod.clearAll()
-    else if (confirmState.type === 'clearLiveSources') await live.clearAll()
-    else if (confirmState.type === 'clearAppCache') await appData.clearCache()
+    else if (confirmState.type === 'clearIptvSources') await iptv.clearAll()
+    else if (confirmState.type === 'restoreFactorySettings') await appData.restoreFactorySettings()
     else if (confirmState.type === 'importAppData') await appData.importData()
     else if (confirmState.type === 'deleteSource') await vod.deleteItem(confirmState.source)
-    else if (confirmState.type === 'deleteLiveSource') await live.deleteItem(confirmState.source)
+    else if (confirmState.type === 'deleteIptvSource') await iptv.deleteItem(confirmState.source)
     else if (confirmState.type === 'deleteSubscription') await general.deleteSubscription(confirmState.subscription.id)
     else await general.selectSubscription(confirmState.subscriptionId)
     setConfirmState(undefined)
@@ -133,13 +143,17 @@ export function SettingsPage(): React.JSX.Element {
           <section id="network" className="scroll-mt-8">
             <NetworkSettingsCard
               apiAvailable={apiAvailable}
-              isSaving={general.isSavingGitHubProxy}
-              route={general.githubProxyRoute}
-              speedResults={general.speedResults}
-              testingRouteId={general.testingRouteId}
-              onRouteChange={(routeId) => void general.saveGitHubProxy(routeId)}
-              onTestAll={() => void general.testAllGitHubProxy()}
-              onTestSingle={(routeId) => void general.testSingleGitHubProxy(routeId)}
+              network={{
+                settings: network.settings,
+                status: network.status,
+                testResults: network.testResults,
+                isLoading: network.isLoading,
+                isSaving: network.isSaving,
+                testingRoute: network.testingRoute,
+                onRefreshStatus: () => void network.refreshStatus(),
+                onSave: (settings) => void network.save(settings),
+                onTest: (route, settings) => void network.test(route, settings),
+              }}
             />
           </section>
 
@@ -175,7 +189,7 @@ export function SettingsPage(): React.JSX.Element {
               speedResults={vod.speedResults}
               title="点播源"
               onAdd={() => setDialog({ mode: 'create' })}
-              onBatchToggle={(enabled) => void vod.batchToggle(enabled)}
+              onBatchSetDisabled={(disabled) => void vod.batchSetDisabled(disabled)}
               onClear={() => setConfirmState({ type: 'clearSources' })}
               onDelete={(source) => setConfirmState({ type: 'deleteSource', source })}
               onEdit={(source) => setDialog({ mode: 'edit', source })}
@@ -185,53 +199,64 @@ export function SettingsPage(): React.JSX.Element {
               onSwitchBackup={(source, backupUrl) => vod.switchBackup(source, backupUrl)}
               onTestAll={() => void vod.testAll()}
               onTestSingle={(sourceId) => void vod.testSingle(sourceId)}
-              onToggle={(source, enabled) => void vod.toggle(source, enabled)}
+              onSetDisabled={(source, disabled) => void vod.setDisabled(source, disabled)}
               onToggleAll={vod.toggleAll}
               onToggleSelection={vod.toggleSelection}
             />
           </section>
 
-          <section id="live-sources" className="scroll-mt-8">
-            <SourceTableCard
-              addText="添加直播源"
-              allSelected={live.allSelected}
-              apiAvailable={apiAvailable}
-              description="管理应用的直播源。"
-              emptyIcon={MonitorPlay}
-              emptyText="还没有直播源"
-              enabledCount={live.enabledCount}
-              heightClassName="max-h-[min(55vh,360px)]"
-              isBatchUpdating={live.isBatchUpdating}
-              isClearing={live.isClearing}
-              isReordering={live.isReordering}
-              selectedSourceIds={live.selectedSourceIds}
-              sources={live.sources}
-              title="直播源"
-              onAdd={() => setLiveSourceDialog({ mode: 'create' })}
-              onBatchToggle={(enabled) => void live.batchToggle(enabled)}
-              onClear={() => setConfirmState({ type: 'clearLiveSources' })}
-              onDelete={(source) => setConfirmState({ type: 'deleteLiveSource', source })}
-              onEdit={(source) => setLiveSourceDialog({ mode: 'edit', source })}
-              onExport={() => void live.exportItems()}
-              onImport={() => void live.importItems()}
-              onMoveToEdge={(sourceId, edge) => void live.moveToEdge(sourceId, edge)}
-              onToggle={(source, enabled) => void live.toggle(source, enabled)}
-              onToggleAll={live.toggleAll}
-              onToggleSelection={live.toggleSelection}
-            />
+          <section id="iptv" className="scroll-mt-8">
+            <div className="grid gap-5">
+              <IptvEpgSettingsCard
+                key={`${iptvSettings.epg.mode}:${iptvSettings.epg.url ?? ''}:${iptvSettings.epg.lastTest.testedAt ?? 0}`}
+                apiAvailable={apiAvailable}
+                isSaving={iptvSettings.isSavingEpg}
+                isTesting={iptvSettings.isTesting}
+                value={iptvSettings.epg}
+                onSave={(value) => void iptvSettings.saveEpg(value)}
+                onTest={(value) => void iptvSettings.test(value)}
+              />
+              <SourceTableCard
+                addText="添加 IPTV 源"
+                allSelected={iptv.allSelected}
+                apiAvailable={apiAvailable}
+                description="管理频道列表和每个源的媒体请求配置。"
+                emptyIcon={MonitorPlay}
+                emptyText="还没有 IPTV 源"
+                enabledCount={iptv.enabledCount}
+                heightClassName="max-h-[min(55vh,360px)]"
+                isBatchUpdating={iptv.isBatchUpdating}
+                isClearing={iptv.isClearing}
+                isReordering={iptv.isReordering}
+                selectedSourceIds={iptv.selectedSourceIds}
+                sources={iptv.sources}
+                title="IPTV 源"
+                onAdd={() => setIptvSourceDialog({ mode: 'create' })}
+                onBatchSetDisabled={(disabled) => void iptv.batchSetDisabled(disabled)}
+                onClear={() => setConfirmState({ type: 'clearIptvSources' })}
+                onDelete={(source) => setConfirmState({ type: 'deleteIptvSource', source })}
+                onEdit={(source) => setIptvSourceDialog({ mode: 'edit', source })}
+                onExport={() => void iptv.exportItems()}
+                onImport={() => void iptv.importItems()}
+                onMoveToEdge={(sourceId, edge) => void iptv.moveToEdge(sourceId, edge)}
+                onSetDisabled={(source, disabled) => void iptv.setDisabled(source, disabled)}
+                onToggleAll={iptv.toggleAll}
+                onToggleSelection={iptv.toggleSelection}
+              />
+            </div>
           </section>
 
           <section id="data-management" className="scroll-mt-8">
             <DataManagementCard
               apiAvailable={apiAvailable}
               isExporting={appData.isExporting}
-              isClearingCache={appData.isClearingCache}
+              isClearingData={appData.isClearingData}
               isImporting={appData.isImporting}
-              isInitializing={appData.isInitializing}
-              onExport={() => setDataSelectionMode('export')}
-              onClearCache={() => setConfirmState({ type: 'clearAppCache' })}
+              isRestoringFactory={appData.isRestoringFactory}
+              onExport={() => setIsExportDialogOpen(true)}
+              onClearData={() => setIsClearDataDialogOpen(true)}
               onImport={() => setConfirmState({ type: 'importAppData' })}
-              onInitialize={() => setDataSelectionMode('initialize')}
+              onRestoreFactory={() => setConfirmState({ type: 'restoreFactorySettings' })}
             />
           </section>
 
@@ -252,36 +277,45 @@ export function SettingsPage(): React.JSX.Element {
         />
       ) : null}
 
-      {liveSourceDialog ? (
-        <LiveSourceDialog
-          dialog={liveSourceDialog}
-          onClose={() => setLiveSourceDialog(undefined)}
+      {iptvSourceDialog ? (
+        <IptvSourceDialog
+          dialog={iptvSourceDialog}
+          onClose={() => setIptvSourceDialog(undefined)}
           onSaved={async () => {
-            setLiveSourceDialog(undefined)
-            await live.refresh()
+            setIptvSourceDialog(undefined)
+            await iptv.refresh()
           }}
         />
       ) : null}
 
       {confirmState ? (
         <ConfirmDialog
-          destructive={confirmState.type !== 'selectSubscription' && confirmState.type !== 'clearAppCache'}
-          description={getConfirmDescription(confirmState, vod.sources.length, live.sources.length)}
+          destructive={confirmState.type !== 'selectSubscription'}
+          description={getConfirmDescription(confirmState, vod.sources.length, iptv.sources.length)}
           title={getConfirmTitle(confirmState)}
           onCancel={() => setConfirmState(undefined)}
           onConfirm={() => void confirm()}
         />
       ) : null}
 
-      {dataSelectionMode ? (
+      {isExportDialogOpen ? (
         <DataSelectionDialog
-          isPending={dataSelectionMode === 'export' ? appData.isExporting : appData.isInitializing}
-          mode={dataSelectionMode}
-          onCancel={() => setDataSelectionMode(undefined)}
+          isPending={appData.isExporting}
+          onCancel={() => setIsExportDialogOpen(false)}
           onConfirm={async (selection) => {
-            if (dataSelectionMode === 'export') await appData.exportData(selection)
-            else await appData.initializeData(selection)
-            setDataSelectionMode(undefined)
+            await appData.exportData(selection)
+            setIsExportDialogOpen(false)
+          }}
+        />
+      ) : null}
+
+      {isClearDataDialogOpen ? (
+        <DataClearDialog
+          isPending={appData.isClearingData}
+          onCancel={() => setIsClearDataDialogOpen(false)}
+          onConfirm={async (selection) => {
+            await appData.clearData(selection)
+            setIsClearDataDialogOpen(false)
           }}
         />
       ) : null}

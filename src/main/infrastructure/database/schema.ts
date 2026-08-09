@@ -1,5 +1,5 @@
 import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
-import type { VodSourceBackup } from '@shared/types'
+import type { IptvEpgProgram, IptvPlaylist, SourceHeaders } from '@shared/types'
 
 export const settingsTable = sqliteTable('settings', {
   key: text('key').primaryKey(),
@@ -13,9 +13,9 @@ export const vodSourcesTable = sqliteTable(
     id: text('id').primaryKey(),
     name: text('name').notNull(),
     url: text('url').notNull(),
-    referer: text('referer'),
-    backups: text('backups', { mode: 'json' }).$type<VodSourceBackup[]>().notNull().default([]),
-    enabled: integer('enabled', { mode: 'boolean' }).notNull(),
+    headers: text('headers', { mode: 'json' }).$type<SourceHeaders>().notNull().default({}),
+    backups: text('backups', { mode: 'json' }).$type<string[]>().notNull().default([]),
+    disabled: integer('disabled', { mode: 'boolean' }).notNull().default(false),
     sort: integer('sort').notNull(),
     origin: text('origin', { enum: ['manual', 'subscription'] })
       .notNull()
@@ -27,13 +27,43 @@ export const vodSourcesTable = sqliteTable(
   (table) => [uniqueIndex('vod_sources_url_unique').on(table.url)],
 )
 
-export const liveSourcesTable = sqliteTable(
-  'live_sources',
+export const iptvChannelSnapshotsTable = sqliteTable('iptv_channel_snapshots', {
+  sourceId: text('source_id').primaryKey(),
+  playlist: text('playlist', { mode: 'json' }).$type<IptvPlaylist>().notNull(),
+  fetchedAt: integer('fetched_at').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+})
+
+export const iptvEpgMetadataTable = sqliteTable('iptv_epg_metadata', {
+  cacheKey: text('cache_key').primaryKey(),
+  sourceUrl: text('source_url').notNull(),
+  providerType: text('provider_type').notNull(),
+  fetchedAt: integer('fetched_at').notNull(),
+  expiresAt: integer('expires_at').notNull(),
+  errorMessage: text('error_message'),
+})
+
+export const iptvEpgProgramsTable = sqliteTable(
+  'iptv_epg_programs',
+  {
+    cacheKey: text('cache_key').notNull(),
+    channelKey: text('channel_key').notNull(),
+    date: text('date').notNull(),
+    programs: text('programs', { mode: 'json' }).$type<IptvEpgProgram[]>().notNull(),
+    fetchedAt: integer('fetched_at').notNull(),
+    expiresAt: integer('expires_at').notNull(),
+  },
+  (table) => [uniqueIndex('iptv_epg_programs_unique').on(table.cacheKey, table.channelKey, table.date)],
+)
+
+export const iptvSourcesTable = sqliteTable(
+  'iptv_sources',
   {
     id: text('id').primaryKey(),
     name: text('name').notNull(),
     url: text('url').notNull(),
-    enabled: integer('enabled', { mode: 'boolean' }).notNull(),
+    headers: text('headers', { mode: 'json' }).$type<SourceHeaders>().notNull().default({}),
+    disabled: integer('disabled', { mode: 'boolean' }).notNull().default(false),
     sort: integer('sort').notNull(),
     origin: text('origin', { enum: ['manual', 'subscription'] })
       .notNull()
@@ -41,7 +71,7 @@ export const liveSourcesTable = sqliteTable(
     createdAt: integer('created_at').notNull(),
     updatedAt: integer('updated_at').notNull(),
   },
-  (table) => [uniqueIndex('live_sources_url_unique').on(table.url)],
+  (table) => [uniqueIndex('iptv_sources_url_unique').on(table.url)],
 )
 
 export const recentPlaysTable = sqliteTable(

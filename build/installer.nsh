@@ -11,7 +11,7 @@ Var DeleteUserDataCheckbox
 Var DeleteUserDataChecked
 
 !macro customUnInit
-  StrCpy $DeleteUserDataChecked "1"
+  StrCpy $DeleteUserDataChecked "0"
 !macroend
 
 ; Replaces default uninstall welcome page with a checkbox (no MessageBox).

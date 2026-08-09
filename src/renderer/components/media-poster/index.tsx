@@ -1,14 +1,16 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Play } from 'lucide-react'
-import { resolveImageUrl } from '@shared/utils/media-image'
+import type { MediaImageSourceType } from '@shared/types'
+import { getSourceImageUrl } from '@renderer/platform/api'
 
 interface MediaPosterProps {
   baseUrl?: string
   className?: string
   overlay?: ReactNode
   poster?: string
-  referer?: string
+  sourceType?: MediaImageSourceType
+  sourceId?: string
   showHoverScrim?: boolean
   title: string
 }
@@ -18,25 +20,47 @@ export function MediaPoster({
   className,
   overlay,
   poster,
-  referer,
+  sourceType = 'vod',
+  sourceId,
   showHoverScrim = true,
   title,
 }: MediaPosterProps): React.JSX.Element {
-  const [failedPoster, setFailedPoster] = useState<string>()
-  const imageSrc = poster && poster !== failedPoster ? resolveImageUrl(poster, { baseUrl, referer }) : undefined
+  const requestKey = `${sourceType}\u0000${sourceId ?? ''}\u0000${poster ?? ''}\u0000${baseUrl ?? ''}`
+  const [resolvedImage, setResolvedImage] = useState<{ key: string; src: string }>()
+  const [failedImage, setFailedImage] = useState<{ key: string; src: string }>()
+  const imageSrc = resolvedImage?.key === requestKey ? resolvedImage.src : undefined
+  const imageKey = requestKey
+  const visibleSrc = imageSrc && !(failedImage?.key === imageKey && failedImage.src === imageSrc) ? imageSrc : undefined
+
+  useEffect(() => {
+    let active = true
+    if (!poster) {
+      return () => {
+        active = false
+      }
+    }
+    void getSourceImageUrl(sourceId, poster, baseUrl, sourceType)
+      .then((url) => {
+        if (active && url) setResolvedImage({ key: requestKey, src: url })
+      })
+      .catch(() => {
+        if (active) setResolvedImage(undefined)
+      })
+    return () => {
+      active = false
+    }
+  }, [baseUrl, poster, requestKey, sourceId, sourceType])
 
   return (
     <div className={`border-border bg-muted relative overflow-hidden rounded-xl border shadow-sm ${className ?? ''}`}>
-      {imageSrc ? (
+      {visibleSrc ? (
         <img
           alt={title}
           className="size-full object-cover transition-transform duration-300 ease-out group-focus-within:scale-[1.04] group-hover:scale-[1.04] motion-reduce:transform-none motion-reduce:transition-none"
           loading="lazy"
-          src={imageSrc}
+          src={visibleSrc}
           onError={() => {
-            if (poster) {
-              setFailedPoster(poster)
-            }
+            setFailedImage({ key: imageKey, src: visibleSrc })
           }}
         />
       ) : (
@@ -44,7 +68,7 @@ export function MediaPoster({
           暂无海报
         </div>
       )}
-      {imageSrc && showHoverScrim ? (
+      {visibleSrc && showHoverScrim ? (
         <div className="pointer-events-none absolute inset-0 bg-black opacity-0 transition-opacity duration-300 group-focus-within:opacity-20 group-hover:opacity-20 motion-reduce:transition-none" />
       ) : null}
       {overlay ? (

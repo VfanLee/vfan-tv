@@ -13,7 +13,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import type { LiveSourceConfig, VodSourceConfig } from '@shared/types'
+import type { IptvSourceConfig, VodSourceConfig } from '@shared/types'
 import { EmptyState, SettingsCard, VodSourceBackupSwitcher } from '@renderer/components'
 import { Badge } from '@/ui/badge'
 import { Button } from '@/ui/button'
@@ -24,7 +24,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { cn } from '@/utils'
 import type { VodSourceSpeedState } from '../types'
 
-type SourceConfig = VodSourceConfig | LiveSourceConfig
+type SourceConfig = VodSourceConfig | IptvSourceConfig
 type SpeedSortOrder = 'asc' | 'desc' | 'default'
 interface TableDragState {
   pointerId: number
@@ -54,7 +54,7 @@ interface SourceTableCardProps<T extends SourceConfig> {
   speedResults?: Record<string, VodSourceSpeedState>
   title: string
   onAdd: () => void
-  onBatchToggle: (enabled: boolean) => void
+  onBatchSetDisabled: (disabled: boolean) => void
   onClear: () => void
   onDelete: (source: T) => void
   onEdit: (source: T) => void
@@ -63,7 +63,7 @@ interface SourceTableCardProps<T extends SourceConfig> {
   onMoveToEdge: (sourceId: string, edge: 'start' | 'end') => void
   onTestAll?: () => void
   onTestSingle?: (sourceId: string) => void
-  onToggle: (source: T, enabled: boolean) => void
+  onSetDisabled: (source: T, disabled: boolean) => void
   onSwitchBackup?: (source: VodSourceConfig, backupUrl: string) => Promise<void>
   onToggleAll: () => void
   onToggleSelection: (sourceId: string) => void
@@ -87,7 +87,7 @@ export function SourceTableCard<T extends SourceConfig>({
   speedResults,
   title,
   onAdd,
-  onBatchToggle,
+  onBatchSetDisabled,
   onClear,
   onDelete,
   onEdit,
@@ -96,7 +96,7 @@ export function SourceTableCard<T extends SourceConfig>({
   onMoveToEdge,
   onTestAll,
   onTestSingle,
-  onToggle,
+  onSetDisabled,
   onSwitchBackup,
   onToggleAll,
   onToggleSelection,
@@ -221,7 +221,7 @@ export function SourceTableCard<T extends SourceConfig>({
         filterKeyword={filterKeyword}
         selectedCount={selectedSourceIds.size}
         onAdd={onAdd}
-        onBatchToggle={onBatchToggle}
+        onBatchSetDisabled={onBatchSetDisabled}
         onClear={onClear}
         onExport={onExport}
         onImport={onImport}
@@ -284,7 +284,10 @@ export function SourceTableCard<T extends SourceConfig>({
                     />
                   </TableCell>
                   <TableCell className="bg-card group-hover:bg-muted sticky left-9 z-20 px-2 transition-colors">
-                    <StatusCell checked={source.enabled} onCheckedChange={(checked) => onToggle(source, checked)} />
+                    <StatusCell
+                      checked={!source.disabled}
+                      onCheckedChange={(checked) => onSetDisabled(source, !checked)}
+                    />
                   </TableCell>
                   <TableCell
                     className={cn(
@@ -384,7 +387,7 @@ function SourceToolbar({
   filterKeyword,
   selectedCount,
   onAdd,
-  onBatchToggle,
+  onBatchSetDisabled,
   onClear,
   onExport,
   onImport,
@@ -400,7 +403,7 @@ function SourceToolbar({
   filterKeyword: string
   selectedCount: number
   onAdd: () => void
-  onBatchToggle: (enabled: boolean) => void
+  onBatchSetDisabled: (disabled: boolean) => void
   onClear: () => void
   onExport: () => void
   onImport: () => void
@@ -413,14 +416,14 @@ function SourceToolbar({
         <Button
           disabled={!apiAvailable || selectedCount === 0 || isBatchUpdating}
           variant="outline"
-          onClick={() => onBatchToggle(true)}
+          onClick={() => onBatchSetDisabled(false)}
         >
           批量开启{selectedCount > 0 ? ` (${selectedCount})` : ''}
         </Button>
         <Button
           disabled={!apiAvailable || selectedCount === 0 || isBatchUpdating}
           variant="outline"
-          onClick={() => onBatchToggle(false)}
+          onClick={() => onBatchSetDisabled(true)}
         >
           批量关闭{selectedCount > 0 ? ` (${selectedCount})` : ''}
         </Button>

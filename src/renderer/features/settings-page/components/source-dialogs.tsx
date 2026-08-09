@@ -1,15 +1,15 @@
 import { Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
-import type { LiveSourceInput, VodSourceInput } from '@shared/types'
+import type { IptvSourceInput, SourceHeaders, VodSourceInput } from '@shared/types'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
 import { Switch } from '@/ui/switch'
-import { createLiveSource, createSource, isApiAvailable, updateLiveSource, updateSource } from '@renderer/platform/api'
-import type { LiveSourceDialogState, SourceDialogState } from '../types'
+import { createIptvSource, createSource, isApiAvailable, updateIptvSource, updateSource } from '@renderer/platform/api'
+import type { IptvSourceDialogState, SourceDialogState } from '../types'
 
-const emptySourceInput: VodSourceInput = { name: '', url: '', referer: undefined, enabled: false, backups: [] }
-const emptyLiveSourceInput: LiveSourceInput = { name: '', url: '', enabled: true }
+const emptySourceInput: VodSourceInput = { name: '', url: '', disabled: false, headers: {}, backups: [] }
+const emptyIptvSourceInput: IptvSourceInput = { name: '', url: '', disabled: false, headers: {} }
 
 export function SourceDialog({
   dialog,
@@ -25,8 +25,8 @@ export function SourceDialog({
       ? {
           name: dialog.source.name,
           url: dialog.source.url,
-          referer: dialog.source.referer,
-          enabled: dialog.source.enabled,
+          headers: dialog.source.headers,
+          disabled: dialog.source.disabled,
           backups: dialog.source.backups,
         }
       : emptySourceInput,
@@ -67,15 +67,11 @@ export function SourceDialog({
           onChange={(event) => setForm((current) => ({ ...current, url: event.target.value }))}
         />
       </label>
-      <label className="block">
-        <span className="text-foreground text-sm font-medium">Referer</span>
-        <Input
-          className="mt-2 font-mono text-xs"
-          placeholder="https://example.com"
-          value={form.referer ?? ''}
-          onChange={(event) => setForm((current) => ({ ...current, referer: event.target.value || undefined }))}
-        />
-      </label>
+      <HeaderEditor
+        description="用于点播 API、搜索、测速和海报请求，不会发送给影片播放地址。"
+        headers={form.headers ?? {}}
+        onChange={(headers) => setForm((current) => ({ ...current, headers }))}
+      />
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -89,7 +85,7 @@ export function SourceDialog({
             onClick={() =>
               setForm((current) => ({
                 ...current,
-                backups: [...(current.backups ?? []), { url: '', referer: undefined }],
+                backups: [...(current.backups ?? []), ''],
               }))
             }
           >
@@ -99,33 +95,19 @@ export function SourceDialog({
         </div>
         {(form.backups ?? []).map((backup, index) => (
           <div
-            className="border-border bg-muted/40 grid grid-cols-[1fr_1fr_auto] gap-2 rounded-xl border p-3"
-            key={`${backup.url}-${index}`}
+            className="border-border bg-muted/40 grid grid-cols-[1fr_auto] gap-2 rounded-xl border p-3"
+            key={`${backup}-${index}`}
           >
             <Input
               aria-label={`备用地址 ${index + 1} URL`}
               className="font-mono text-xs"
               placeholder="https://example.com/api.php/provide/vod"
-              value={backup.url}
+              value={backup}
               onChange={(event) =>
                 setForm((current) => ({
                   ...current,
                   backups: (current.backups ?? []).map((item, itemIndex) =>
-                    itemIndex === index ? { ...item, url: event.target.value } : item,
-                  ),
-                }))
-              }
-            />
-            <Input
-              aria-label={`备用地址 ${index + 1} Referer`}
-              className="font-mono text-xs"
-              placeholder="Referer（可选）"
-              value={backup.referer ?? ''}
-              onChange={(event) =>
-                setForm((current) => ({
-                  ...current,
-                  backups: (current.backups ?? []).map((item, itemIndex) =>
-                    itemIndex === index ? { ...item, referer: event.target.value || undefined } : item,
+                    itemIndex === index ? event.target.value : item,
                   ),
                 }))
               }
@@ -152,8 +134,8 @@ export function SourceDialog({
         <span className="mt-1 flex items-center justify-between gap-4">
           <span className="text-muted-foreground text-xs">关闭后不会参与聚合搜索。</span>
           <Switch
-            checked={form.enabled ?? false}
-            onCheckedChange={(checked) => setForm((current) => ({ ...current, enabled: checked }))}
+            checked={!(form.disabled ?? false)}
+            onCheckedChange={(checked) => setForm((current) => ({ ...current, disabled: !checked }))}
           />
         </span>
       </label>
@@ -161,30 +143,35 @@ export function SourceDialog({
   )
 }
 
-export function LiveSourceDialog({
+export function IptvSourceDialog({
   dialog,
   onClose,
   onSaved,
 }: {
-  dialog: LiveSourceDialogState
+  dialog: IptvSourceDialogState
   onClose: () => void
   onSaved: () => Promise<void>
 }): React.JSX.Element {
-  const [form, setForm] = useState<LiveSourceInput>(() =>
+  const [form, setForm] = useState<IptvSourceInput>(() =>
     dialog.mode === 'edit'
-      ? { name: dialog.source.name, url: dialog.source.url, enabled: dialog.source.enabled }
-      : emptyLiveSourceInput,
+      ? {
+          name: dialog.source.name,
+          url: dialog.source.url,
+          disabled: dialog.source.disabled,
+          headers: dialog.source.headers,
+        }
+      : emptyIptvSourceInput,
   )
   const [isSaving, setIsSaving] = useState(false)
-  const title = dialog.mode === 'create' ? '添加直播源' : '编辑直播源'
+  const title = dialog.mode === 'create' ? '添加 IPTV 源' : '编辑 IPTV 源'
 
   const save = async (): Promise<void> => {
     if (!isApiAvailable()) return
     setIsSaving(true)
     try {
-      if (dialog.mode === 'create') await createLiveSource(form)
-      else await updateLiveSource(dialog.source.id, form)
-      toast.success(dialog.mode === 'create' ? '直播源已添加' : '直播源已更新')
+      if (dialog.mode === 'create') await createIptvSource(form)
+      else await updateIptvSource(dialog.source.id, form)
+      toast.success(dialog.mode === 'create' ? 'IPTV 源已添加' : 'IPTV 源已更新')
       await onSaved()
     } catch (error) {
       toast.error('保存失败', { description: error instanceof Error ? error.message : String(error) })
@@ -207,7 +194,7 @@ export function LiveSourceDialog({
         <span className="text-foreground text-sm font-medium">URL</span>
         <Input
           className="mt-2 font-mono text-xs"
-          placeholder="https://example.com/live.m3u"
+          placeholder="https://example.com/iptv.m3u"
           type="url"
           value={form.url}
           onChange={(event) => setForm((current) => ({ ...current, url: event.target.value }))}
@@ -219,14 +206,90 @@ export function LiveSourceDialog({
       <label className="border-border bg-muted flex items-center justify-between gap-4 rounded-xl border px-3 py-3">
         <span>
           <span className="text-foreground block text-sm font-medium">是否开启</span>
-          <span className="text-muted-foreground text-xs">关闭后不会在直播页选择。</span>
+          <span className="text-muted-foreground text-xs">关闭后不会在 IPTV 页选择。</span>
         </span>
         <Switch
-          checked={form.enabled ?? true}
-          onCheckedChange={(checked) => setForm((current) => ({ ...current, enabled: checked }))}
+          checked={!(form.disabled ?? false)}
+          onCheckedChange={(checked) => setForm((current) => ({ ...current, disabled: !checked }))}
         />
       </label>
+      <HeaderEditor
+        description="只用于频道预览和播放，不会发送给播放列表或 EPG 服务。"
+        headers={form.headers ?? {}}
+        onChange={(headers) => setForm((current) => ({ ...current, headers }))}
+      />
     </DialogSurface>
+  )
+}
+
+function HeaderEditor({
+  description,
+  headers,
+  onChange,
+}: {
+  description: string
+  headers: SourceHeaders
+  onChange: (headers: SourceHeaders) => void
+}): React.JSX.Element {
+  const addHeader = (): void => {
+    const next = { ...headers }
+    const existing = new Set(Object.keys(next).map((name) => name.toLowerCase()))
+    let name =
+      ['User-Agent', 'Referer', 'X-Custom-Header'].find((item) => !existing.has(item.toLowerCase())) ??
+      'X-Custom-Header'
+    let suffix = 2
+    while (existing.has(name.toLowerCase())) name = `X-Custom-Header-${suffix++}`
+    next[name] = ''
+    onChange(next)
+  }
+
+  return (
+    <div className="border-border space-y-4 border-t pt-4">
+      <div>
+        <h3 className="text-foreground text-sm font-semibold">请求 Header</h3>
+        <p className="text-muted-foreground mt-1 text-xs">{description}</p>
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-muted-foreground text-xs">User-Agent、Referer 与自定义 Header 在同一处配置。</p>
+        <Button type="button" size="sm" variant="outline" onClick={addHeader}>
+          <Plus data-icon="inline-start" />
+          添加
+        </Button>
+      </div>
+      {Object.entries(headers).map(([name, value], index) => (
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-2" key={`${name}-${index}`}>
+          <Input
+            aria-label={`Header ${index + 1} 名称`}
+            className="font-mono text-xs"
+            placeholder="User-Agent"
+            value={name}
+            onChange={(event) =>
+              onChange(
+                Object.fromEntries(
+                  Object.entries(headers).map(([key, item]) => [key === name ? event.target.value : key, item]),
+                ),
+              )
+            }
+          />
+          <Input
+            aria-label={`Header ${index + 1} 值`}
+            className="font-mono text-xs"
+            placeholder="value"
+            value={value ?? ''}
+            onChange={(event) => onChange({ ...headers, [name]: event.target.value })}
+          />
+          <Button
+            aria-label={`删除 Header ${index + 1}`}
+            size="icon"
+            type="button"
+            variant="ghost"
+            onClick={() => onChange(Object.fromEntries(Object.entries(headers).filter(([key]) => key !== name)))}
+          >
+            <Trash2 />
+          </Button>
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -245,9 +308,11 @@ function DialogSurface({
 }): React.JSX.Element {
   return (
     <div className="bg-background/45 fixed inset-0 z-50 flex items-center justify-center px-4 backdrop-blur-sm">
-      <div className="border-border bg-card w-full max-w-lg rounded-xl border p-5 shadow-sm">
+      <div className="border-border bg-card flex max-h-[88vh] w-full max-w-lg flex-col rounded-xl border p-5 shadow-sm">
         <h2 className="text-foreground mb-5 text-lg font-semibold">{title}</h2>
-        <div className="flex flex-col gap-4">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+          <div className="flex flex-col gap-4">{children}</div>
+        </div>
         <div className="mt-6 flex justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>
             取消

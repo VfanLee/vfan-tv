@@ -48,7 +48,7 @@ export function RadioPage(): React.JSX.Element {
     resume()
   }, [resume])
 
-  const mergeLivePrograms = useCallback(async (items: RadioChannel[]): Promise<RadioChannel[]> => {
+  const mergeIptvPrograms = useCallback(async (items: RadioChannel[]): Promise<RadioChannel[]> => {
     if (!items.length) return items
     try {
       return applyLivePrograms(items, await getRadioLivePrograms(items.map((item) => item.id)))
@@ -74,7 +74,7 @@ export function RadioPage(): React.JSX.Element {
             ? await getRadioBillboard(nextCategoryId, nextRegionId)
             : await getRadioCategoryChannels(nextCategoryId, 1, PAGE_SIZE)
         setChannels(items)
-        void mergeLivePrograms(items).then((nextItems) => {
+        void mergeIptvPrograms(items).then((nextItems) => {
           setChannels((current) =>
             current.length === items.length && current.every((item, index) => item.id === items[index]?.id)
               ? nextItems
@@ -88,7 +88,7 @@ export function RadioPage(): React.JSX.Element {
         setIsLoading(false)
       }
     },
-    [categoryId, mergeLivePrograms, regionId, searchQuery, view],
+    [categoryId, mergeIptvPrograms, regionId, searchQuery, view],
   )
 
   useEffect(() => {
@@ -112,7 +112,7 @@ export function RadioPage(): React.JSX.Element {
         if (!useRadioPlayerStore.getState().channel && items[0]) {
           useRadioPlayerStore.getState().playChannel(items[0])
         }
-        void mergeLivePrograms(items).then((nextItems) => {
+        void mergeIptvPrograms(items).then((nextItems) => {
           if (active) setChannels(nextItems)
         })
       } catch (error) {
@@ -125,7 +125,7 @@ export function RadioPage(): React.JSX.Element {
     return () => {
       active = false
     }
-  }, [mergeLivePrograms])
+  }, [mergeIptvPrograms])
 
   useEffect(() => {
     if (!channels.length) return

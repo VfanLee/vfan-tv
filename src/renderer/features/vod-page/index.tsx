@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router'
-import { ArrowLeft, Heart, ListVideo, Radio } from 'lucide-react'
+import { ArrowLeft, Heart, ListVideo, Radio, RotateCcw, TriangleAlert } from 'lucide-react'
 import type { VodSearchResult } from '@shared/types'
 import { BasicPlayer, MediaPoster } from '@renderer/components'
+import { useMediaPlaybackTarget } from '@renderer/hooks'
 import { SegmentedTabs } from '@/ui'
 import { cn } from '@/utils'
 import { useSearchContextStore } from '@/stores'
@@ -16,6 +17,7 @@ import {
   dedupeCandidates,
   getDefaultSelection,
   getDoubanScore,
+  getEpisodePlaybackCandidates,
   getEpisodeCount,
   getPlayLines,
   getSelectionByEpisodeUrl,
@@ -66,29 +68,63 @@ export function VodPage(): React.JSX.Element {
       ),
     [lines, locationState?.preferredEpisodeIndex, locationState?.preferredLineIndex, resourceKey],
   )
-  const activeSelection =
-    selection?.resourceKey === resourceKey
-      ? selection
-      : (locationEpisodeSelection ??
-        locationIndexedSelection ?? {
-          resourceKey,
-          lineIndex: defaultSelection.lineIndex,
-          episodeIndex: defaultSelection.episodeIndex,
-        })
+  const requestedSelection = useMemo<EpisodeSelection>(
+    () =>
+      selection?.resourceKey === resourceKey
+        ? selection
+        : (locationEpisodeSelection ??
+          locationIndexedSelection ?? {
+            resourceKey,
+            lineIndex: defaultSelection.lineIndex,
+            episodeIndex: defaultSelection.episodeIndex,
+          }),
+    [defaultSelection, locationEpisodeSelection, locationIndexedSelection, resourceKey, selection],
+  )
+  const playbackCandidates = useMemo(
+    () => getEpisodePlaybackCandidates(lines, requestedSelection),
+    [lines, requestedSelection],
+  )
+  const requestedEpisode = lines[requestedSelection.lineIndex]?.episodes[requestedSelection.episodeIndex]
+  const playbackResolution = useMediaPlaybackTarget(
+    playbackCandidates.length > 0
+      ? {
+          candidates: playbackCandidates,
+          sourceId: current?.sourceId,
+          diagnostics: { sourceName: current?.sourceName, episodeName: requestedEpisode?.name },
+        }
+      : undefined,
+  )
+  const playbackTarget = playbackResolution.target
+  const selectedPlaybackCandidate = playbackCandidates.find(
+    (candidate) => candidate.id === playbackTarget?.selectedCandidateId,
+  )
+  const activeSelection = useMemo<EpisodeSelection>(() => {
+    if (!selectedPlaybackCandidate) return requestedSelection
+    const lineIndex = Number(selectedPlaybackCandidate.id)
+    const line = lines[lineIndex]
+    const episodeIndex = line?.episodes.findIndex((episode) => episode.url === selectedPlaybackCandidate.url) ?? -1
+    if (!Number.isInteger(lineIndex) || !line || episodeIndex < 0) return requestedSelection
+    return { resourceKey, lineIndex, episodeIndex }
+  }, [lines, requestedSelection, resourceKey, selectedPlaybackCandidate])
   const activeLine = lines[activeSelection.lineIndex]
   const activeEpisode = activeLine?.episodes[activeSelection.episodeIndex]
   const recentPlayback = useRecentPlayback(current, activeLine, activeEpisode)
   const playbackProgressRef = recentPlayback.progressRef
   const saveRecentProgress = recentPlayback.save
-  const playerSrc = activeEpisode?.url
+  const playerSrc = selectedPlaybackCandidate?.url ?? activeEpisode?.url
+  const isPlayerResolving = hydration.isHydrating || playbackResolution.isLoading
   const previousEpisodeIndex = activeSelection.episodeIndex + (isEpisodeDescending ? 1 : -1)
   const nextEpisodeIndex = activeSelection.episodeIndex + (isEpisodeDescending ? -1 : 1)
   const hasPreviousEpisode = Boolean(
     activeLine && previousEpisodeIndex >= 0 && previousEpisodeIndex < activeLine.episodes.length,
   )
   const hasNextEpisode = Boolean(activeLine && nextEpisodeIndex >= 0 && nextEpisodeIndex < activeLine.episodes.length)
+  const locationMatchesPlaybackCandidate = Boolean(
+    locationState?.episodeUrl && playbackCandidates.some((candidate) => candidate.url === locationState.episodeUrl),
+  )
   const initialTime =
-    shouldApplyLocationInitialTime(locationState, activeSelection, playerSrc) && locationState?.initialTime
+    (locationMatchesPlaybackCandidate || shouldApplyLocationInitialTime(locationState, activeSelection, playerSrc)) &&
+    locationState?.initialTime
       ? Math.max(0, Math.floor(locationState.initialTime))
       : 0
   const playerTitle = activeEpisode ? `${current?.title ?? '未知资源'} - ${activeEpisode.name}` : undefined
@@ -204,15 +240,18 @@ export function VodPage(): React.JSX.Element {
       {isTheaterMode ? (
         <div className="min-h-0 flex-1">
           <main className="flex h-full min-h-0 min-w-0 items-center justify-center">
-            <section className="aspect-video w-full max-w-[calc(100vh*16/9)] overflow-hidden bg-black">
+            <section className="relative aspect-video w-full max-w-[calc(100vh*16/9)] overflow-hidden bg-black">
               <BasicPlayer
                 autoPlay
+                formatPlaybackUrl={() => playerSrc ?? ''}
                 hasNextEpisode={hasNextEpisode}
                 hasPreviousEpisode={hasPreviousEpisode}
                 initialTime={initialTime}
-                isResolvingSource={hydration.isHydrating}
+                isResolvingSource={isPlayerResolving}
                 isTheaterMode={isTheaterMode}
-                src={playerSrc}
+                mediaSessionId={playbackTarget?.mediaSessionId}
+                sourceType={playbackTarget?.streamType}
+                src={playbackTarget?.src}
                 title={playerTitle}
                 onEnded={hasNextEpisode ? () => selectEpisode(nextEpisodeIndex) : undefined}
                 onNextEpisode={() => selectEpisode(nextEpisodeIndex)}
@@ -220,6 +259,7 @@ export function VodPage(): React.JSX.Element {
                 onProgress={(progress) => void saveRecentProgress(progress)}
                 onToggleTheaterMode={() => setIsTheaterMode((current) => !current)}
               />
+              <VodPlaybackError errorMessage={playbackResolution.errorMessage} onRetry={playbackResolution.retry} />
             </section>
           </main>
         </div>
@@ -241,22 +281,29 @@ export function VodPage(): React.JSX.Element {
 
               <div className="grid min-h-0 flex-1 gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
                 <main className="min-h-0 min-w-0">
-                  <section className="h-full min-h-0 overflow-hidden rounded-xl bg-black">
+                  <section className="relative h-full min-h-0 overflow-hidden rounded-xl bg-black">
                     <BasicPlayer
                       autoPlay
                       className="h-full"
+                      formatPlaybackUrl={() => playerSrc ?? ''}
                       hasNextEpisode={hasNextEpisode}
                       hasPreviousEpisode={hasPreviousEpisode}
                       initialTime={initialTime}
-                      isResolvingSource={hydration.isHydrating}
+                      isResolvingSource={isPlayerResolving}
                       isTheaterMode={isTheaterMode}
-                      src={playerSrc}
+                      mediaSessionId={playbackTarget?.mediaSessionId}
+                      sourceType={playbackTarget?.streamType}
+                      src={playbackTarget?.src}
                       title={playerTitle}
                       onEnded={hasNextEpisode ? () => selectEpisode(nextEpisodeIndex) : undefined}
                       onNextEpisode={() => selectEpisode(nextEpisodeIndex)}
                       onPreviousEpisode={() => selectEpisode(previousEpisodeIndex)}
                       onProgress={(progress) => void saveRecentProgress(progress)}
                       onToggleTheaterMode={() => setIsTheaterMode((current) => !current)}
+                    />
+                    <VodPlaybackError
+                      errorMessage={playbackResolution.errorMessage}
+                      onRetry={playbackResolution.retry}
                     />
                   </section>
                 </main>
@@ -320,6 +367,7 @@ export function VodPage(): React.JSX.Element {
                 ) : undefined
               }
               poster={current?.poster}
+              sourceId={current?.sourceId}
               title={current?.title ?? '影片海报'}
             />
 
@@ -367,6 +415,35 @@ export function VodPage(): React.JSX.Element {
           </section>
         </>
       )}
+    </div>
+  )
+}
+
+function VodPlaybackError({
+  errorMessage,
+  onRetry,
+}: {
+  errorMessage?: string
+  onRetry: () => void
+}): React.JSX.Element | null {
+  if (!errorMessage) return null
+  return (
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-4 bg-black px-6 text-center">
+      <span className="flex size-12 items-center justify-center rounded-2xl bg-white/10 text-white/70">
+        <TriangleAlert className="size-5" />
+      </span>
+      <div className="max-w-lg">
+        <h2 className="text-lg font-semibold text-white">无法解析播放地址</h2>
+        <p className="mt-2 text-sm leading-6 text-white/55">{errorMessage}</p>
+      </div>
+      <button
+        className="inline-flex h-10 items-center gap-2 rounded-lg bg-white px-4 text-sm font-semibold text-black transition-colors hover:bg-white/90"
+        type="button"
+        onClick={onRetry}
+      >
+        <RotateCcw className="size-4" />
+        重试
+      </button>
     </div>
   )
 }

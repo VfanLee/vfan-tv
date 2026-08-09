@@ -1,10 +1,84 @@
 import { z } from 'zod'
 
+const networkProxyHostSchema = z
+  .string()
+  .trim()
+  .min(1, '代理主机不能为空')
+  .refine((value) => !value.includes('://'), '代理主机不能包含协议')
+  .refine((value) => !/[\s/@?#]/.test(value), '代理主机不能包含路径、认证信息或空格')
+
+export const networkProxyProfileSchema = z
+  .object({
+    id: z.string().trim().min(1),
+    name: z.string().trim().min(1, '代理名称不能为空'),
+    protocol: z.enum(['http', 'https', 'socks5']),
+    host: networkProxyHostSchema,
+    port: z.number().int().min(1, '代理端口必须大于 0').max(65_535, '代理端口不能超过 65535'),
+  })
+  .strict()
+
+export const networkRouteSettingsSchema = z
+  .object({
+    mode: z.enum(['direct', 'system', 'custom']).default('direct'),
+    activeProfileId: z.string().trim().min(1).optional(),
+  })
+  .strict()
+
+export const networkSettingsSchema = z
+  .object({
+    profiles: z.array(networkProxyProfileSchema).default([]),
+    content: networkRouteSettingsSchema.default({ mode: 'direct' }),
+    playback: networkRouteSettingsSchema.default({ mode: 'direct' }),
+  })
+  .superRefine((value, context) => {
+    const ids = new Set<string>()
+    const names = new Set<string>()
+    for (const [index, profile] of value.profiles.entries()) {
+      if (ids.has(profile.id)) {
+        context.addIssue({ code: z.ZodIssueCode.custom, path: ['profiles', index, 'id'], message: '代理 ID 不能重复' })
+      }
+      ids.add(profile.id)
+      const normalizedName = profile.name.toLocaleLowerCase()
+      if (names.has(normalizedName)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ['profiles', index, 'name'],
+          message: '代理名称不能重复',
+        })
+      }
+      names.add(normalizedName)
+    }
+    for (const route of ['content', 'playback'] as const) {
+      const routeSettings = value[route]
+      if (
+        routeSettings.mode === 'custom' &&
+        !value.profiles.some((profile) => profile.id === routeSettings.activeProfileId)
+      ) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [route, 'activeProfileId'],
+          message: '请选择有效的代理配置',
+        })
+      }
+    }
+  })
+
+export const iptvEpgSettingsSchema = z.object({
+  mode: z.enum(['source', 'query', 'xmltv']).default('source'),
+  url: z.string().trim().url('EPG 地址无效').optional(),
+  lastTest: z
+    .object({
+      status: z.enum(['idle', 'testing', 'success', 'error']).default('idle'),
+      testedAt: z.number().int().nonnegative().optional(),
+      elapsedMs: z.number().int().nonnegative().optional(),
+      errorMessage: z.string().optional(),
+    })
+    .default({ status: 'idle' }),
+  lastSuccessAt: z.number().int().nonnegative().optional(),
+  lastSuccessSource: z.string().optional(),
+})
+
 export const appSettingsSchema = z.object({
-  githubProxyCustomPrefix: z.string().trim().default(''),
-  githubProxyRoute: z
-    .enum(['direct', 'gh-proxy', 'cloudflare-v4', 'cloudflare-v46', 'fastly-v4', 'custom'])
-    .default('gh-proxy'),
   theme: z.enum(['light', 'dark', 'system']).default('system'),
   subscriptions: z
     .array(
@@ -19,4 +93,10 @@ export const appSettingsSchema = z.object({
     )
     .default([]),
   activeSubscriptionId: z.string().trim().min(1).optional(),
+  iptvEpg: iptvEpgSettingsSchema.default({ mode: 'source', lastTest: { status: 'idle' } }),
+  network: networkSettingsSchema.default({
+    profiles: [],
+    content: { mode: 'direct' },
+    playback: { mode: 'direct' },
+  }),
 })

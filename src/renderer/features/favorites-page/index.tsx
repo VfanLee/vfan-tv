@@ -109,6 +109,7 @@ function FavoriteCard({
           baseUrl={item.sourceUrl}
           className="aspect-[2/3]"
           poster={item.poster}
+          sourceId={item.sourceId}
           title={item.title}
           overlay={<PosterPlayOverlay />}
         />

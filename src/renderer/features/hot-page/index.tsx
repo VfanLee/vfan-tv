@@ -127,7 +127,13 @@ function HotCard({ item, onClick }: { item: RecommendationItem; onClick: () => v
       type="button"
       onClick={onClick}
     >
-      <MediaPoster className="aspect-[2/3]" poster={item.poster} showHoverScrim={false} title={item.title} />
+      <MediaPoster
+        className="aspect-[2/3]"
+        poster={item.poster}
+        showHoverScrim={false}
+        sourceType="douban"
+        title={item.title}
+      />
       <div className="mt-3 min-w-0">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-foreground min-w-0 truncate text-[15px] font-semibold">{item.title}</h2>

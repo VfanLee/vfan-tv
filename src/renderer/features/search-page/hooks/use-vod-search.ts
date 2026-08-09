@@ -61,7 +61,7 @@ export function useVodSearch(initialKeyword: string): VodSearchState {
   const refreshEnabledSourceCount = useCallback(async (): Promise<number> => {
     try {
       const sourceConfigs = await listSources()
-      const nextCount = sourceConfigs.filter((source) => source.enabled).length
+      const nextCount = sourceConfigs.filter((source) => !source.disabled).length
       setEnabledSourceCount(nextCount)
       setIsSourcesReady(true)
       return nextCount
@@ -113,7 +113,7 @@ export function useVodSearch(initialKeyword: string): VodSearchState {
   }, [])
 
   useEffect(() => {
-    void refreshEnabledSourceCount()
+    queueMicrotask(() => void refreshEnabledSourceCount())
   }, [refreshEnabledSourceCount])
 
   useEffect(() => {

@@ -1,22 +1,30 @@
 import playlistParser, { type PlaylistItem } from 'iptv-playlist-parser'
-import type { LiveChannel, LiveChannelStream, LivePlaylist, LiveStreamRequestHeaders } from '@shared/types'
+import type {
+  IptvChannel,
+  IptvChannelStream,
+  IptvPlaylist,
+  IptvStreamRequestHeaders,
+  SourceHeaders,
+} from '@shared/types'
 import type { HttpClient } from '../../infrastructure/http/http-client'
+import { resolveSourceRequestHeaders } from '../../infrastructure/http/source-request-headers'
 
 const MAX_PLAYLIST_SIZE = 10 * 1024 * 1024
 const DEFAULT_GROUP = '未分组'
 const VOD_STREAM_URL_PATTERN = /\.(?:mp4|m4v|mkv|mov|avi|wmv|webm)(?:$|[?#])/i
-const STREAM_URL_PATTERN = /(?:https?|rtmp|rtsp):\/\/\S+/i
+const STREAM_URL_PATTERN = /https?:\/\/\S+/i
 const TEXT_GROUP_MARKERS = new Set(['#genre#', '#group#'])
-const LIVE_CONTEXT_KEYWORDS = ['直播', '卫视', '央视', '央卫视']
+const IPTV_CONTEXT_KEYWORDS = ['直播', '卫视', '央视', '央卫视']
 const VOD_CONTEXT_KEYWORDS = ['点播', '录播', '回放', '春晚']
 
 interface ParsedExtInf {
   title: string
   group: string
   logo?: string
+  tvgId?: string
   tvgName?: string
   epgUrl?: string
-  requestHeaders?: LiveStreamRequestHeaders
+  requestHeaders?: IptvStreamRequestHeaders
 }
 
 interface ParsedPlaylistItem extends ParsedExtInf {
@@ -24,51 +32,38 @@ interface ParsedPlaylistItem extends ParsedExtInf {
 }
 
 // 将远程 M3U/M3U8 内容解析为统一频道模型，并保留源站要求的请求头供播放器使用。
-export class LivePlaylistService {
+export class IptvPlaylistService {
   constructor(private readonly httpClient: HttpClient) {}
 
-  async load(url: string): Promise<LivePlaylist> {
+  async load(url: string, headers: SourceHeaders): Promise<IptvPlaylist> {
     const parsedUrl = new URL(url)
 
     if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-      throw new Error('直播源地址仅支持 HTTP 或 HTTPS')
+      throw new Error('IPTV 源地址仅支持 HTTP 或 HTTPS')
     }
 
-    const playlistResponse = await this.loadPlaylistContent(parsedUrl)
+    const playlistResponse = await this.loadPlaylistContent(parsedUrl, headers)
 
-    return parseLivePlaylist(playlistResponse.content, playlistResponse.url)
+    return parseIptvPlaylist(playlistResponse.content, playlistResponse.url)
   }
 
-  private async loadPlaylistContent(parsedUrl: URL): Promise<{ content: string; url: string }> {
-    try {
-      return {
-        content: await this.httpClient.get<string>(parsedUrl.toString(), {
-          responseType: 'text',
-          maxContentLength: MAX_PLAYLIST_SIZE,
-        }),
-        url: parsedUrl.toString(),
-      }
-    } catch (error) {
-      if (parsedUrl.protocol !== 'https:') {
-        throw error
-      }
-
-      const fallbackUrl = new URL(parsedUrl)
-      fallbackUrl.protocol = 'http:'
-      return {
-        content: await this.httpClient.get<string>(fallbackUrl.toString(), {
-          responseType: 'text',
-          maxContentLength: MAX_PLAYLIST_SIZE,
-        }),
-        url: fallbackUrl.toString(),
-      }
+  private async loadPlaylistContent(parsedUrl: URL, headers: SourceHeaders): Promise<{ content: string; url: string }> {
+    return {
+      content: await this.httpClient.get<string>(parsedUrl.toString(), {
+        headers: resolveSourceRequestHeaders(parsedUrl.toString(), parsedUrl.toString(), headers),
+        requestLabel: 'IPTV 目录',
+        responseType: 'text',
+        maxContentLength: MAX_PLAYLIST_SIZE,
+      }),
+      url: parsedUrl.toString(),
     }
   }
 }
 
-export function parseLivePlaylist(content: string, sourceUrl: string): LivePlaylist {
-  const items = parsePlaylistItems(content)
-  const channelMap = new Map<string, LiveChannel>()
+export function parseIptvPlaylist(content: string, sourceUrl: string): IptvPlaylist {
+  const parsed = parsePlaylistItems(content)
+  const items = parsed.items
+  const channelMap = new Map<string, IptvChannel>()
 
   for (const item of items) {
     addStream(channelMap, item, item.url)
@@ -77,12 +72,13 @@ export function parseLivePlaylist(content: string, sourceUrl: string): LivePlayl
   const channels = [...channelMap.values()]
 
   if (channels.length === 0) {
-    throw new Error('直播源中没有可播放频道')
+    throw new Error('IPTV 源中没有可播放频道')
   }
 
   return {
     sourceUrl,
     fetchedAt: Date.now(),
+    sourceEpgUrls: parsed.sourceEpgUrls,
     channels,
   }
 }
@@ -95,8 +91,14 @@ export function m3uToTextPlaylist(content: string): string {
   return playlistItemsToText(parseM3uPlaylistItems(content))
 }
 
-function parsePlaylistItems(content: string): ParsedPlaylistItem[] {
-  return isM3uPlaylist(content) ? parseM3uPlaylistItems(content) : parseTextPlaylistItems(content)
+function parsePlaylistItems(content: string): { items: ParsedPlaylistItem[]; sourceEpgUrls: string[] } {
+  if (!isM3uPlaylist(content)) return { items: parseTextPlaylistItems(content), sourceEpgUrls: [] }
+  const playlist = playlistParser.parse(content)
+  const headerUrls = [playlist.header.attrs['x-tvg-url'], ...parseHeaderEpgUrls(playlist.header.raw)]
+  return {
+    items: playlist.items.flatMap(toParsedPlaylistItem),
+    sourceEpgUrls: [...new Set(headerUrls.flatMap(splitEpgUrls).filter(Boolean))],
+  }
 }
 
 function parseM3uPlaylistItems(content: string): ParsedPlaylistItem[] {
@@ -107,12 +109,13 @@ function toParsedPlaylistItem(item: PlaylistItem): ParsedPlaylistItem[] {
   const url = normalizeM3uStreamUrl(item.url)
   if (!url) return []
 
-  const requestHeaders = normalizeRequestHeaders(item.http.referrer, item.http['user-agent'])
+  const requestHeaders = normalizeRequestHeaders(item.http.referrer, item.http['user-agent'], parseUrlHeaders(item.url))
   return [
     {
       title: item.name.trim() || item.tvg.name.trim() || '未命名频道',
       group: item.group.title.trim() || DEFAULT_GROUP,
       logo: item.tvg.logo.trim() || undefined,
+      tvgId: item.tvg.id.trim() || undefined,
       tvgName: item.tvg.name.trim() || undefined,
       epgUrl: item.tvg.url.trim() || undefined,
       requestHeaders,
@@ -122,17 +125,53 @@ function toParsedPlaylistItem(item: PlaylistItem): ParsedPlaylistItem[] {
 }
 
 function normalizeM3uStreamUrl(value: string): string {
-  return value.split('|', 1)[0]?.trim() || ''
+  const url = value.split('|', 1)[0]?.trim() || ''
+  try {
+    return ['http:', 'https:'].includes(new URL(url).protocol) ? url : ''
+  } catch {
+    return ''
+  }
 }
 
-function normalizeRequestHeaders(referer: string, userAgent: string): LiveStreamRequestHeaders | undefined {
-  const normalizedReferer = referer.trim()
-  const normalizedUserAgent = userAgent.trim()
-  if (!normalizedReferer && !normalizedUserAgent) return undefined
-  return {
-    ...(normalizedReferer ? { referer: normalizedReferer } : {}),
-    ...(normalizedUserAgent ? { userAgent: normalizedUserAgent } : {}),
+function normalizeRequestHeaders(
+  referer: string,
+  userAgent: string,
+  urlHeaders: Record<string, string>,
+): IptvStreamRequestHeaders | undefined {
+  const headers = new Map<string, { name: string; value: string }>()
+  const entries: Array<[string, string]> = [
+    ...(referer.trim() ? ([['Referer', referer.trim()]] as Array<[string, string]>) : []),
+    ...(userAgent.trim() ? ([['User-Agent', userAgent.trim()]] as Array<[string, string]>) : []),
+    ...Object.entries(urlHeaders),
+  ]
+  for (const [rawName, value] of entries) {
+    const normalized = rawName.trim().toLowerCase()
+    const name = normalized === 'referrer' ? 'Referer' : normalized === 'useragent' ? 'User-Agent' : rawName.trim()
+    if (name && value.trim()) headers.set(name.toLowerCase(), { name, value })
   }
+  if (headers.size === 0) return undefined
+  return { headers: Object.fromEntries([...headers.values()].map(({ name, value }) => [name, value])) }
+}
+
+function parseUrlHeaders(value: string): Record<string, string> {
+  const raw = value.includes('|') ? value.slice(value.indexOf('|') + 1) : ''
+  if (!raw) return {}
+  return Object.fromEntries(
+    raw
+      .split('&')
+      .map((part) => part.split('=', 2).map((item) => decodeURIComponent(item.trim())))
+      .filter((entry): entry is [string, string] => entry.length === 2 && Boolean(entry[0] && entry[1])),
+  )
+}
+
+function parseHeaderEpgUrls(raw: string): string[] {
+  const match = /(?:url-tvg|x-tvg-url)=["']([^"']+)["']/gi
+  return [...raw.matchAll(match)].map((item) => item[1] ?? '')
+}
+
+function splitEpgUrls(value: unknown): string[] {
+  if (typeof value !== 'string') return []
+  return value.split(/[;,]/).map((item) => item.trim())
 }
 
 function parseTextPlaylistItems(content: string): ParsedPlaylistItem[] {
@@ -241,9 +280,9 @@ function parseTextStreamItem(line: string): { title: string; url: string } | und
   }
 }
 
-function addStream(channelMap: Map<string, LiveChannel>, info: ParsedExtInf, url: string): void {
+function addStream(channelMap: Map<string, IptvChannel>, info: ParsedExtInf, url: string): void {
   const channelId = createStableId(`${info.group}:${info.title}`)
-  const stream: LiveChannelStream = {
+  const stream: IptvChannelStream = {
     id: createStableId(`${info.group}:${info.title}:${url}`),
     name: `线路 ${((channelMap.get(channelId)?.streams.length ?? 0) + 1).toString()}`,
     url,
@@ -264,6 +303,7 @@ function addStream(channelMap: Map<string, LiveChannel>, info: ParsedExtInf, url
     title: info.title,
     group: info.group,
     logo: info.logo,
+    tvgId: info.tvgId,
     tvgName: info.tvgName,
     epgUrl: info.epgUrl,
     streams: [stream],
@@ -280,7 +320,7 @@ function inferStreamIsLive(group: string, title: string, url: string): boolean {
     return false
   }
 
-  if (LIVE_CONTEXT_KEYWORDS.some((keyword) => context.includes(keyword))) {
+  if (IPTV_CONTEXT_KEYWORDS.some((keyword) => context.includes(keyword))) {
     return true
   }
 

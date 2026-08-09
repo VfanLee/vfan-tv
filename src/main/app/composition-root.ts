@@ -3,14 +3,19 @@ import { IPC_CHANNELS } from '@shared/ipc'
 import type { SearchEvent } from '@shared/types'
 import { createDatabase } from '../infrastructure/database/client'
 import { HttpClient } from '../infrastructure/http/http-client'
-import { DoubanService } from '../modules/home/douban.service'
+import { ContentNetworkService } from '../infrastructure/network/content-network.service'
+import { configureDoubanSessionHeaders, DoubanService } from '../modules/home/douban.service'
 import { HomeService } from '../modules/home/home.service'
 import { FavoriteRepository } from '../modules/library/favorite.repository'
 import { RecentPlayRepository } from '../modules/library/recent-play.repository'
-import { LivePlaylistService } from '../modules/live-sources/live-playlist.service'
-import { LiveSourceRepository } from '../modules/live-sources/live-source.repository'
-import { LiveSourceService } from '../modules/live-sources/live-source.service'
-import { detectMediaStreamType } from '../modules/media/media-stream-detector.service'
+import { IptvPlaylistService } from '../modules/iptv-sources/iptv-playlist.service'
+import { IptvCacheRepository } from '../modules/iptv-sources/iptv-cache.repository'
+import { IptvCatalogService } from '../modules/iptv-sources/iptv-catalog.service'
+import { IptvEpgService } from '../modules/iptv-sources/iptv-epg.service'
+import { IptvPlaybackService } from '../modules/iptv-sources/iptv-playback.service'
+import { IptvSourceRepository } from '../modules/iptv-sources/iptv-source.repository'
+import { IptvSourceService } from '../modules/iptv-sources/iptv-source.service'
+import { MediaPlaybackTargetService } from '../modules/media/media-playback-target.service'
 import { MediaProxyServer } from '../modules/media/media-proxy-server'
 import { probeMediaSource } from '../modules/media/media-probe.service'
 import { SearchTaskManager } from '../modules/media/search-task-manager'
@@ -21,7 +26,7 @@ import { VodSourceRepository } from '../modules/sources/vod-source.repository'
 import { SettingsRepository } from '../modules/settings/settings.repository'
 import { SettingsService } from '../modules/settings/settings.service'
 import { UpdateService } from '../modules/updates/update.service'
-import { RadioService } from '../modules/radio/radio.service'
+import { configureRadioSessionHeaders, RadioService } from '../modules/radio/radio.service'
 
 // main 进程唯一的组合根：在此处集中装配依赖，领域模块不得自行创建全局实例。
 export interface ApplicationContext {
@@ -30,18 +35,24 @@ export interface ApplicationContext {
   setMainWindow: (window: BrowserWindow | null) => void
   repositories: {
     source: VodSourceRepository
-    liveSource: LiveSourceRepository
+    iptvSource: IptvSourceRepository
+    iptvCache: IptvCacheRepository
     recentPlay: RecentPlayRepository
     favorite: FavoriteRepository
   }
   services: {
     source: SourceService
-    liveSource: LiveSourceService
-    livePlaylist: LivePlaylistService
+    iptvSource: IptvSourceService
+    iptvPlaylist: IptvPlaylistService
+    iptvCatalog: IptvCatalogService
+    iptvEpg: IptvEpgService
+    iptvPlayback: IptvPlaybackService
     home: HomeService
     douban: DoubanService
     settings: SettingsService
+    network: ContentNetworkService
     mediaProxy: MediaProxyServer
+    mediaPlaybackTarget: MediaPlaybackTargetService
     vodSearch: VodSearchService
     vodCatalog: VodCatalogService
     updates: UpdateService
@@ -49,29 +60,40 @@ export interface ApplicationContext {
   }
   utilities: {
     httpClient: HttpClient
-    probeMediaSource: typeof probeMediaSource
-    detectMediaStreamType: typeof detectMediaStreamType
+    probeMediaSource: (
+      input: Parameters<typeof probeMediaSource>[0],
+      source?: Parameters<typeof probeMediaSource>[2],
+    ) => ReturnType<typeof probeMediaSource>
   }
 }
 
-export function createApplicationContext(): ApplicationContext {
+export async function createApplicationContext(): Promise<ApplicationContext> {
   const db = createDatabase()
   const source = new VodSourceRepository(db)
-  const liveSource = new LiveSourceRepository(db)
+  const iptvSource = new IptvSourceRepository(db)
+  const iptvCache = new IptvCacheRepository(db)
   const recentPlay = new RecentPlayRepository(db)
   const favorite = new FavoriteRepository(db)
   const settings = new SettingsService(new SettingsRepository(db))
-  const httpClient = new HttpClient()
+  const network = new ContentNetworkService()
+  await network.initialize(settings.get().network)
+  configureDoubanSessionHeaders(network.getContext('douban').session)
+  configureRadioSessionHeaders(network.getContext('radio').session)
+  const httpClient = new HttpClient(network, 'content')
+  const radioHttpClient = new HttpClient(network, 'radio')
   // IPC 事件只投递给当前主窗口，避免业务服务直接持有 BrowserWindow。
   let mainWindow: BrowserWindow | null = null
   const getMainWindow = (): BrowserWindow | null => mainWindow
   const emitSearchEvent = (event: SearchEvent): void =>
     mainWindow?.webContents.send(IPC_CHANNELS.vod.searchEvent, event)
-  const emitUpdateEvent: ConstructorParameters<typeof UpdateService>[1] = (event) =>
+  const emitUpdateEvent: ConstructorParameters<typeof UpdateService>[0] = (event) =>
     mainWindow?.webContents.send(IPC_CHANNELS.updates.event, event)
   const sourceService = new SourceService(source, httpClient)
-  const douban = new DoubanService(httpClient)
-  const mediaProxy = new MediaProxyServer()
+  const douban = new DoubanService(network)
+  const mediaProxy = new MediaProxyServer(network)
+  const mediaPlaybackTarget = new MediaPlaybackTargetService(mediaProxy, network)
+  const iptvPlaylist = new IptvPlaylistService(httpClient)
+  const iptvCatalog = new IptvCatalogService(iptvSource, iptvCache, iptvPlaylist)
 
   return {
     db,
@@ -79,20 +101,28 @@ export function createApplicationContext(): ApplicationContext {
     setMainWindow: (window) => {
       mainWindow = window
     },
-    repositories: { source, liveSource, recentPlay, favorite },
+    repositories: { source, iptvSource, iptvCache, recentPlay, favorite },
     services: {
       source: sourceService,
-      liveSource: new LiveSourceService(liveSource),
-      livePlaylist: new LivePlaylistService(httpClient),
+      iptvSource: new IptvSourceService(iptvSource, iptvCache),
+      iptvPlaylist,
+      iptvCatalog,
+      iptvEpg: new IptvEpgService(httpClient, settings, iptvCatalog, iptvCache),
+      iptvPlayback: new IptvPlaybackService(iptvSource, iptvCatalog, mediaPlaybackTarget),
       home: new HomeService(recentPlay, douban),
       douban,
       settings,
+      network,
       mediaProxy,
+      mediaPlaybackTarget,
       vodSearch: new VodSearchService(sourceService, httpClient, new SearchTaskManager(), emitSearchEvent),
       vodCatalog: new VodCatalogService(sourceService, httpClient),
-      updates: new UpdateService(settings, emitUpdateEvent),
-      radio: new RadioService(httpClient, mediaProxy),
+      updates: new UpdateService(emitUpdateEvent, network),
+      radio: new RadioService(radioHttpClient, mediaProxy, network),
     },
-    utilities: { httpClient, probeMediaSource, detectMediaStreamType },
+    utilities: {
+      httpClient,
+      probeMediaSource: (input, source) => probeMediaSource(input, network, source),
+    },
   }
 }

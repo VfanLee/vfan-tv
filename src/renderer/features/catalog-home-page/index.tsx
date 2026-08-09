@@ -138,7 +138,7 @@ export function CatalogHomePage(): React.JSX.Element {
               </label>
               <div className="flex min-w-0 items-center gap-2">
                 <Select
-                  value={selectedSource?.id}
+                  value={selectedSource?.id ?? ''}
                   onValueChange={(sourceId) => {
                     const next = new URLSearchParams(searchParams)
                     next.set('source', sourceId)
@@ -251,7 +251,6 @@ export function CatalogHomePage(): React.JSX.Element {
                     key={`${item.sourceId}:${item.vodId}`}
                     item={item}
                     pending={pendingDetailKey === `${item.sourceId}:${item.vodId}`}
-                    referer={selectedSource?.referer}
                     onOpen={() => void openDetail(item)}
                   />
                 ))}
@@ -411,12 +410,10 @@ function CatalogCard({
   item,
   onOpen,
   pending,
-  referer,
 }: {
   item: VodSearchResult
   onOpen: () => void
   pending: boolean
-  referer?: string
 }): React.JSX.Element {
   const meta = [item.year, item.area, item.category].filter(Boolean).join(' · ')
   return (
@@ -431,7 +428,7 @@ function CatalogCard({
           baseUrl={item.sourceUrl}
           className="border-border bg-muted aspect-[2/3] shadow-sm"
           poster={item.poster}
-          referer={referer}
+          sourceId={item.sourceId}
           title={item.title}
         />
         {pending ? (

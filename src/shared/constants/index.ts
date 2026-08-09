@@ -1,6 +1,5 @@
 export * from './app-brand'
-export * from './github-proxy'
-export * from './live'
+export * from './iptv'
 export * from './player'
 export * from './radio'
 export * from './release-routes'

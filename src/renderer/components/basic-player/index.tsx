@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type MutableRefObject } from 'react'
 import { createPortal } from 'react-dom'
 import Artplayer, { type Option } from 'artplayer'
 import artplayerPluginAudioTrack from 'artplayer-plugin-audio-track'
-import artplayerPluginHlsControl from 'artplayer-plugin-hls-control'
 import Hls, { type ErrorData } from 'hls.js'
 import mpegts from 'mpegts.js'
 import {
@@ -12,7 +11,16 @@ import {
   PLAYER_SEEK_STEP_STORAGE_KEY,
 } from '@shared/constants'
 import type { MediaStreamType } from '@shared/types'
-import { enterMiniWindowMode, isApiAvailable, onMiniWindowModeExit } from '@renderer/platform/api'
+import {
+  enterMiniWindowMode,
+  getAssociatedAudioUrl,
+  getMediaPlaybackSessionInfo,
+  isApiAvailable,
+  onMiniWindowModeExit,
+  releaseMediaPlaybackSession,
+  reportMediaPlaybackEvent,
+  retainMediaPlaybackSession,
+} from '@renderer/platform/api'
 import {
   artplayerControlIcons,
   artplayerSwitchIcons,
@@ -20,10 +28,17 @@ import {
   createMediaPlaybackCoordinator,
   type MediaPlaybackCoordinator,
 } from '@/utils'
-import { CustomSliderDialog, DisplaySettingsMenu } from './components/display-settings-dialogs'
+import { CustomSliderDialog, DisplaySettingsMenu, MediaTrackDialog } from './components/display-settings-dialogs'
 import { createSafeAmbilightPlugin } from './utils/safe-ambilight-plugin'
 import { createSettingsPositionTracker } from './utils/settings-position'
-import type { BasicPlayerProps, CustomSliderInput, DisplaySettingsState, MiniWindowPlayerController } from './types'
+import type {
+  BasicPlayerProps,
+  CustomSliderInput,
+  DisplaySettingsState,
+  MediaTrackSelection,
+  MiniWindowPlayerController,
+  PlayerRuntimeInfo,
+} from './types'
 
 // 播放器适配层：统一 ArtPlayer、HLS.js 与 mpegts.js 的生命周期及持久化播放设置。
 export type {
@@ -31,12 +46,17 @@ export type {
   MiniWindowPlayerController,
   MiniWindowPlayerState,
   PlayerNavigationLabels,
+  PlayerRuntimeInfo,
   PlayerVariant,
 } from './types'
 
 interface BasicPlayerCallbacks {
   onEnded?: () => void
   onProgress?: (progress: { currentTime: number; duration: number; force?: boolean }) => void
+  onPlaybackReady?: () => void
+  onPlaybackError?: (reason: string) => void
+  onRuntimeInfoChange?: (info: PlayerRuntimeInfo) => void
+  onSettingsVisibilityChange?: (visible: boolean) => void
 }
 
 type ArtplayerWithHls = Artplayer & { hls?: Hls }
@@ -98,22 +118,31 @@ interface VideoPlaybackQualityInfo {
 
 export function BasicPlayer({
   autoPlay = false,
-  audioTrackUrl,
+  audioTrackUrl: inputAudioTrackUrl,
   className,
   enableAutoNext = true,
+  hidePlaybackSettings = false,
   initialTime = 0,
   isResolvingSource = false,
   isTheaterMode = false,
   loop,
+  mediaSessionId,
   miniWindowMode = false,
+  playerOverlay,
+  playerOverlayPinned = false,
+  showMediaTrackSettings = false,
   onMiniWindowControllerReady,
   onMiniWindowPlayerStateChange,
   persistPlaybackSettings = true,
   formatPlaybackUrl = normalizePlaybackUrlForDisplay,
   onEnded,
   onProgress,
+  onPlaybackReady,
+  onPlaybackError,
+  onRuntimeInfoChange,
+  onSettingsVisibilityChange,
   sourceType,
-  src,
+  src: inputSrc,
   title,
   variant = 'vod',
 }: BasicPlayerProps): React.JSX.Element {
@@ -126,22 +155,56 @@ export function BasicPlayer({
   const initialTimeRef = useRef(initialTime)
   const resumeTimeRef = useRef(0)
   const resolvedUrlRef = useRef('检测中…')
+  const originalUrlRef = useRef('检测中…')
   const restoreFullscreenWebRef = useRef(false)
   const miniWindowSessionIdRef = useRef<string | undefined>(undefined)
   const miniWindowControllerReadyRef = useRef(onMiniWindowControllerReady)
   const miniWindowPlayerStateChangeRef = useRef(onMiniWindowPlayerStateChange)
   const playbackCoordinatorRef = useRef<MediaPlaybackCoordinator | null>(null)
   const [customNumberInput, setCustomNumberInput] = useState<CustomSliderInput | undefined>(undefined)
+  const [mediaTrackSelection, setMediaTrackSelection] = useState<MediaTrackSelection | undefined>(undefined)
   const [displaySettings, setDisplaySettings] = useState<DisplaySettingsState | undefined>(undefined)
   const [isDisplaySettingsClosing, setIsDisplaySettingsClosing] = useState(false)
   const [settingsPortalContainer, setSettingsPortalContainer] = useState<HTMLElement | undefined>(undefined)
   const [settingsBottomOffset, setSettingsBottomOffset] = useState(64)
+  const src = inputSrc && sourceType ? inputSrc : undefined
+  const [resolvedAudioTrack, setResolvedAudioTrack] = useState<{ input?: string; url?: string }>()
+  const audioTrackUrl = isLocalPlaybackUrl(inputAudioTrackUrl)
+    ? inputAudioTrackUrl
+    : resolvedAudioTrack && resolvedAudioTrack.input === inputAudioTrackUrl
+      ? resolvedAudioTrack.url
+      : undefined
+
+  useEffect(() => {
+    let active = true
+    if (!inputAudioTrackUrl || isLocalPlaybackUrl(inputAudioTrackUrl)) {
+      return () => {
+        active = false
+      }
+    }
+    if (!mediaSessionId) {
+      setResolvedAudioTrack({ input: inputAudioTrackUrl, url: undefined })
+      return () => {
+        active = false
+      }
+    }
+    void getAssociatedAudioUrl(mediaSessionId, inputAudioTrackUrl)
+      .then((url) => {
+        if (active) setResolvedAudioTrack({ input: inputAudioTrackUrl, url })
+      })
+      .catch(() => {
+        if (active) setResolvedAudioTrack({ input: inputAudioTrackUrl, url: undefined })
+      })
+    return () => {
+      active = false
+    }
+  }, [inputAudioTrackUrl, mediaSessionId])
 
   const isLive = variant === 'live'
   const isHls = isHlsSource(src, sourceType)
   const isFlv = isFlvSource(src, sourceType)
   const isMpegts = isMpegtsSource(src, sourceType)
-  const canEnterMiniWindowMode = !miniWindowMode && isApiAvailable()
+  const canEnterMiniWindowMode = !miniWindowMode && Boolean(sourceType && mediaSessionId) && isApiAvailable()
 
   useEffect(() => {
     const coordinator = createMediaPlaybackCoordinator('video', () => {
@@ -159,6 +222,7 @@ export function BasicPlayer({
 
   useEffect(() => {
     setCustomNumberInput(undefined)
+    setMediaTrackSelection(undefined)
     setDisplaySettings(undefined)
     setIsDisplaySettingsClosing(false)
     setSettingsPortalContainer(undefined)
@@ -169,12 +233,33 @@ export function BasicPlayer({
     callbacksRef.current = {
       onEnded,
       onProgress,
+      onPlaybackReady,
+      onPlaybackError,
+      onRuntimeInfoChange,
+      onSettingsVisibilityChange,
     }
     formatPlaybackUrlRef.current = formatPlaybackUrl
     initialTimeRef.current = initialTime
     miniWindowControllerReadyRef.current = onMiniWindowControllerReady
     miniWindowPlayerStateChangeRef.current = onMiniWindowPlayerStateChange
-  }, [formatPlaybackUrl, initialTime, onEnded, onMiniWindowControllerReady, onMiniWindowPlayerStateChange, onProgress])
+  }, [
+    formatPlaybackUrl,
+    initialTime,
+    onEnded,
+    onMiniWindowControllerReady,
+    onMiniWindowPlayerStateChange,
+    onPlaybackError,
+    onPlaybackReady,
+    onProgress,
+    onRuntimeInfoChange,
+    onSettingsVisibilityChange,
+  ])
+
+  useEffect(() => {
+    const visible = Boolean(displaySettings || customNumberInput || mediaTrackSelection)
+    artRef.current?.template.$player.classList.toggle('vfan-player-overlay-pinned', visible)
+    callbacksRef.current.onSettingsVisibilityChange?.(visible)
+  }, [customNumberInput, displaySettings, mediaTrackSelection])
 
   useEffect(() => {
     if (miniWindowMode) return
@@ -212,22 +297,20 @@ export function BasicPlayer({
     container.innerHTML = ''
     container.setAttribute('aria-label', title ?? 'Vfan TV 播放器')
     const displayPlaybackUrl = formatPlaybackUrlRef.current(src)
+    originalUrlRef.current = displayPlaybackUrl
     const debugLog = new PlaybackDebugRecorder()
-
-    const resolveAbortController = new AbortController()
-    let isResolveActive = true
-    // FLV/TS 直播源必须跳过二次解析探测：这类 CDN 常用 URL 里的 session token（seqid/stream_key 等）
-    // 做单连接鉴权，哪怕探测请求只读头就断开，服务端一旦收到同 token 的新请求就可能判定为「重连」，
-    // 把正在播放的那条连接踢掉——表现为播一小段就卡住，点播放又重复同一小段。
-    if (isLive || isFlv || isMpegts) {
-      resolvedUrlRef.current = extractProxiedTargetUrl(src) ?? displayPlaybackUrl
+    resolvedUrlRef.current = '检测中…'
+    if (mediaSessionId) {
+      void getMediaPlaybackSessionInfo(mediaSessionId)
+        .then((info) => {
+          originalUrlRef.current = info.originalUrl
+          resolvedUrlRef.current = info.finalUrl ?? '等待首次媒体请求…'
+        })
+        .catch(() => {
+          resolvedUrlRef.current = '媒体会话已失效'
+        })
     } else {
-      resolvedUrlRef.current = '检测中…'
-      void resolvePlaybackAddress(src, resolveAbortController.signal).then((resolvedUrl) => {
-        if (isResolveActive) {
-          resolvedUrlRef.current = resolvedUrl
-        }
-      })
+      resolvedUrlRef.current = displayPlaybackUrl
     }
 
     if (!cachedAppVersion && window.api?.updates?.getCurrentVersion) {
@@ -236,20 +319,51 @@ export function BasicPlayer({
       })
     }
 
-    let hlsControlUpdate: (() => void) | undefined
     let audioMenuItem: HTMLElement | undefined
     let loopEnabled = loop ?? (persistPlaybackSettings ? readLoopEnabled() : false)
     let autoNextEnabled = enableAutoNext && (persistPlaybackSettings ? readAutoNextEnabled() : true)
     let playbackRate = persistPlaybackSettings ? readPlaybackRate() : 1
     let seekStep = persistPlaybackSettings ? readSeekStep() : 5
     let hasReportedPlaybackFailure = false
+    let hasReportedPlaybackReady = false
     let hlsNetworkRecoveryAttempts = 0
+    const playbackStartedAt = performance.now()
+    let runtimeInfo: PlayerRuntimeInfo = {}
+    let hasReportedFirstFrame = false
+
+    const reportRuntimeInfo = (patch: Partial<PlayerRuntimeInfo>): void => {
+      runtimeInfo = { ...runtimeInfo, ...patch }
+      callbacksRef.current.onRuntimeInfoChange?.(runtimeInfo)
+    }
+
+    const reportFirstFrame = (): void => {
+      if (hasReportedFirstFrame) return
+      hasReportedFirstFrame = true
+      const elapsedMs = Math.max(1, Math.round(performance.now() - playbackStartedAt))
+      reportRuntimeInfo({ firstFrameMs: elapsedMs })
+      if (mediaSessionId) {
+        void reportMediaPlaybackEvent({ mediaSessionId, type: 'first-frame', elapsedMs })
+        void getMediaPlaybackSessionInfo(mediaSessionId).then((info) => {
+          resolvedUrlRef.current = info.finalUrl ?? resolvedUrlRef.current
+        })
+      }
+    }
+
+    callbacksRef.current.onRuntimeInfoChange?.({})
 
     const reportPlaybackFailure = (artInstance: Artplayer, reason: string): void => {
       if (hasReportedPlaybackFailure) return
       hasReportedPlaybackFailure = true
       debugLog.push('FAIL', reason)
       artInstance.notice.show = `无法播放：${reason}`
+      if (mediaSessionId) void reportMediaPlaybackEvent({ mediaSessionId, type: 'player-error', message: reason })
+      callbacksRef.current.onPlaybackError?.(reason)
+    }
+
+    const reportPlaybackReady = (): void => {
+      if (hasReportedPlaybackReady) return
+      hasReportedPlaybackReady = true
+      callbacksRef.current.onPlaybackReady?.()
     }
 
     const openSettingPanel = function (this: Artplayer, contextmenu: { show: boolean }): void {
@@ -308,25 +422,32 @@ export function BasicPlayer({
               html: `<span class="vfan-mini-window-icon">${artplayerControlIcons.miniWindow}</span>`,
               tooltip: '小窗模式',
               click: () => {
-                if (!src) return
+                if (!src || !sourceType) return
                 const sessionId = crypto.randomUUID()
                 miniWindowSessionIdRef.current = sessionId
                 art.pause()
-                void enterMiniWindowMode({
-                  sessionId,
-                  src,
-                  sourceType,
-                  title,
-                  variant,
-                  initialTime: isLive ? 0 : art.currentTime,
-                  loop: loopEnabled,
-                  audioTrackUrl,
-                }).catch((error: unknown) => {
-                  miniWindowSessionIdRef.current = undefined
-                  console.error('Failed to enter mini window mode:', error)
-                  art.notice.show = '进入小窗模式失败，请重启应用后重试'
-                  void art.play().catch(() => undefined)
-                })
+                const retainSession = mediaSessionId ? retainMediaPlaybackSession(mediaSessionId) : Promise.resolve()
+                void retainSession
+                  .then(() =>
+                    enterMiniWindowMode({
+                      sessionId,
+                      src,
+                      sourceType,
+                      mediaSessionId: mediaSessionId!,
+                      title,
+                      variant,
+                      initialTime: isLive ? 0 : art.currentTime,
+                      loop: loopEnabled,
+                      audioTrackUrl,
+                    }),
+                  )
+                  .catch((error: unknown) => {
+                    if (mediaSessionId) void releaseMediaPlaybackSession(mediaSessionId)
+                    miniWindowSessionIdRef.current = undefined
+                    console.error('Failed to enter mini window mode:', error)
+                    art.notice.show = '进入小窗模式失败，请重启应用后重试'
+                    void art.play().catch(() => undefined)
+                  })
               },
             },
           ]
@@ -347,26 +468,6 @@ export function BasicPlayer({
               artplayerPluginAudioTrack({
                 url: audioTrackUrl, // 独立外部音轨地址
               }),
-            ]
-          : []),
-        ...(!miniWindowMode && isHls
-          ? [
-              (art) => {
-                const plugin = artplayerPluginHlsControl({
-                  quality: {
-                    control: false,
-                    setting: false,
-                  },
-                  audio: {
-                    control: false,
-                    setting: true,
-                    title: '音效',
-                    auto: '自动',
-                  },
-                })(art)
-                hlsControlUpdate = plugin.update
-                return plugin
-              },
             ]
           : []),
       ],
@@ -451,10 +552,12 @@ export function BasicPlayer({
             hls.on(Hls.Events.MANIFEST_PARSED, () => {
               debugLog.push('HLS', `清单已解析 · ${hls.levels.length} 档 · ${hls.audioTracks.length} 音轨`)
               if (hasHlsAudioTracks(hls)) {
-                hlsControlUpdate?.()
                 setContextMenuItemVisible(audioMenuItem, true)
               }
+              reportRuntimeInfo(getHlsRuntimeInfo(hls, video))
             })
+            hls.on(Hls.Events.LEVEL_SWITCHED, () => reportRuntimeInfo(getHlsRuntimeInfo(hls, video)))
+            hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, () => reportRuntimeInfo(getHlsRuntimeInfo(hls, video)))
             hls.on(Hls.Events.LEVEL_LOADED, () => {
               hlsNetworkRecoveryAttempts = 0
             })
@@ -500,6 +603,7 @@ export function BasicPlayer({
             hlsRef,
             debugLog,
             reportPlaybackFailure,
+            (info) => reportRuntimeInfo(info),
           )
         },
         mpegts(video, url, artInstance) {
@@ -513,6 +617,7 @@ export function BasicPlayer({
             hlsRef,
             debugLog,
             reportPlaybackFailure,
+            (info) => reportRuntimeInfo(info),
           )
         },
       },
@@ -520,6 +625,15 @@ export function BasicPlayer({
 
     artRef.current = art
     art.on('video:play', () => playbackCoordinatorRef.current?.announcePlaying())
+    art.on('video:playing', reportFirstFrame)
+    art.on('video:canplay', reportPlaybackReady)
+    art.on('video:loadedmetadata', () => {
+      reportRuntimeInfo({
+        width: art.video.videoWidth || undefined,
+        height: art.video.videoHeight || undefined,
+        fps: getVideoFrameRate(art),
+      })
+    })
     const reportMiniWindowPlayerState = (): void => {
       miniWindowPlayerStateChangeRef.current?.({
         isPlaying: !art.video.paused && !art.video.ended,
@@ -562,13 +676,22 @@ export function BasicPlayer({
       removeLiveSettingItems(art)
     }
     injectPlayerChromeStyles(art, miniWindowMode)
-    localizeInfoPanel(art, displayPlaybackUrl, resolvedUrlRef, getStreamType(isHls, isFlv, isMpegts), isLive, mpegtsRef)
+    localizeInfoPanel(art, originalUrlRef, resolvedUrlRef, getStreamType(isHls, isFlv, isMpegts), isLive, mpegtsRef)
     const openDisplaySettings = (): void => {
       settingsPosition.refreshAfterControlTransition()
       const refresh = (): void => openDisplaySettings()
       const hls = (art as ArtplayerWithHls).hls
-      const audioTrack =
-        hls && hls.audioTracks.length > 1
+      const openVideoTracks = (): void => setMediaTrackSelection(createVideoTrackSelection(art, isHls, openVideoTracks))
+      const openAudioTracks = (): void => setMediaTrackSelection(createAudioTrackSelection(art, isHls, openAudioTracks))
+      const videoTrack =
+        showMediaTrackSettings && hls && hls.levels.length > 1
+          ? { label: getVideoTrackMenuLabel(art, hls), onClick: openVideoTracks }
+          : undefined
+      const audioTrack = showMediaTrackSettings
+        ? hls && hls.audioTracks.length > 1
+          ? { label: getAudioTrackMenuLabel(hls), onClick: openAudioTracks }
+          : undefined
+        : hls && hls.audioTracks.length > 1
           ? {
               label: hls.audioTracks[hls.audioTrack]?.name || `音轨 ${hls.audioTrack + 1}`,
               onClick: () => {
@@ -580,13 +703,14 @@ export function BasicPlayer({
       setDisplaySettings({
         aspectRatio: art.aspectRatio,
         flip: art.flip,
+        videoTrack,
         audioTrack,
         playbackRate,
         seekStep,
         loop: loopEnabled,
         autoNext: autoNextEnabled,
-        showPlaybackSettings: !isLive,
-        showAutoNext: !isLive && enableAutoNext,
+        showPlaybackSettings: !isLive && !hidePlaybackSettings,
+        showAutoNext: !isLive && !hidePlaybackSettings && enableAutoNext,
         onAspectRatio: () => {
           art.aspectRatio = nextFromList(art.aspectRatio, ['default', '4:3', '16:9'])
           refresh()
@@ -630,6 +754,7 @@ export function BasicPlayer({
       if (miniWindowMode) return
       if (!visible) return
       art.setting.show = false
+      callbacksRef.current.onSettingsVisibilityChange?.(true)
       openDisplaySettings()
     })
     art.on('ready', () => {
@@ -733,8 +858,6 @@ export function BasicPlayer({
     return () => {
       settingsPosition.destroy()
       setSettingsPortalContainer((current) => (current === art.template.$player ? undefined : current))
-      isResolveActive = false
-      resolveAbortController.abort()
       art.template.$player.removeEventListener('pointerdown', focusPlayer)
       art.template.$player.removeEventListener('contextmenu', preventMiniWindowContextMenu)
       document.removeEventListener('keydown', handleSeekShortcut, true)
@@ -763,21 +886,31 @@ export function BasicPlayer({
     audioTrackUrl,
     autoPlay,
     enableAutoNext,
+    hidePlaybackSettings,
     isHls,
     isFlv,
     isMpegts,
     isLive,
     loop,
+    mediaSessionId,
     miniWindowMode,
     canEnterMiniWindowMode,
     persistPlaybackSettings,
+    showMediaTrackSettings,
     sourceType,
     src,
     title,
     variant,
   ])
 
-  const displaySettingsOverlay = customNumberInput ? (
+  const displaySettingsOverlay = mediaTrackSelection ? (
+    <MediaTrackDialog
+      input={mediaTrackSelection}
+      closing={isDisplaySettingsClosing}
+      bottomOffset={settingsBottomOffset}
+      onBack={() => setMediaTrackSelection(undefined)}
+    />
+  ) : customNumberInput ? (
     <CustomSliderDialog
       key={`${customNumberInput.title}-${customNumberInput.initialValue}`}
       input={customNumberInput}
@@ -804,8 +937,9 @@ export function BasicPlayer({
         if (miniWindowMode) return
         if (!displaySettings || !(event.target instanceof Element) || event.target.closest('[data-display-settings]'))
           return
+        const isPlayerOverlayInteraction = Boolean(event.target.closest('[data-player-overlay]'))
         const isControlInteraction = Boolean(event.target.closest('.art-bottom'))
-        if (!isControlInteraction) {
+        if (!isControlInteraction && !isPlayerOverlayInteraction) {
           event.preventDefault()
           event.stopPropagation()
         }
@@ -813,6 +947,7 @@ export function BasicPlayer({
         setIsDisplaySettingsClosing(true)
         window.setTimeout(() => {
           setCustomNumberInput(undefined)
+          setMediaTrackSelection(undefined)
           setDisplaySettings(undefined)
           setIsDisplaySettingsClosing(false)
         }, 150)
@@ -826,39 +961,50 @@ export function BasicPlayer({
             isTheaterMode ? 'inset-y-0' : 'top-14 bottom-16',
           )}
         >
-          {isResolvingSource ? '正在识别播放源…' : '请先选择要播放的内容'}
+          {isResolvingSource ? '正在连接播放源…' : '请先选择要播放的内容'}
         </div>
       ) : null}
       {!miniWindowMode &&
         (settingsPortalContainer
-          ? createPortal(displaySettingsOverlay, settingsPortalContainer)
+          ? createPortal(
+              <>
+                {playerOverlay ? (
+                  <div
+                    className={cn('vfan-player-top-overlay', playerOverlayPinned && 'vfan-player-top-overlay-pinned')}
+                    data-player-overlay
+                  >
+                    {playerOverlay}
+                  </div>
+                ) : null}
+                {displaySettingsOverlay}
+              </>,
+              settingsPortalContainer,
+            )
           : displaySettingsOverlay)}
     </div>
   )
 }
 
 function isHlsSource(src: string | undefined, sourceType: BasicPlayerProps['sourceType']): boolean {
-  if (!src) {
-    return false
-  }
+  return Boolean(src && sourceType === 'hls')
+}
 
-  return sourceType === 'hls' || /\.m3u8(?:$|[?#])/i.test(src)
+function isLocalPlaybackUrl(src: string | undefined): boolean {
+  if (!src) return false
+  try {
+    const url = new URL(src)
+    return !['http:', 'https:'].includes(url.protocol) || url.hostname === '127.0.0.1' || url.hostname === 'localhost'
+  } catch {
+    return true
+  }
 }
 
 function isFlvSource(src: string | undefined, sourceType: BasicPlayerProps['sourceType']): boolean {
-  if (!src) {
-    return false
-  }
-
-  return sourceType === 'flv' || /\.flv(?:$|[?#])/i.test(src)
+  return Boolean(src && sourceType === 'flv')
 }
 
 function isMpegtsSource(src: string | undefined, sourceType: BasicPlayerProps['sourceType']): boolean {
-  if (!src) {
-    return false
-  }
-
-  return sourceType === 'mpegts' || /\.(?:ts|m2ts)(?:$|[?#])/i.test(src)
+  return Boolean(src && sourceType === 'mpegts')
 }
 
 function getStreamType(isHls: boolean, isFlv: boolean, isMpegts: boolean): MediaStreamType {
@@ -897,6 +1043,7 @@ function createMpegtsPlayback(
   hlsRef: MutableRefObject<Hls | null>,
   debugLog: PlaybackDebugRecorder,
   reportPlaybackFailure: (art: Artplayer, reason: string) => void,
+  reportRuntimeInfo: (info: Partial<PlayerRuntimeInfo>) => void,
 ): void {
   destroyHls(hlsRef)
   destroyMpegts(mpegtsRef)
@@ -961,6 +1108,19 @@ function createMpegtsPlayback(
     player.on(mpegts.Events.MEDIA_INFO, () => {
       if (isStale()) return
       debugLog.push(label, '媒体信息已解析')
+      const mediaInfo = player.mediaInfo
+      const codecInfo = mediaInfo as typeof mediaInfo & {
+        fps?: number
+        videoCodec?: string
+        audioCodec?: string
+      }
+      reportRuntimeInfo({
+        width: mediaInfo?.width,
+        height: mediaInfo?.height,
+        fps: codecInfo?.fps,
+        videoCodec: codecInfo?.videoCodec,
+        audioCodec: codecInfo?.audioCodec,
+      })
     })
     player.on(mpegts.Events.LOADING_COMPLETE, () => {
       if (isStale() || !treatAsLive) return
@@ -1030,6 +1190,113 @@ function hasHlsAudioTracks(hls: Hls): boolean {
   return hls.audioTracks.length > 1
 }
 
+function getHlsRuntimeInfo(hls: Hls, video: HTMLVideoElement): Partial<PlayerRuntimeInfo> {
+  const levelIndex = hls.currentLevel >= 0 ? hls.currentLevel : hls.loadLevel
+  const level = hls.levels[levelIndex] ?? hls.levels[0]
+  const audioTrack = hls.audioTracks[hls.audioTrack] ?? hls.audioTracks[0]
+  return {
+    width: video.videoWidth || level?.width || undefined,
+    height: video.videoHeight || level?.height || undefined,
+    fps: level?.frameRate || undefined,
+    videoCodec: level?.videoCodec || undefined,
+    audioCodec: audioTrack?.audioCodec || level?.audioCodec || undefined,
+  }
+}
+
+function getVideoTrackMenuLabel(art: Artplayer, hls?: Hls): string {
+  if (!hls) return art.video.videoHeight ? `${art.video.videoHeight}p` : '当前流'
+  if (hls.autoLevelEnabled) return '自动'
+  const level = hls.levels[hls.currentLevel]
+  return level?.name || (level?.height ? `${level.height}p` : `线路 ${hls.currentLevel + 1}`)
+}
+
+function getAudioTrackMenuLabel(hls?: Hls): string {
+  if (!hls) return '当前音轨'
+  const track = hls.audioTracks[hls.audioTrack] ?? hls.audioTracks[0]
+  return track?.name || track?.lang || '当前音轨'
+}
+
+function createVideoTrackSelection(art: Artplayer, isHls: boolean, refresh: () => void): MediaTrackSelection {
+  const hls = isHls ? (art as ArtplayerWithHls).hls : undefined
+  if (!hls || !hls.levels.length) {
+    const dimensions =
+      art.video.videoWidth && art.video.videoHeight
+        ? `${art.video.videoWidth} × ${art.video.videoHeight}`
+        : '尚未识别视频参数'
+    return {
+      title: '视频',
+      hint: '当前流不支持切换',
+      options: [{ id: 'current', label: '当前视频', description: dimensions, selected: true, disabled: true }],
+    }
+  }
+
+  return {
+    title: '视频',
+    options: [
+      {
+        id: 'auto',
+        label: '自动',
+        description: '根据网络状况自动选择清晰度',
+        selected: hls.autoLevelEnabled,
+        onSelect: () => {
+          hls.currentLevel = -1
+          refresh()
+        },
+      },
+      ...hls.levels.map((level, index) => ({
+        id: `level-${index}`,
+        label: level.name || (level.height ? `${level.height}p` : `清晰度 ${index + 1}`),
+        description: [
+          level.videoCodec,
+          level.width && level.height ? `${level.width} × ${level.height}` : undefined,
+          level.bitrate ? formatBitsPerSecond(level.bitrate) : undefined,
+        ]
+          .filter(Boolean)
+          .join(' · '),
+        selected: !hls.autoLevelEnabled && hls.currentLevel === index,
+        onSelect: () => {
+          hls.currentLevel = index
+          refresh()
+        },
+      })),
+    ],
+  }
+}
+
+function createAudioTrackSelection(art: Artplayer, isHls: boolean, refresh: () => void): MediaTrackSelection {
+  const hls = isHls ? (art as ArtplayerWithHls).hls : undefined
+  if (!hls || hls.audioTracks.length <= 1) {
+    const track = hls?.audioTracks[0]
+    return {
+      title: '音频',
+      hint: '当前流不支持切换',
+      options: [
+        {
+          id: 'current',
+          label: track?.name || track?.lang || '当前音轨',
+          description: [track?.lang, track?.audioCodec].filter(Boolean).join(' · ') || '单音轨',
+          selected: true,
+          disabled: true,
+        },
+      ],
+    }
+  }
+
+  return {
+    title: '音频',
+    options: hls.audioTracks.map((track, index) => ({
+      id: `audio-${index}`,
+      label: track.name || track.lang || `音轨 ${index + 1}`,
+      description: [track.lang, track.audioCodec].filter(Boolean).join(' · '),
+      selected: hls.audioTrack === index,
+      onSelect: () => {
+        hls.audioTrack = index
+        refresh()
+      },
+    })),
+  }
+}
+
 function setContextMenuItemVisible(element: HTMLElement | undefined, visible: boolean): void {
   if (element) {
     element.style.display = visible ? '' : 'none'
@@ -1068,6 +1335,35 @@ function injectPlayerChromeStyles(art: Artplayer, miniWindowMode = false): void 
     }
     .art-video-player:not(.art-control-show):not(.art-hover) .art-bottom .art-progress .art-progress-indicator {
       display: none !important;
+    }
+    .art-video-player .vfan-player-top-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 190;
+      pointer-events: none;
+      opacity: 0;
+      transform: translateY(-4px);
+      transition: opacity 180ms ease, transform 180ms ease;
+    }
+    .art-video-player.art-control-show .vfan-player-top-overlay,
+    .art-video-player.vfan-player-overlay-pinned .vfan-player-top-overlay,
+    .art-video-player .vfan-player-top-overlay.vfan-player-top-overlay-pinned,
+    .art-video-player .vfan-player-top-overlay:focus-within {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .art-video-player.art-control-show .vfan-player-top-overlay > *,
+    .art-video-player.vfan-player-overlay-pinned .vfan-player-top-overlay > *,
+    .art-video-player .vfan-player-top-overlay.vfan-player-top-overlay-pinned > *,
+    .art-video-player .vfan-player-top-overlay:focus-within > * {
+      pointer-events: auto;
+    }
+    .art-video-player .vfan-iptv-fullscreen-only {
+      display: none;
+    }
+    .art-video-player.art-fullscreen .vfan-iptv-fullscreen-only,
+    .art-video-player.art-fullscreen-web .vfan-iptv-fullscreen-only {
+      display: block;
     }
     .art-video-player.vfan-mini-window-player .art-top,
     .art-video-player.vfan-mini-window-player .art-bottom,
@@ -1435,7 +1731,7 @@ function reloadPlayback(art: Artplayer): void {
 
 function localizeInfoPanel(
   art: Artplayer,
-  playbackUrl: string,
+  playbackUrlRef: MutableRefObject<string>,
   resolvedUrlRef: MutableRefObject<string>,
   streamType: MediaStreamType,
   isLive: boolean,
@@ -1465,7 +1761,7 @@ function localizeInfoPanel(
       <div class="vfan-stats-row"><span class="vfan-stats-label">播放进度</span><span class="vfan-stats-value" data-vfan-info="progress"></span></div>
       <div class="vfan-stats-row vfan-stats-row-meter"><span class="vfan-stats-label">缓冲健康</span><span class="vfan-stats-value"><span data-vfan-info="buffer-health"></span><span class="vfan-stats-meter" data-vfan-info="buffer-meter"><span></span></span></span></div>
       <div class="vfan-stats-row"><span class="vfan-stats-label">丢帧</span><span class="vfan-stats-value" data-vfan-info="dropped-frames"></span></div>
-      <div class="vfan-stats-row vfan-stats-row-url"><span class="vfan-stats-label">视频地址</span><span class="vfan-stats-value vfan-stats-value-copyable" data-vfan-info="url" data-vfan-copy-label="视频地址" data-vfan-copy="${escapeHtmlAttribute(playbackUrl)}" title="点击复制：${escapeHtmlAttribute(playbackUrl)}"></span></div>
+      <div class="vfan-stats-row vfan-stats-row-url"><span class="vfan-stats-label">视频地址</span><span class="vfan-stats-value vfan-stats-value-copyable" data-vfan-info="url" data-vfan-copy-label="视频地址" title="点击复制"></span></div>
       <div class="vfan-stats-row vfan-stats-row-url"><span class="vfan-stats-label">最终播放地址</span><span class="vfan-stats-value vfan-stats-value-copyable" data-vfan-info="resolved-url" data-vfan-copy-label="最终播放地址" title="点击复制"></span></div>
       ${getProtocolStatsMarkup(streamType)}
     </div>
@@ -1491,7 +1787,7 @@ function localizeInfoPanel(
     setInfoText($infoPanel, 'buffer-health', bufferHealth.text)
     setInfoMeter($infoPanel, 'buffer-meter', getBufferMeterPercent(bufferHealth.seconds, art.duration, isLive))
     setInfoText($infoPanel, 'dropped-frames', getDroppedFramesText(art.video))
-    setInfoText($infoPanel, 'url', shortenText(playbackUrl, 56))
+    setInfoTextWithTitle($infoPanel, 'url', playbackUrlRef.current)
     setInfoTextWithTitle($infoPanel, 'resolved-url', resolvedUrlRef.current)
     if (isHls) {
       setInfoText($infoPanel, 'quality', getQualityText(art, true))
@@ -1738,8 +2034,7 @@ function getMimeTypeText(
     return formatMpegtsMediaInfo(mpegtsPlayer?.mediaInfo)
   }
 
-  const mimeType = art.video.currentSrc ? guessMimeType(art.video.currentSrc) : '-'
-  return mimeType
+  return art.video.currentSrc ? '浏览器原生媒体' : '-'
 }
 
 function formatMpegtsSpeed(speed: unknown): string {
@@ -1882,15 +2177,6 @@ function getVideoPlaybackQuality(video: HTMLVideoElement): VideoPlaybackQualityI
   return getter?.call(video)
 }
 
-function guessMimeType(url: string): string {
-  const normalized = url.toLowerCase()
-  if (normalized.includes('.m3u8')) return 'application/x-mpegURL'
-  if (normalized.includes('.mp4')) return 'video/mp4'
-  if (normalized.includes('.webm')) return 'video/webm'
-  if (normalized.includes('.mkv')) return 'video/x-matroska'
-  return '-'
-}
-
 function shortenText(value: string, maxLength: number): string {
   if (value.length <= maxLength) {
     return value
@@ -1899,10 +2185,6 @@ function shortenText(value: string, maxLength: number): string {
   const head = Math.max(18, Math.floor(maxLength * 0.45))
   const tail = Math.max(12, maxLength - head - 1)
   return `${value.slice(0, head)}…${value.slice(-tail)}`
-}
-
-function escapeHtmlAttribute(value: string): string {
-  return value.replaceAll('&', '&amp;').replaceAll('"', '&quot;')
 }
 
 function setInfoText(panel: HTMLElement, name: string, value: string): void {
@@ -1968,77 +2250,6 @@ function showCopyFeedback(art: Artplayer, message: string): void {
   feedback.dataset.vfanCopyFeedbackTimer = String(
     window.setTimeout(() => feedback?.classList.remove('is-visible'), 1800),
   )
-}
-
-/**
- * 探测播放地址在跳转（HTTP 重定向）后实际解析到的最终地址，用于统计信息面板展示排查。
- * 本地代理地址会走 `/resolve`（只跟跳转、不拉流）。
- * 注意：仅用于非直播源。FLV/TS 直播源由调用方直接跳过，不要在此对同一 URL 发起二次请求，
- * 否则会被 CDN 的单连接 session 鉴权判定为重连，导致正在播放的连接被踢断。
- */
-async function resolvePlaybackAddress(url: string, signal: AbortSignal): Promise<string> {
-  try {
-    const resolveUrl = createResolveProbeUrl(url)
-    const response = await fetch(resolveUrl, {
-      method: 'GET',
-      redirect: 'follow',
-      signal,
-    })
-
-    if (resolveUrl !== url) {
-      const payload = (await response.json()) as { url?: unknown }
-      return typeof payload.url === 'string' && payload.url ? payload.url : extractProxiedTargetUrl(url) || url
-    }
-
-    void response.body?.cancel().catch(() => {})
-    return response.url || url
-  } catch {
-    return extractProxiedTargetUrl(url) || url
-  }
-}
-
-function createResolveProbeUrl(playbackUrl: string): string {
-  try {
-    const parsed = new URL(playbackUrl)
-    if (parsed.hostname !== '127.0.0.1' && parsed.hostname !== 'localhost') {
-      return playbackUrl
-    }
-    if (parsed.pathname !== '/media') {
-      return playbackUrl
-    }
-
-    const targetUrl = parsed.searchParams.get('url')
-    if (!targetUrl) {
-      return playbackUrl
-    }
-
-    const resolveUrl = new URL('/resolve', parsed.origin)
-    resolveUrl.searchParams.set('url', targetUrl)
-    const referer = parsed.searchParams.get('referer')
-    const userAgent = parsed.searchParams.get('user-agent')
-    if (referer) {
-      resolveUrl.searchParams.set('referer', referer)
-    }
-    if (userAgent) {
-      resolveUrl.searchParams.set('user-agent', userAgent)
-    }
-    return resolveUrl.toString()
-  } catch {
-    return playbackUrl
-  }
-}
-
-function extractProxiedTargetUrl(url: string): string | undefined {
-  try {
-    const parsed = new URL(url)
-    if (parsed.hostname !== '127.0.0.1' && parsed.hostname !== 'localhost') {
-      return undefined
-    }
-    const target = parsed.searchParams.get('url')
-    return target || undefined
-  } catch {
-    return undefined
-  }
 }
 
 function getHealthMeterBackground(percent: number): string {
@@ -2166,13 +2377,7 @@ function isTextInputTarget(target: EventTarget | null): boolean {
 }
 
 function normalizePlaybackUrlForDisplay(src: string): string {
-  try {
-    const parsedUrl = new URL(src)
-    const proxyTargetUrl = parsedUrl.searchParams.get('url')
-    return proxyTargetUrl ? decodeURIComponent(proxyTargetUrl) : decodeURIComponent(src)
-  } catch {
-    return src
-  }
+  return src
 }
 
 function createHlsConfig(isLive: boolean): ConstructorParameters<typeof Hls>[0] {

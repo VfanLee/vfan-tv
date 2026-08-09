@@ -1,38 +1,26 @@
 import { z } from 'zod'
+import { sourceHeadersSchema } from './source'
+import { iptvEpgSettingsSchema } from './settings'
 
 const optionalStringSchema = z.string().optional()
-const vodSourceBackupSchema = z.object({
-  url: z.string().trim().url('VOD 备用地址 URL 无效'),
-  referer: z
-    .string()
-    .trim()
-    .url('VOD 备用地址 Referer 无效')
-    .optional()
-    .or(z.literal(''))
-    .transform((value) => value || undefined),
-})
-
-function validateVodSourceBackups(
-  value: { url: string; backups: Array<{ url: string }> },
-  context: z.RefinementCtx,
-): void {
+function validateVodSourceBackups(value: { url: string; backups: string[] }, context: z.RefinementCtx): void {
   const urls = new Set<string>()
-  for (const [index, backup] of value.backups.entries()) {
-    if (backup.url === value.url) {
+  for (const [index, backupUrl] of value.backups.entries()) {
+    if (backupUrl === value.url) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['backups', index, 'url'],
+        path: ['backups', index],
         message: 'VOD 备用地址不能与当前地址相同',
       })
     }
-    if (urls.has(backup.url)) {
+    if (urls.has(backupUrl)) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ['backups', index, 'url'],
+        path: ['backups', index],
         message: 'VOD 备用地址不能重复',
       })
     }
-    urls.add(backup.url)
+    urls.add(backupUrl)
   }
 }
 
@@ -45,6 +33,17 @@ export const appDataSelectionSchema = z
   })
   .strict()
 
+export const appDataClearSelectionSchema = z
+  .object({
+    cache: z.boolean(),
+    favorites: z.boolean(),
+    recent: z.boolean(),
+    searchHistory: z.boolean(),
+    sources: z.boolean(),
+  })
+  .strict()
+  .refine((selection) => Object.values(selection).some(Boolean), '请至少选择一项要清除的数据')
+
 export const appDataClientPayloadSchema = z
   .object({
     selection: appDataSelectionSchema,
@@ -56,28 +55,23 @@ export const appDataVodSourceSchema = z
   .object({
     name: z.string().trim().min(1, 'VOD 源名称不能为空'),
     url: z.string().trim().url('VOD 源 URL 无效'),
-    referer: z
-      .string()
-      .trim()
-      .url('VOD 源 Referer 无效')
-      .optional()
-      .or(z.literal(''))
-      .transform((value) => value || undefined),
-    enabled: z.boolean(),
-    backups: z.array(vodSourceBackupSchema).default([]),
+    disabled: z.boolean().default(false),
+    headers: sourceHeadersSchema.optional().default({}),
+    backups: z.array(z.string().trim().url('VOD 备用地址 URL 无效')).default([]),
     origin: z.enum(['manual', 'subscription']).default('manual'),
     sort: z.number().int().nonnegative().optional(),
   })
   .strict()
   .superRefine(validateVodSourceBackups)
 
-export const appDataLiveSourceSchema = z
+export const appDataIptvSourceSchema = z
   .object({
-    name: z.string().trim().min(1, '直播源名称不能为空'),
-    url: z.string().trim().url('直播源 URL 无效'),
-    enabled: z.boolean(),
+    name: z.string().trim().min(1, 'IPTV 源名称不能为空'),
+    url: z.string().trim().url('IPTV 源 URL 无效'),
+    disabled: z.boolean().default(false),
     origin: z.enum(['manual', 'subscription']).default('manual'),
     sort: z.number().int().nonnegative().optional(),
+    headers: sourceHeadersSchema.optional().default({}),
   })
   .strict()
 
@@ -122,25 +116,22 @@ export const appDataFavoriteSchema = z
   })
   .strict()
 
-export const appDataBackupSchema = z
+const appDataBackupBaseSchema = z
   .object({
     app: z.literal('vfan-tv'),
-    schemaVersion: z.literal(1),
+    schemaVersion: z.literal(3),
     exportedAt: z.number().int().nonnegative(),
-    subscription: z
-      .object({
-        url: z.string(),
-        updatedAt: z.number().int().nonnegative().optional(),
-      })
-      .strict(),
-    subscriptions: z.array(z.object({ id: z.string().min(1), url: z.string().url() })).optional(),
+    subscriptions: z.array(z.object({ id: z.string().min(1), url: z.string().url() })),
     activeSubscriptionId: z.string().optional(),
+    iptvEpg: iptvEpgSettingsSchema.optional(),
     vod: z.array(appDataVodSourceSchema),
-    live: z.array(appDataLiveSourceSchema),
+    iptv: z.array(appDataIptvSourceSchema),
     recent: z.array(appDataRecentPlaySchema),
     favorites: z.array(appDataFavoriteSchema),
     searchHistory: z.array(z.string()),
   })
   .strict()
+
+export const appDataBackupSchema = appDataBackupBaseSchema
 
 export type AppDataBackupInput = z.infer<typeof appDataBackupSchema>

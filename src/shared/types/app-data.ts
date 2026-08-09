@@ -1,41 +1,37 @@
 import type { FavoriteItem } from './favorite'
-import type { LiveSourceOrigin } from './live'
+import type { IptvEpgSettings, IptvSourceOrigin } from './iptv'
 import type { RecentPlayItem } from './recent'
-import type { VodSourceBackup, VodSourceOrigin } from './source'
+import type { SourceHeaders, VodSourceOrigin } from './source'
 import type { SubscriptionConfig } from './settings'
-
-export interface AppDataSubscription {
-  url: string
-  updatedAt?: number
-}
 
 export interface AppDataVodSource {
   name: string
   url: string
-  referer?: string
-  enabled: boolean
-  backups: VodSourceBackup[]
+  disabled: boolean
+  headers: SourceHeaders
+  backups: string[]
   origin: VodSourceOrigin
   sort?: number
 }
 
-export interface AppDataLiveSource {
+export interface AppDataIptvSource {
   name: string
   url: string
-  enabled: boolean
-  origin: LiveSourceOrigin
+  disabled: boolean
+  origin: IptvSourceOrigin
   sort?: number
+  headers: SourceHeaders
 }
 
 export interface AppDataBackup {
   app: 'vfan-tv'
-  schemaVersion: 1
+  schemaVersion: 3
   exportedAt: number
-  subscription: AppDataSubscription
-  subscriptions?: SubscriptionConfig[]
+  subscriptions: SubscriptionConfig[]
   activeSubscriptionId?: string
+  iptvEpg?: IptvEpgSettings
   vod: AppDataVodSource[]
-  live: AppDataLiveSource[]
+  iptv: AppDataIptvSource[]
   recent: RecentPlayItem[]
   favorites: FavoriteItem[]
   searchHistory: string[]
@@ -53,9 +49,17 @@ export interface AppDataSelection {
   sources: boolean
 }
 
+export interface AppDataClearSelection {
+  cache: boolean
+  favorites: boolean
+  recent: boolean
+  searchHistory: boolean
+  sources: boolean
+}
+
 export interface AppDataOperationCounts {
   vod: number
-  live: number
+  iptv: number
   recent: number
   favorites: number
   searchHistory: number

@@ -17,31 +17,34 @@ export function registerAppDataIpc(context: ApplicationContext): void {
       const window = requireWindow(context)
       const payload = appDataClientPayloadSchema.parse(clientData)
       const { selection } = payload
-      const { source, liveSource, settings } = context.services
+      const { source, iptvSource, settings } = context.services
       const { recentPlay, favorite } = context.repositories
       const appSettings = settings.get()
       const backup: AppDataBackup = {
         app: 'vfan-tv',
-        schemaVersion: 1,
+        schemaVersion: 3,
         exportedAt: Date.now(),
-        subscription: { url: '', updatedAt: undefined },
         subscriptions: selection.sources ? appSettings.subscriptions : [],
         activeSubscriptionId: selection.sources ? appSettings.activeSubscriptionId : undefined,
-        vod: (selection.sources ? source.list() : []).map(({ name, url, referer, enabled, backups, origin, sort }) => ({
+        iptvEpg: selection.sources ? appSettings.iptvEpg : undefined,
+        vod: (selection.sources ? source.list() : []).map(
+          ({ name, url, headers, disabled, backups, origin, sort }) => ({
+            name,
+            url,
+            headers,
+            disabled,
+            backups,
+            origin,
+            sort,
+          }),
+        ),
+        iptv: (selection.sources ? iptvSource.list() : []).map(({ name, url, disabled, origin, sort, headers }) => ({
           name,
           url,
-          referer,
-          enabled,
-          backups,
+          disabled,
           origin,
           sort,
-        })),
-        live: (selection.sources ? liveSource.list() : []).map(({ name, url, enabled, origin, sort }) => ({
-          name,
-          url,
-          enabled,
-          origin,
-          sort,
+          headers,
         })),
         recent: selection.recent ? recentPlay.list(Number.MAX_SAFE_INTEGER) : [],
         favorites: selection.favorites ? favorite.list() : [],
@@ -71,16 +74,15 @@ export function registerAppDataIpc(context: ApplicationContext): void {
     assertUniqueVodEndpointUrls(backup)
     const now = Date.now()
     const { settings } = context.services
-    const { source: sourceRepository, liveSource: liveSourceRepository, recentPlay, favorite } = context.repositories
+    const currentNetworkSettings = settings.get().network
+    const { source: sourceRepository, iptvSource: iptvSourceRepository, recentPlay, favorite } = context.repositories
     // 先清空再按备份顺序恢复，确保导入结果不会与旧数据混合。
     resetAppDatabase(context.db)
-    const subscriptions = backup.subscriptions?.length
-      ? backup.subscriptions
-      : backup.subscription.url
-        ? [{ id: 'legacy-subscription', url: backup.subscription.url }]
-        : []
+    const subscriptions = backup.subscriptions
     settings.update({
       subscriptions,
+      iptvEpg: backup.iptvEpg,
+      network: currentNetworkSettings,
       activeSubscriptionId: subscriptions.some((item) => item.id === backup.activeSubscriptionId)
         ? backup.activeSubscriptionId
         : subscriptions[0]?.id,
@@ -93,8 +95,8 @@ export function registerAppDataIpc(context: ApplicationContext): void {
         createdAt: now,
         updatedAt: now,
       })
-    for (const [sort, item] of backup.live.entries())
-      liveSourceRepository.upsert({
+    for (const [sort, item] of backup.iptv.entries())
+      iptvSourceRepository.upsert({
         id: randomUUID(),
         ...item,
         sort,
@@ -127,7 +129,7 @@ function parseAppDataBackup(fileContent: string): AppDataBackup {
 function getAppDataCounts(backup: AppDataBackup): AppDataOperationCounts {
   return {
     vod: backup.vod.length,
-    live: backup.live.length,
+    iptv: backup.iptv.length,
     recent: backup.recent.length,
     favorites: backup.favorites.length,
     searchHistory: backup.searchHistory.length,
@@ -135,13 +137,13 @@ function getAppDataCounts(backup: AppDataBackup): AppDataOperationCounts {
 }
 
 function emptyAppDataCounts(): AppDataOperationCounts {
-  return { vod: 0, live: 0, recent: 0, favorites: 0, searchHistory: 0 }
+  return { vod: 0, iptv: 0, recent: 0, favorites: 0, searchHistory: 0 }
 }
 
 function assertUniqueVodEndpointUrls(backup: AppDataBackup): void {
   const owners = new Map<string, string>()
   for (const source of backup.vod) {
-    for (const url of [source.url, ...source.backups.map((item) => item.url)]) {
+    for (const url of [source.url, ...source.backups]) {
       const owner = owners.get(url)
       if (owner) throw new Error(`VOD 地址同时存在于「${owner}」和「${source.name}」`)
       owners.set(url, source.name)

@@ -54,17 +54,13 @@ export function VodSourceBackupSwitcher({
           value={source.url}
           onValueChange={(url) => void switchTo(url)}
         >
-          <AddressRadioItem
-            current
-            endpoint={{ url: source.url, referer: source.referer }}
-            itemId={`${source.id}-current`}
-          />
+          <AddressRadioItem current url={source.url} itemId={`${source.id}-current`} />
           {source.backups.map((backup, index) => (
             <AddressRadioItem
-              endpoint={backup}
+              url={backup}
               itemId={`${source.id}-backup-${index}`}
-              key={backup.url}
-              loading={switchingUrl === backup.url}
+              key={backup}
+              loading={switchingUrl === backup}
             />
           ))}
         </RadioGroup>
@@ -75,12 +71,12 @@ export function VodSourceBackupSwitcher({
 
 function AddressRadioItem({
   current = false,
-  endpoint,
+  url,
   itemId,
   loading = false,
 }: {
   current?: boolean
-  endpoint: { url: string; referer?: string }
+  url: string
   itemId: string
   loading?: boolean
 }): React.JSX.Element {
@@ -89,12 +85,9 @@ function AddressRadioItem({
       className="hover:bg-muted has-[[data-slot=radio-group-item]:focus-visible]:ring-ring flex cursor-pointer items-start gap-2 rounded-lg px-2 py-2 has-[[data-slot=radio-group-item]:disabled]:cursor-not-allowed has-[[data-slot=radio-group-item]:disabled]:opacity-60 has-[[data-slot=radio-group-item]:focus-visible]:ring-2"
       htmlFor={itemId}
     >
-      <RadioGroupItem id={itemId} value={endpoint.url} />
+      <RadioGroupItem id={itemId} value={url} />
       <span className="min-w-0 flex-1">
-        <span className="block truncate font-mono text-xs">{endpoint.url}</span>
-        {endpoint.referer ? (
-          <span className="text-muted-foreground mt-1 block truncate text-xs">Referer: {endpoint.referer}</span>
-        ) : null}
+        <span className="block truncate font-mono text-xs">{url}</span>
       </span>
       {current ? (
         <Badge variant="secondary">正在使用</Badge>

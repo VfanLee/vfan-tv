@@ -28,3 +28,7 @@ export function getRadioRegions(): Promise<RadioRegion[]> {
 export function getRadioBillboard(categoryId: number, regionId: number): Promise<RadioChannel[]> {
   return requireRuntimeApi().radio.getBillboard(categoryId, regionId)
 }
+
+export function getRadioPlaybackUrl(channelId: number): Promise<string> {
+  return requireRuntimeApi().radio.getPlaybackUrl(channelId)
+}

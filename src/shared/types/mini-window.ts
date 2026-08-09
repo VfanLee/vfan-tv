@@ -4,7 +4,8 @@ import type { RadioChannel } from './radio'
 export interface VideoMiniWindowPlaybackContext {
   sessionId: string
   src: string
-  sourceType?: MediaStreamType
+  sourceType: MediaStreamType
+  mediaSessionId: string
   title?: string
   variant: 'vod' | 'live'
   initialTime: number

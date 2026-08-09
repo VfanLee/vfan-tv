@@ -1,14 +1,8 @@
-import type { LiveSourceConfig, SubscriptionConfig, VodSourceConfig } from '@shared/types'
+import type { IptvSourceConfig, SubscriptionConfig, VodSourceConfig } from '@shared/types'
 
 export type SourceDialogState = { mode: 'create' } | { mode: 'edit'; source: VodSourceConfig }
 
-export type LiveSourceDialogState = { mode: 'create' } | { mode: 'edit'; source: LiveSourceConfig }
-
-export interface GitHubProxySpeedState {
-  elapsedMs?: number
-  errorMessage?: string
-  status: 'idle' | 'testing' | 'success' | 'error'
-}
+export type IptvSourceDialogState = { mode: 'create' } | { mode: 'edit'; source: IptvSourceConfig }
 
 export type VodSourceSpeedState =
   | { status: 'idle' }
@@ -18,10 +12,10 @@ export type VodSourceSpeedState =
 
 export type ConfirmState =
   | { type: 'clearSources' }
-  | { type: 'clearLiveSources' }
-  | { type: 'clearAppCache' }
+  | { type: 'clearIptvSources' }
+  | { type: 'restoreFactorySettings' }
   | { type: 'importAppData' }
   | { type: 'deleteSource'; source: VodSourceConfig }
-  | { type: 'deleteLiveSource'; source: LiveSourceConfig }
+  | { type: 'deleteIptvSource'; source: IptvSourceConfig }
   | { type: 'deleteSubscription'; subscription: SubscriptionConfig }
   | { type: 'selectSubscription'; subscriptionId: string }

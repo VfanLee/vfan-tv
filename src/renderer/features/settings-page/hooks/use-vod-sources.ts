@@ -28,7 +28,7 @@ export interface VodSourcesState {
   sources: VodSourceConfig[]
   speedResults: Record<string, VodSourceSpeedState>
   applySources: (sources: VodSourceConfig[]) => void
-  batchToggle: (enabled: boolean) => Promise<void>
+  batchSetDisabled: (disabled: boolean) => Promise<void>
   clearAll: () => Promise<void>
   deleteItem: (source: VodSourceConfig) => Promise<void>
   exportItems: () => Promise<void>
@@ -38,7 +38,7 @@ export interface VodSourcesState {
   switchBackup: (source: VodSourceConfig, backupUrl: string) => Promise<void>
   testAll: () => Promise<void>
   testSingle: (sourceId: string) => Promise<void>
-  toggle: (source: VodSourceConfig, enabled: boolean) => Promise<void>
+  setDisabled: (source: VodSourceConfig, disabled: boolean) => Promise<void>
   toggleAll: () => void
   toggleSelection: (sourceId: string) => void
 }
@@ -123,16 +123,16 @@ export function useVodSources(apiAvailable: boolean): VodSourcesState {
     }
   }
 
-  const toggle = async (source: VodSourceConfig, enabled: boolean): Promise<void> => {
+  const setDisabled = async (source: VodSourceConfig, disabled: boolean): Promise<void> => {
     if (!apiAvailable) return
     const previousSources = sources
-    setSources((current) => current.map((item) => (item.id === source.id ? { ...item, enabled } : item)))
+    setSources((current) => current.map((item) => (item.id === source.id ? { ...item, disabled } : item)))
     try {
       await updateSource(source.id, {
         name: source.name,
         url: source.url,
-        referer: source.referer,
-        enabled,
+        headers: source.headers,
+        disabled,
         backups: source.backups,
       })
     } catch (error) {
@@ -146,20 +146,20 @@ export function useVodSources(apiAvailable: boolean): VodSourcesState {
     setSelectedSourceIds(allSelected ? new Set() : new Set(sources.map((source) => source.id)))
   }
 
-  const batchToggle = async (enabled: boolean): Promise<void> => {
+  const batchSetDisabled = async (disabled: boolean): Promise<void> => {
     const selectedSources = sources.filter((source) => selectedSourceIds.has(source.id))
     if (!apiAvailable || selectedSources.length === 0) return
     setIsBatchUpdating(true)
     setSources((current) =>
-      current.map((source) => (selectedSourceIds.has(source.id) ? { ...source, enabled } : source)),
+      current.map((source) => (selectedSourceIds.has(source.id) ? { ...source, disabled } : source)),
     )
     const results = await Promise.allSettled(
       selectedSources.map((source) =>
         updateSource(source.id, {
           name: source.name,
           url: source.url,
-          referer: source.referer,
-          enabled,
+          headers: source.headers,
+          disabled,
           backups: source.backups,
         }),
       ),
@@ -169,7 +169,7 @@ export function useVodSources(apiAvailable: boolean): VodSourcesState {
     setIsBatchUpdating(false)
     if (failedCount > 0)
       toast.error('部分状态更新失败', { description: `${failedCount} 个点播源未能更新，请稍后重试。` })
-    else toast.success(`已${enabled ? '开启' : '关闭'} ${selectedSources.length} 个点播源`)
+    else toast.success(`已${disabled ? '关闭' : '开启'} ${selectedSources.length} 个点播源`)
   }
 
   const reorder = async (nextSources: VodSourceConfig[]): Promise<void> => {
@@ -243,7 +243,7 @@ export function useVodSources(apiAvailable: boolean): VodSourcesState {
 
   return {
     allSelected,
-    enabledCount: sources.filter((source) => source.enabled).length,
+    enabledCount: sources.filter((source) => !source.disabled).length,
     isBatchUpdating,
     isClearing,
     isReordering,
@@ -252,7 +252,7 @@ export function useVodSources(apiAvailable: boolean): VodSourcesState {
     sources,
     speedResults,
     applySources,
-    batchToggle,
+    batchSetDisabled,
     clearAll,
     deleteItem,
     exportItems,
@@ -262,7 +262,7 @@ export function useVodSources(apiAvailable: boolean): VodSourcesState {
     switchBackup,
     testAll,
     testSingle,
-    toggle,
+    setDisabled,
     toggleAll,
     toggleSelection: (sourceId) => setSelectedSourceIds((current) => toggleId(current, sourceId)),
   }

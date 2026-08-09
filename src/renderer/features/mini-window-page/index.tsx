@@ -22,6 +22,7 @@ import {
   getMiniWindowPlayback,
   hideMiniWindow,
   moveMiniWindow,
+  releaseMediaPlaybackSession,
   resizeMiniWindow,
   setMiniWindowAlwaysOnTop,
   updateMiniWindowPlayback,
@@ -109,6 +110,13 @@ export function MiniWindowPage(): React.JSX.Element {
       void getMiniWindowAlwaysOnTop(context.sessionId).then(setIsAlwaysOnTop)
     })
   }, [])
+
+  useEffect(() => {
+    const mediaSessionId = playback?.variant === 'radio' ? undefined : playback?.mediaSessionId
+    return () => {
+      if (mediaSessionId) void releaseMediaPlaybackSession(mediaSessionId)
+    }
+  }, [playback])
 
   const leaveMiniWindowMode = useCallback((): void => {
     if (!playback) return
@@ -383,6 +391,7 @@ function VideoMiniWindowPlayer({
       enableAutoNext={false}
       initialTime={playback.initialTime}
       loop={playback.loop}
+      mediaSessionId={playback.mediaSessionId}
       miniWindowMode
       persistPlaybackSettings={false}
       sourceType={playback.sourceType}

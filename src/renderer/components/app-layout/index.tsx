@@ -60,7 +60,7 @@ export function AppLayout(): React.JSX.Element {
   const primaryNavItems = [
     homeNavItem,
     ...(appStyle === 'trending' ? trendingNavItems : []),
-    { to: '/live', label: '直播', icon: MonitorPlay },
+    { to: '/iptv', label: 'IPTV', icon: MonitorPlay },
     ...(navigationVisibility.radio ? [{ to: '/radio', label: '电台', icon: Radio }] : []),
     ...(navigationVisibility.linkPlayer ? [{ to: '/link-player', label: '直链播放', icon: Link }] : []),
   ]
@@ -87,6 +87,7 @@ export function AppLayout(): React.JSX.Element {
         'bg-background text-foreground grid h-screen overflow-hidden transition-[grid-template-columns] duration-200',
         isSidebarCompact ? 'grid-cols-[76px_1fr]' : 'grid-cols-[252px_1fr]',
       )}
+      data-app-shell
     >
       <aside
         className={cn(
@@ -149,20 +150,23 @@ export function AppLayout(): React.JSX.Element {
         </nav>
       </aside>
 
-      <section className="bg-background relative isolate z-0 h-screen min-w-0 overflow-hidden">
+      <section className="bg-background relative isolate z-0 h-screen min-w-0 overflow-hidden" data-app-content-shell>
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 -z-10 bg-cover bg-fixed bg-center dark:hidden"
+          data-app-content-background
           style={{ backgroundImage: `url(${applicationBackgroundUrl})` }}
         />
         <div
           aria-hidden="true"
           className="pointer-events-none absolute inset-0 -z-10 hidden bg-cover bg-fixed bg-center dark:block"
+          data-app-content-background
           style={{ backgroundImage: `url(${applicationBackgroundDarkUrl})` }}
         />
         <div
           aria-hidden="true"
           className="bg-background/5 dark:bg-background/10 pointer-events-none absolute inset-0 -z-10"
+          data-app-content-background
         />
         <main
           ref={mainRef}

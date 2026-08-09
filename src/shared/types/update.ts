@@ -1,5 +1,7 @@
 export type UpdateStatus = 'idle' | 'checking' | 'available' | 'not-available' | 'downloading' | 'downloaded' | 'error'
 
+export type ReleaseDownloadRouteId = 'direct' | 'gh-proxy' | 'cloudflare-v4' | 'cloudflare-v46' | 'fastly-v4'
+
 export interface UpdateDownloadProgress {
   bytesPerSecond: number
   percent: number
@@ -12,8 +14,6 @@ export interface UpdateCheckResult {
   autoUpdateError?: string
   canAutoUpdate: boolean
   currentVersion: string
-  downloadName?: string
-  downloadUrl?: string
   latestVersion: string
   manualDownloadName?: string
   manualDownloadUrl?: string

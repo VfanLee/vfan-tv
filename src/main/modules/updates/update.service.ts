@@ -1,9 +1,10 @@
 import { app } from 'electron'
+import { randomUUID } from 'crypto'
 import { NsisUpdater } from 'electron-updater'
 import type { ProgressInfo, UpdateDownloadedEvent, UpdateInfo } from 'electron-updater'
-import { getWindowsUpdateChannel, resolveGitHubUrl } from '@shared/constants'
+import { getWindowsUpdateChannel } from '@shared/constants'
 import type { UpdateCheckResult, UpdateEvent } from '@shared/types'
-import type { SettingsService } from '../settings/settings.service'
+import type { ContentNetworkService } from '../../infrastructure/network/content-network.service'
 import { checkLatestRelease, isNewerVersion } from './update-checker'
 import packageJson from '../../../../package.json'
 
@@ -19,8 +20,8 @@ export class UpdateService {
   private updater?: NsisUpdater
 
   constructor(
-    private readonly settingsService: SettingsService,
     private readonly emitEvent: UpdateEventEmitter,
+    private readonly network: ContentNetworkService,
   ) {}
 
   getCurrentVersion(): string {
@@ -74,9 +75,22 @@ export class UpdateService {
     }
 
     // electron-updater 下载时沿用上一次检查解析出的地址，因此下载前必须用最终下载源重新检查一次。
-    const updater = this.configureUpdater(this.lastResult?.latestVersion)
-    await this.runWithoutUpdaterEvents(() => updater.checkForUpdates())
-    await updater.downloadUpdate()
+    const requestId = randomUUID()
+    const startedAt = Date.now()
+    console.info(
+      `[应用更新] 下载开始 | requestId=${requestId} | 网络=${this.network.getRouteDescription('update')} | 版本=${this.lastResult?.latestVersion ?? '未知'}`,
+    )
+    try {
+      const updater = this.configureUpdater(this.lastResult?.latestVersion)
+      await this.runWithoutUpdaterEvents(() => updater.checkForUpdates())
+      await updater.downloadUpdate()
+      console.info(`[应用更新] 下载成功 | requestId=${requestId} | 耗时=${Date.now() - startedAt}ms`)
+    } catch (error) {
+      console.error(
+        `[应用更新] 下载失败 | requestId=${requestId} | 原因=${getErrorMessage(error)} | 耗时=${Date.now() - startedAt}ms`,
+      )
+      throw error
+    }
   }
 
   install(): void {
@@ -91,14 +105,12 @@ export class UpdateService {
     return process.platform === 'win32' && !process.env.PORTABLE_EXECUTABLE_DIR
   }
 
-  // 已知目标版本时使用带 tag 的下载地址：它能被 GitHub 加速服务识别，`releases/latest/download` 则不能。
   private configureUpdater(version?: string): NsisUpdater {
-    const settings = this.settingsService.get()
     const baseUrl = version ? `${REPOSITORY_URL}/releases/download/v${version}/` : RELEASE_DOWNLOAD_BASE_URL
     const updater = this.getUpdater()
 
     updater.channel = getWindowsUpdateChannel(process.arch)
-    updater.setFeedURL({ provider: 'generic', url: resolveGitHubUrl(baseUrl, settings) })
+    updater.setFeedURL({ provider: 'generic', url: baseUrl })
     return updater
   }
 
@@ -202,11 +214,9 @@ export class UpdateService {
       arch: process.arch,
       canAutoUpdate: this.canUseAutoUpdater() && updateAvailable,
       currentVersion: this.getCurrentVersion(),
-      downloadName: manualResult?.downloadName,
-      downloadUrl: manualResult?.downloadUrl,
       latestVersion,
-      manualDownloadName: manualResult?.manualDownloadName ?? manualResult?.downloadName,
-      manualDownloadUrl: manualResult?.manualDownloadUrl ?? manualResult?.downloadUrl,
+      manualDownloadName: manualResult?.manualDownloadName,
+      manualDownloadUrl: manualResult?.manualDownloadUrl,
       platform: process.platform,
       releaseName: normalizeText(updateInfo?.releaseName) ?? manualResult?.releaseName ?? `Vfan TV ${latestVersion}`,
       releaseNotes:
@@ -218,7 +228,7 @@ export class UpdateService {
   }
 
   private async checkManualRelease(): Promise<UpdateCheckResult> {
-    return checkLatestRelease(this.getCurrentVersion(), this.settingsService.get(), process.platform, process.arch)
+    return checkLatestRelease(this.getCurrentVersion(), this.network, process.platform, process.arch)
   }
 }
 

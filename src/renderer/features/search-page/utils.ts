@@ -12,6 +12,7 @@ export function groupSearchResults(items: VodSearchResult[]): GroupedSearchResul
       current.sourceNames = Array.from(new Set([...current.sourceNames, item.sourceName]))
       if (!current.poster && item.poster) {
         current.poster = item.poster
+        current.posterSourceId = item.sourceId
         current.posterSourceUrl = item.sourceUrl
       }
       current.remarks ||= item.remarks
@@ -21,6 +22,7 @@ export function groupSearchResults(items: VodSearchResult[]): GroupedSearchResul
       key,
       title: item.title,
       poster: item.poster,
+      posterSourceId: item.poster ? item.sourceId : undefined,
       posterSourceUrl: item.sourceUrl,
       meta: formatMeta(item),
       remarks: item.remarks,

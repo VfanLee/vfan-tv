@@ -13,10 +13,8 @@ import {
 import { Button } from '@/ui/button'
 import { Checkbox } from '@/ui/checkbox'
 
-type DataOperation = 'export' | 'initialize'
-
 const baseOptions: Array<{ key: keyof AppDataSelection; label: string; description: string }> = [
-  { key: 'sources', label: '数据源', description: '订阅、点播源和直播源会一并处理。' },
+  { key: 'sources', label: '数据源', description: '订阅、VOD 源和 IPTV 源会一并处理。' },
   { key: 'recent', label: '最近观看', description: '播放进度与观看记录。' },
   { key: 'favorites', label: '收藏', description: '已收藏的影视条目。' },
   { key: 'searchHistory', label: '搜索历史', description: '本机保存的搜索关键词。' },
@@ -31,12 +29,10 @@ const defaultSelection: AppDataSelection = {
 
 export function DataSelectionDialog({
   isPending,
-  mode,
   onCancel,
   onConfirm,
 }: {
   isPending: boolean
-  mode: DataOperation
   onCancel: () => void
   onConfirm: (selection: AppDataSelection) => Promise<void>
 }): React.JSX.Element {
@@ -44,7 +40,6 @@ export function DataSelectionDialog({
   const options = baseOptions
   const hasSelection = options.some((option) => selection[option.key])
   const allSelected = options.every((option) => selection[option.key])
-  const title = mode === 'export' ? '选择导出数据' : '选择初始化数据'
 
   const confirm = async (): Promise<void> => {
     if (!hasSelection || isPending) return
@@ -55,12 +50,8 @@ export function DataSelectionDialog({
     <AlertDialog open onOpenChange={(open) => !open && !isPending && onCancel()}>
       <AlertDialogContent className="max-w-md" size="default">
         <AlertDialogHeader>
-          <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>
-            {mode === 'export'
-              ? '导入此备份时会全量初始化；未导出的数据不会保留。'
-              : '仅清除勾选的数据，未勾选的数据会保留在本机。'}
-          </AlertDialogDescription>
+          <AlertDialogTitle>选择导出数据</AlertDialogTitle>
+          <AlertDialogDescription>导入此备份时会全量覆盖业务数据；未导出的数据不会保留。</AlertDialogDescription>
         </AlertDialogHeader>
 
         <div className="space-y-1">
@@ -98,13 +89,12 @@ export function DataSelectionDialog({
           </AlertDialogCancel>
           <AlertDialogAction
             disabled={!hasSelection || isPending}
-            variant={mode === 'initialize' ? 'destructive' : 'default'}
             onClick={(event) => {
               event.preventDefault()
               void confirm()
             }}
           >
-            {isPending ? '处理中...' : mode === 'export' ? '导出' : '初始化'}
+            {isPending ? '处理中...' : '导出'}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>

@@ -1,27 +1,28 @@
 import { randomUUID } from 'crypto'
-import { liveSourceImportItemSchema, liveSourceInputSchema } from '@shared/schemas'
+import { iptvSourceImportItemSchema, iptvSourceInputSchema } from '@shared/schemas'
 import type {
-  LiveSourceConfig,
-  LiveSourceExportItem,
-  LiveSourceImportItem,
-  LiveSourceImportPreview,
-  LiveSourceImportResult,
-  LiveSourceInput,
+  IptvSourceConfig,
+  IptvSourceExportItem,
+  IptvSourceImportItem,
+  IptvSourceImportPreview,
+  IptvSourceImportResult,
+  IptvSourceInput,
   SourceSubscriptionSectionResult,
 } from '@shared/types'
-import type { LiveSourceRepository } from './live-source.repository'
+import type { IptvSourceRepository } from './iptv-source.repository'
+import type { IptvCacheRepository } from './iptv-cache.repository'
 
-// 直播源与点播源共用导入语义，但保持独立模型，避免将播放列表能力耦合到点播源。
+// IPTV 源与 VOD 源共用导入语义，但保持独立模型，避免将播放列表能力耦合到 VOD 源。
 function toImportItems(payload: unknown): {
-  validItems: LiveSourceImportItem[]
-  invalidItems: LiveSourceImportPreview['invalidItems']
+  validItems: IptvSourceImportItem[]
+  invalidItems: IptvSourceImportPreview['invalidItems']
 } {
   const rawItems = Array.isArray(payload) ? payload : [payload]
-  const validItems: LiveSourceImportItem[] = []
-  const invalidItems: LiveSourceImportPreview['invalidItems'] = []
+  const validItems: IptvSourceImportItem[] = []
+  const invalidItems: IptvSourceImportPreview['invalidItems'] = []
 
   for (const [index, raw] of rawItems.entries()) {
-    const result = liveSourceImportItemSchema.safeParse(raw)
+    const result = iptvSourceImportItemSchema.safeParse(raw)
 
     if (result.success) {
       validItems.push(result.data)
@@ -37,19 +38,22 @@ function toImportItems(payload: unknown): {
   return { validItems, invalidItems }
 }
 
-export class LiveSourceService {
-  constructor(private readonly repository: LiveSourceRepository) {}
+export class IptvSourceService {
+  constructor(
+    private readonly repository: IptvSourceRepository,
+    private readonly cacheRepository?: IptvCacheRepository,
+  ) {}
 
-  list(): LiveSourceConfig[] {
+  list(): IptvSourceConfig[] {
     return this.repository.list()
   }
 
-  create(input: LiveSourceInput): LiveSourceConfig {
-    const data = liveSourceInputSchema.parse(input)
+  create(input: IptvSourceInput): IptvSourceConfig {
+    const data = iptvSourceInputSchema.parse(input)
     const existing = this.repository.findByUrl(data.url)
 
     if (existing) {
-      throw new Error('直播源地址已存在')
+      throw new Error('IPTV 源地址已存在')
     }
 
     const now = Date.now()
@@ -57,7 +61,8 @@ export class LiveSourceService {
       id: randomUUID(),
       name: data.name,
       url: data.url,
-      enabled: data.enabled,
+      disabled: data.disabled,
+      headers: data.headers,
       sort: this.repository.list().length,
       origin: 'manual',
       createdAt: now,
@@ -65,30 +70,33 @@ export class LiveSourceService {
     })
   }
 
-  update(id: string, input: LiveSourceInput): LiveSourceConfig {
-    const data = liveSourceInputSchema.parse(input)
+  update(id: string, input: IptvSourceInput): IptvSourceConfig {
+    const data = iptvSourceInputSchema.parse(input)
     const existing = this.repository.findById(id)
 
     if (!existing) {
-      throw new Error('直播源不存在')
+      throw new Error('IPTV 源不存在')
     }
 
     const duplicated = this.repository.findByUrl(data.url)
 
     if (duplicated && duplicated.id !== id) {
-      throw new Error('直播源地址已存在')
+      throw new Error('IPTV 源地址已存在')
     }
 
-    return this.repository.update({
+    const updated = this.repository.update({
       ...existing,
       name: data.name,
       url: data.url,
-      enabled: data.enabled,
+      disabled: data.disabled,
+      headers: data.headers,
       updatedAt: Date.now(),
     })
+    if (existing.url !== updated.url) this.cacheRepository?.deletePlaylist(id)
+    return updated
   }
 
-  reorder(sourceIds: string[]): LiveSourceConfig[] {
+  reorder(sourceIds: string[]): IptvSourceConfig[] {
     const sources = this.repository.list()
     const existingIds = new Set(sources.map((source) => source.id))
     const requestedIds = new Set(sourceIds)
@@ -98,7 +106,7 @@ export class LiveSourceService {
       requestedIds.size !== sourceIds.length ||
       sourceIds.some((id) => !existingIds.has(id))
     ) {
-      throw new Error('直播源排序数据无效')
+      throw new Error('IPTV 源排序数据无效')
     }
 
     return this.repository.reorder(sourceIds)
@@ -108,30 +116,33 @@ export class LiveSourceService {
     const existing = this.repository.findById(id)
 
     if (!existing) {
-      throw new Error('直播源不存在')
+      throw new Error('IPTV 源不存在')
     }
 
     this.repository.delete(id)
+    this.cacheRepository?.deletePlaylist(id)
   }
 
   clear(): void {
     this.repository.clear()
+    this.cacheRepository?.clearAll()
   }
 
-  exportItems(): LiveSourceExportItem[] {
+  exportItems(): IptvSourceExportItem[] {
     return this.repository.list().map((source) => ({
       name: source.name,
       url: source.url,
-      enabled: source.enabled,
+      disabled: source.disabled,
+      headers: source.headers,
     }))
   }
 
-  previewImport(payload: unknown): LiveSourceImportPreview {
+  previewImport(payload: unknown): IptvSourceImportPreview {
     const { validItems, invalidItems } = toImportItems(payload)
     const seen = new Set<string>()
-    const newItems: LiveSourceImportItem[] = []
-    const overwriteItems: LiveSourceImportItem[] = []
-    const skippedItems: LiveSourceImportItem[] = []
+    const newItems: IptvSourceImportItem[] = []
+    const overwriteItems: IptvSourceImportItem[] = []
+    const skippedItems: IptvSourceImportItem[] = []
 
     for (const item of validItems) {
       if (seen.has(item.url)) {
@@ -157,27 +168,29 @@ export class LiveSourceService {
     }
   }
 
-  confirmImport(payload: unknown): LiveSourceImportResult {
+  confirmImport(payload: unknown): IptvSourceImportResult {
     const preview = this.previewImport(payload)
     const existingSources = this.repository.list()
     const nextSort = existingSources.length
     const now = Date.now()
-    const created: LiveSourceConfig[] = []
-    const overwritten: LiveSourceConfig[] = []
+    const created: IptvSourceConfig[] = []
+    const overwritten: IptvSourceConfig[] = []
 
     for (const [index, item] of [...preview.newItems, ...preview.overwriteItems].entries()) {
       const existing = this.repository.findByUrl(item.url)
-      const source: LiveSourceConfig = {
+      const source: IptvSourceConfig = {
         id: existing?.id ?? randomUUID(),
         name: item.name,
         url: item.url,
-        enabled: item.enabled ?? true,
+        disabled: item.disabled ?? false,
+        headers: item.headers ?? {},
         sort: existing?.sort ?? nextSort + index,
         origin: 'manual',
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       }
       const saved = this.repository.upsert(source)
+      if (existing) this.cacheRepository?.deletePlaylist(existing.id)
 
       if (existing) {
         overwritten.push(saved)
@@ -194,7 +207,7 @@ export class LiveSourceService {
     }
   }
 
-  syncSubscription(items: LiveSourceImportItem[]): SourceSubscriptionSectionResult {
+  syncSubscription(items: IptvSourceImportItem[]): SourceSubscriptionSectionResult {
     const uniqueItems = [...new Map(items.map((item) => [item.url, item])).values()]
     const now = Date.now()
     const manualOwner = this.repository
@@ -202,6 +215,9 @@ export class LiveSourceService {
       .find((source) => source.origin === 'manual' && uniqueItems.some((item) => item.url === source.url))
 
     if (manualOwner) throw new Error(`订阅源地址与手动源「${manualOwner.name}」冲突`)
+    for (const source of this.repository.list().filter((item) => item.origin === 'subscription')) {
+      this.cacheRepository?.deletePlaylist(source.id)
+    }
     this.repository.clearSubscription()
 
     for (const item of uniqueItems) {
@@ -209,7 +225,8 @@ export class LiveSourceService {
         id: randomUUID(),
         name: item.name,
         url: item.url,
-        enabled: item.enabled ?? true,
+        disabled: item.disabled ?? false,
+        headers: item.headers ?? {},
         sort: this.repository.list().length,
         origin: 'subscription',
         createdAt: now,

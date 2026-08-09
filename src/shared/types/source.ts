@@ -1,41 +1,48 @@
-export interface VodSourceBackup {
-  url: string
-  referer?: string
+export interface SourceHeaders {
+  'User-Agent'?: string
+  'Referer'?: string
+  [key: string]: string | undefined
 }
 
-export interface VodSourceImportItem {
+export interface VodSourceDefinition {
   name: string
   url: string
-  referer?: string
-  enabled?: boolean
-  backups?: VodSourceBackup[]
+  disabled?: boolean
+  headers?: SourceHeaders
+  backups?: string[]
 }
 
-export interface VodSourceExportItem {
+export interface IptvSourceDefinition {
   name: string
   url: string
-  referer?: string
-  enabled: boolean
-  backups: VodSourceBackup[]
+  disabled?: boolean
+  headers?: SourceHeaders
+}
+
+export interface SourceSubscription {
+  vod: VodSourceDefinition[]
+  iptv: IptvSourceDefinition[]
+}
+
+export type VodSourceImportItem = VodSourceDefinition
+
+export interface VodSourceExportItem extends VodSourceDefinition {
+  disabled: boolean
+  headers: SourceHeaders
+  backups: string[]
 }
 
 export type VodSourceOrigin = 'manual' | 'subscription'
 
-export interface VodSourceSubscriptionItem {
-  name: string
-  url: string
-  referer?: string
-  enabled?: boolean
-  backups?: VodSourceBackup[]
-}
+export type VodSourceSubscriptionItem = VodSourceDefinition
 
 export interface VodSourceConfig {
   id: string
   name: string
   url: string
-  referer?: string
-  enabled: boolean
-  backups: VodSourceBackup[]
+  disabled: boolean
+  headers: SourceHeaders
+  backups: string[]
   sort: number
   origin: VodSourceOrigin
   remark?: string
@@ -43,13 +50,7 @@ export interface VodSourceConfig {
   updatedAt: number
 }
 
-export interface VodSourceInput {
-  name: string
-  url: string
-  referer?: string
-  enabled?: boolean
-  backups?: VodSourceBackup[]
-}
+export type VodSourceInput = VodSourceDefinition
 
 export type VodSourceSpeedResult = { status: 'success'; elapsedMs: number } | { status: 'error'; errorMessage: string }
 
@@ -85,7 +86,7 @@ export interface VodSourceExportResult {
 
 export interface SourceSubscriptionResult {
   vod: SourceSubscriptionSectionResult
-  live: SourceSubscriptionSectionResult
+  iptv: SourceSubscriptionSectionResult
   updatedAt?: number
 }
 

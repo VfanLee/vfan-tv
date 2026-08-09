@@ -195,7 +195,7 @@ function createApplicationMenu(): void {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return
 
   // Set app user model id for windows
@@ -203,7 +203,7 @@ app.whenReady().then(() => {
   app.dock?.setIcon(icon)
   electronApp.setAppUserModelId(APP_ID)
   createApplicationMenu()
-  applicationContext = createApplicationContext()
+  applicationContext = await createApplicationContext()
   registerIpcHandlers(applicationContext)
 
   // Default open or close DevTools by F12 in development

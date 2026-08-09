@@ -6,21 +6,13 @@ import { Checkbox } from '@/ui/checkbox'
 import logoMarkUrl from '@renderer/assets/logo-mark.svg'
 
 const NOTICE_ITEMS = [
-  '本软件系影视聚合客户端（空壳），不提供、不内置、不运营任何点播源、直播源或视听内容；全部数据源与播放内容均由用户自行获取、配置与使用。',
+  '本软件系影视聚合客户端（空壳），不提供、不内置、不运营任何 VOD 源、IPTV 源或视听内容；全部数据源与播放内容均由用户自行获取、配置与使用。',
   '本软件仅供个人学习与研究目的使用；禁止用于任何商业用途，禁止基于本软件对外提供公开服务、运营平台或有偿服务。',
   '用户对其自行收集、配置、访问或传播的数据与内容，以及由此产生的全部使用行为，独立承担法律责任；因公开分享、传播、运营或违法使用所引发的法律后果，均由用户自行负责，与项目作者及贡献者无关。',
   '用户应遵守其所在国家或地区的法律法规，确保自身使用行为合法，并请低调使用，避免不当传播与宣传。',
   '未经书面授权，不得在哔哩哔哩、小红书、微信公众号、抖音、今日头条及其他中国大陆社交平台以视频、图文等方式宣传本项目；亦不得以「科技周刊 / 月刊」或其他媒体、站点形式收录、转载或推广本项目。',
   '本项目不向任何国家或地区提供运营性服务、内容分发服务或技术托管服务；任何第三方在当地的使用或对外提供服务，均属其个人或该第三方行为，相关法律风险与责任由其自行承担。',
 ] as const
-
-export function shouldSkipDisclaimer(): boolean {
-  try {
-    return window.localStorage.getItem(DISCLAIMER_SKIP_STORAGE_KEY) === '1'
-  } catch {
-    return false
-  }
-}
 
 export function DisclaimerOverlay({ onAcknowledge }: { onAcknowledge: () => void }): React.JSX.Element {
   const [skipNextTime, setSkipNextTime] = useState(false)

@@ -1,5 +1,4 @@
 import { randomUUID } from 'crypto'
-import axios from 'axios'
 import { vodSourceImportItemSchema, vodSourceInputSchema } from '@shared/schemas'
 import type {
   SourceSubscriptionSectionResult,
@@ -12,7 +11,7 @@ import type {
   VodSourceSubscriptionItem,
   VodSourceSpeedResult,
 } from '@shared/types'
-import type { HttpClient } from '../../infrastructure/http/http-client'
+import { isHttpRequestError, type HttpClient } from '../../infrastructure/http/http-client'
 import type { VodSourceRepository } from './vod-source.repository'
 
 // 点播源领域服务：将外部导入数据校验为可持久化的源配置，并维护排序与唯一性约束。
@@ -60,9 +59,9 @@ export class SourceService {
       id: randomUUID(),
       name: data.name,
       url: data.url,
-      referer: data.referer,
+      headers: data.headers,
       backups: data.backups,
-      enabled: data.enabled,
+      disabled: data.disabled,
       sort: this.repository.list().length,
       origin: 'manual',
       createdAt: now,
@@ -84,9 +83,9 @@ export class SourceService {
       ...existing,
       name: data.name,
       url: data.url,
-      referer: data.referer,
+      headers: data.headers,
       backups: data.backups,
-      enabled: data.enabled,
+      disabled: data.disabled,
       updatedAt: Date.now(),
     })
   }
@@ -121,16 +120,15 @@ export class SourceService {
     const existing = this.repository.findById(id)
     if (!existing) throw new Error('数据源不存在')
 
-    const backupIndex = existing.backups.findIndex((backup) => backup.url === backupUrl)
+    const backupIndex = existing.backups.findIndex((backup) => backup === backupUrl)
     if (backupIndex === -1) throw new Error('备用地址不存在')
 
     const next = existing.backups[backupIndex]
     const backups = [...existing.backups]
-    backups[backupIndex] = { url: existing.url, referer: existing.referer }
+    backups[backupIndex] = existing.url
     return this.repository.update({
       ...existing,
-      url: next.url,
-      referer: next.referer,
+      url: next,
       backups,
       updatedAt: Date.now(),
     })
@@ -143,7 +141,8 @@ export class SourceService {
     try {
       const startedAt = performance.now()
       await this.httpClient.get(buildVodSourceProbeUrl(source.url), {
-        headers: source.referer ? { Referer: source.referer } : undefined,
+        headers: source.headers,
+        requestLabel: '点播源测速',
         timeout: 5_000,
       })
       return { status: 'success', elapsedMs: Math.max(1, Math.round(performance.now() - startedAt)) }
@@ -160,8 +159,8 @@ export class SourceService {
     return this.repository.list().map((source) => ({
       name: source.name,
       url: source.url,
-      referer: source.referer,
-      enabled: source.enabled,
+      disabled: source.disabled,
+      headers: source.headers,
       backups: source.backups,
     }))
   }
@@ -212,9 +211,9 @@ export class SourceService {
         id: existing?.id ?? randomUUID(),
         name: item.name,
         url: item.url,
-        referer: item.referer,
+        headers: item.headers ?? {},
         backups: item.backups ?? [],
-        enabled: item.enabled ?? false,
+        disabled: item.disabled ?? false,
         sort: existing?.sort ?? nextSort + index,
         origin: 'manual',
         remark: existing?.remark,
@@ -250,9 +249,9 @@ export class SourceService {
         id: randomUUID(),
         name: item.name,
         url: item.url,
-        referer: item.referer,
+        headers: item.headers ?? {},
         backups: item.backups ?? [],
-        enabled: item.enabled ?? false,
+        disabled: item.disabled ?? false,
         sort: this.repository.list().length,
         origin: 'subscription',
         createdAt: now,
@@ -267,14 +266,13 @@ export class SourceService {
     }
   }
 
-  private assertEndpointUrlsAvailable(url: string, backups: Array<{ url: string }>, excludedSourceId?: string): void {
-    for (const endpointUrl of [url, ...backups.map((backup) => backup.url)]) {
+  private assertEndpointUrlsAvailable(url: string, backups: string[], excludedSourceId?: string): void {
+    for (const endpointUrl of [url, ...backups]) {
       const owner = this.repository
         .list()
         .find(
           (source) =>
-            source.id !== excludedSourceId &&
-            (source.url === endpointUrl || source.backups.some((backup) => backup.url === endpointUrl)),
+            source.id !== excludedSourceId && (source.url === endpointUrl || source.backups.includes(endpointUrl)),
         )
       if (owner) throw new Error(`源路径已存在于「${owner.name}」`)
     }
@@ -285,10 +283,10 @@ export class SourceService {
     const manualSources = this.repository.list().filter((source) => source.origin === 'manual')
 
     for (const item of items) {
-      for (const endpointUrl of [item.url, ...(item.backups ?? []).map((backup) => backup.url)]) {
+      for (const endpointUrl of [item.url, ...(item.backups ?? [])]) {
         if (endpointUrls.has(endpointUrl)) throw new Error(`订阅中存在重复的源地址：${endpointUrl}`)
         const manualOwner = manualSources.find(
-          (source) => source.url === endpointUrl || source.backups.some((backup) => backup.url === endpointUrl),
+          (source) => source.url === endpointUrl || source.backups.includes(endpointUrl),
         )
         if (manualOwner) throw new Error(`订阅源地址与手动源「${manualOwner.name}」冲突`)
         endpointUrls.add(endpointUrl)
@@ -308,9 +306,9 @@ function buildVodSourceProbeUrl(sourceUrl: string): string {
 
 /** 将测速异常转换为适合在设置页展示的简短原因。 */
 function getSpeedTestErrorMessage(error: unknown): string {
-  if (axios.isAxiosError(error)) {
+  if (isHttpRequestError(error)) {
     if (error.code === 'ECONNABORTED') return '请求超时'
-    if (error.response) return `HTTP ${error.response.status}`
+    if (error.status) return `HTTP ${error.status}`
     return error.message || '连接失败'
   }
   return error instanceof Error ? error.message : '请求失败'

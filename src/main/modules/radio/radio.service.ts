@@ -1,10 +1,13 @@
 import type { RadioCategory, RadioChannel, RadioLiveProgram, RadioRegion, RadioSearchResult } from '@shared/types'
+import type { Session } from 'electron'
 import type { HttpClient } from '../../infrastructure/http/http-client'
+import type { ContentNetworkService } from '../../infrastructure/network/content-network.service'
 import type { MediaProxyServer } from '../media/media-proxy-server'
 
 const QTFM_API_BASE_URL = 'https://rapi.qtfm.cn'
 const QINGTING_API_BASE_URL = 'https://rapi.qingting.fm'
 const QINGTING_SEARCH_BASE_URL = 'https://search.qingting.fm'
+const QINGTING_AUDIO_REFERER = 'https://ls.qingting.fm/'
 
 type UnknownRecord = Record<string, unknown>
 
@@ -15,6 +18,7 @@ export class RadioService {
   constructor(
     private readonly httpClient: HttpClient,
     private readonly proxyServer: MediaProxyServer,
+    private readonly network: ContentNetworkService,
   ) {}
 
   async getCategories(): Promise<RadioCategory[]> {
@@ -82,8 +86,32 @@ export class RadioService {
     return asArray(getPayload(response)).map(toChannel).filter(isDefined)
   }
 
+  async getPlaybackUrl(channelId: number): Promise<string> {
+    const id = normalizeId(channelId)
+    if (!id) throw new Error('电台频道无效')
+    const url = `https://ls.qingting.fm/live/${id}/64k.m3u8`
+    return this.proxyServer.createMediaUrl(url, { headers: {} }, this.network.getContext('radio'))
+  }
+
   private async get<T>(url: string): Promise<T> {
-    return this.httpClient.get<T>(await this.proxyServer.createRadioApiUrl(url))
+    return this.httpClient.get<T>(url, { requestLabel: '电台 API' })
+  }
+}
+
+/** 蜻蜓音频使用固定直连 Session，并只向官方音频域名补充其要求的 Referer。 */
+export function configureRadioSessionHeaders(session: Session): void {
+  session.webRequest.onBeforeSendHeaders({ urls: ['https://ls.qingting.fm/*'] }, (details, callback) => {
+    callback({
+      requestHeaders: setRequestHeader(details.requestHeaders, 'Referer', QINGTING_AUDIO_REFERER),
+    })
+  })
+}
+
+function setRequestHeader(headers: Record<string, string>, name: string, value: string): Record<string, string> {
+  const normalizedName = name.toLowerCase()
+  return {
+    ...Object.fromEntries(Object.entries(headers).filter(([key]) => key.toLowerCase() !== normalizedName)),
+    [name]: value,
   }
 }
 

@@ -4,7 +4,12 @@ import type {
   HotRecommendationsRequest,
   RecommendationItem,
 } from '@shared/types'
-import type { HttpClient } from '../../infrastructure/http/http-client'
+import { randomUUID } from 'crypto'
+import { net, type Session } from 'electron'
+import type { ContentNetworkContext, ContentNetworkService } from '../../infrastructure/network/content-network.service'
+
+const DOUBAN_MOVIE_REFERER = 'https://movie.douban.com/explore'
+const DOUBAN_TV_REFERER = 'https://movie.douban.com/tv/'
 
 interface DoubanRecentHotResponse {
   items?: unknown[]
@@ -26,7 +31,7 @@ const HOT_REQUESTS: DoubanHotRequest[] = [
     categoryParam: '热门',
     defaultType: '全部',
     supportedTypes: ['全部', '华语', '欧美', '韩国', '日本'],
-    referer: 'https://movie.douban.com/explore',
+    referer: DOUBAN_MOVIE_REFERER,
   },
   {
     category: 'tv',
@@ -34,7 +39,7 @@ const HOT_REQUESTS: DoubanHotRequest[] = [
     categoryParam: 'tv',
     defaultType: 'tv_domestic',
     supportedTypes: ['tv_domestic', 'tv_american', 'tv_japanese', 'tv_korean'],
-    referer: 'https://movie.douban.com/tv/',
+    referer: DOUBAN_TV_REFERER,
   },
   {
     category: 'animation',
@@ -42,7 +47,7 @@ const HOT_REQUESTS: DoubanHotRequest[] = [
     categoryParam: 'tv',
     defaultType: 'tv_animation',
     supportedTypes: ['tv_animation'],
-    referer: 'https://movie.douban.com/tv/',
+    referer: DOUBAN_TV_REFERER,
   },
   {
     category: 'documentary',
@@ -50,7 +55,7 @@ const HOT_REQUESTS: DoubanHotRequest[] = [
     categoryParam: 'tv',
     defaultType: 'tv_documentary',
     supportedTypes: ['tv_documentary'],
-    referer: 'https://movie.douban.com/tv/',
+    referer: DOUBAN_TV_REFERER,
   },
   {
     category: 'show',
@@ -58,7 +63,7 @@ const HOT_REQUESTS: DoubanHotRequest[] = [
     categoryParam: 'show',
     defaultType: 'show',
     supportedTypes: ['show', 'show_domestic', 'show_foreign'],
-    referer: 'https://movie.douban.com/tv/',
+    referer: DOUBAN_TV_REFERER,
   },
 ]
 
@@ -66,7 +71,7 @@ export class DoubanService {
   private recentHotRequest?: Promise<RecommendationItem[]>
   private readonly hotPageRequests = new Map<string, Promise<HotRecommendationsPage>>()
 
-  constructor(private readonly httpClient: HttpClient) {}
+  constructor(private readonly network: ContentNetworkService) {}
 
   async getRecentHot(): Promise<RecommendationItem[]> {
     if (!this.recentHotRequest) {
@@ -81,7 +86,20 @@ export class DoubanService {
 
           return normalizeDoubanItems(response.items ?? [], request.category)
         }),
-      ).then((responses) => responses.flatMap((response) => (response.status === 'fulfilled' ? response.value : [])))
+      )
+        .then((responses) =>
+          responses.flatMap((response, index) => {
+            if (response.status === 'fulfilled') return response.value
+            const request = HOT_REQUESTS[index]
+            console.warn(
+              `[豆瓣 API] 分类加载失败 | 分类=${request.category} | 类型=${request.defaultType} | 原因=${getErrorMessage(response.reason)}`,
+            )
+            return []
+          }),
+        )
+        .finally(() => {
+          this.recentHotRequest = undefined
+        })
     }
 
     return this.recentHotRequest
@@ -98,9 +116,8 @@ export class DoubanService {
       return cachedRequest
     }
 
-    const pageRequest = this.loadRecentHotPage(request, input.type, start, limit).catch((error: unknown) => {
+    const pageRequest = this.loadRecentHotPage(request, input.type, start, limit).finally(() => {
       this.hotPageRequests.delete(cacheKey)
-      throw error
     })
 
     this.hotPageRequests.set(cacheKey, pageRequest)
@@ -131,14 +148,151 @@ export class DoubanService {
     start: number,
     limit: number,
   ): Promise<DoubanRecentHotResponse> {
-    return this.httpClient.get<DoubanRecentHotResponse>(buildRecentHotUrl(request, type, start, limit), {
-      headers: {
-        Referer: request.referer,
-        Origin: 'https://movie.douban.com',
-        Accept: 'application/json, text/plain, */*',
-      },
-      timeout: 12_000,
+    const url = buildRecentHotUrl(request, type, start, limit)
+    const requestId = randomUUID()
+    const startedAt = Date.now()
+    console.info(`[豆瓣 API] 开始 | requestId=${requestId} | 网络=固定直连 | 目标=m.douban.com`)
+
+    try {
+      const result = await this.network.withDoubanContext((context) => requestDoubanJson(url, request.referer, context))
+      console.info(
+        `[豆瓣 API] 成功 | requestId=${requestId} | 网络=固定直连 | 目标=m.douban.com | 状态码=200 | Content-Type=application/json | 耗时=${Date.now() - startedAt}ms`,
+      )
+      return result
+    } catch (error) {
+      const details = getDoubanRequestError(error)
+      console.warn(
+        `[豆瓣 API] 失败 | requestId=${requestId} | 网络=固定直连 | 目标=m.douban.com | 状态码=${details.status ?? '—'} | Content-Type=${details.contentType ?? '—'} | 原因=${details.message} | 耗时=${Date.now() - startedAt}ms`,
+      )
+      throw new Error(details.message)
+    }
+  }
+}
+
+interface DoubanRequestErrorDetails {
+  message: string
+  status?: number
+  contentType?: string
+}
+
+async function requestDoubanJson(
+  url: string,
+  referer: string,
+  context: ContentNetworkContext,
+): Promise<DoubanRecentHotResponse> {
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const request = net.request({
+      method: 'GET',
+      url,
+      session: context.session,
+      redirect: 'follow',
+      headers: { Referer: referer },
+      origin: new URL(referer).origin,
+      referrerPolicy: 'unsafe-url',
     })
+    const timeoutId = setTimeout(() => {
+      request.abort()
+      finish(() => reject({ message: '请求超时' } satisfies DoubanRequestErrorDetails))
+    }, 12_000)
+
+    const finish = (callback: () => void): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeoutId)
+      callback()
+    }
+
+    request.on('response', (response) => {
+      const chunks: Buffer[] = []
+      let size = 0
+      response.on('data', (chunk) => {
+        size += chunk.byteLength
+        if (size > 5 * 1024 * 1024) {
+          request.abort()
+          finish(() => reject({ message: '响应内容超过大小限制' } satisfies DoubanRequestErrorDetails))
+          return
+        }
+        chunks.push(chunk)
+      })
+      response.on('error', () => finish(() => reject({ message: '网络请求失败' } satisfies DoubanRequestErrorDetails)))
+      response.on('end', () => {
+        const contentType = getResponseHeader(response.headers, 'content-type')
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          finish(() =>
+            reject({
+              message: `上游返回 HTTP ${response.statusCode}`,
+              status: response.statusCode,
+              contentType,
+            } satisfies DoubanRequestErrorDetails),
+          )
+          return
+        }
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as DoubanRecentHotResponse
+          finish(() => resolve(body))
+        } catch {
+          finish(() => reject({ message: '响应不是有效的 JSON', status: response.statusCode, contentType }))
+        }
+      })
+    })
+    request.on('error', () => finish(() => reject({ message: '网络请求失败' } satisfies DoubanRequestErrorDetails)))
+    request.end()
+  })
+}
+
+function getResponseHeader(headers: Record<string, string | string[]>, name: string): string | undefined {
+  const value = headers[name.toLowerCase()]
+  return (Array.isArray(value) ? value[0] : value)?.split(';', 1)[0]
+}
+
+function getDoubanRequestError(error: unknown): DoubanRequestErrorDetails {
+  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+    const details = error as Partial<DoubanRequestErrorDetails>
+    const message = (error as { message: string }).message
+    return {
+      message: message.replace(/\s+/g, ' ').slice(0, 120),
+      status: details.status,
+      contentType: details.contentType,
+    }
+  }
+  return { message: '网络请求失败' }
+}
+
+/**
+ * Electron Fetch 会在发起请求前拒绝跨站 Referer。豆瓣使用独立 Session，
+ * 因此在 Chromium 完成请求校验后，仅对豆瓣自己的域名注入其要求的 Referer。
+ */
+export function configureDoubanSessionHeaders(session: Session): void {
+  session.webRequest.onBeforeSendHeaders(
+    {
+      urls: ['https://m.douban.com/*', 'https://*.doubanio.com/*'],
+    },
+    (details, callback) => {
+      callback({
+        requestHeaders: setRequestHeader(details.requestHeaders, 'Referer', getDoubanReferer(details.url)),
+      })
+    },
+  )
+}
+
+function getDoubanReferer(url: string): string {
+  try {
+    const target = new URL(url)
+    if (target.hostname === 'm.douban.com' && target.pathname.endsWith('/tv')) {
+      return DOUBAN_TV_REFERER
+    }
+  } catch {
+    // URL 已由请求层校验；无法识别时使用电影页作为豆瓣图片的默认来源页。
+  }
+  return DOUBAN_MOVIE_REFERER
+}
+
+function setRequestHeader(headers: Record<string, string>, name: string, value: string): Record<string, string> {
+  const normalizedName = name.toLowerCase()
+  return {
+    ...Object.fromEntries(Object.entries(headers).filter(([key]) => key.toLowerCase() !== normalizedName)),
+    [name]: value,
   }
 }
 
@@ -218,4 +372,9 @@ function getOptionalString(value: unknown): string | undefined {
 
 function getNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message.replace(/\s+/g, ' ').slice(0, 120)
+  return '请求失败'
 }

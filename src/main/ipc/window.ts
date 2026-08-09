@@ -64,4 +64,14 @@ export function registerWindowIpc(context: ApplicationContext): void {
   ipcMain.handle(IPC_CHANNELS.window.quitApp, () => {
     app.quit()
   })
+  ipcMain.handle(IPC_CHANNELS.window.restartApp, () => {
+    if (!app.isPackaged) {
+      setTimeout(() => context.getMainWindow()?.webContents.reloadIgnoringCache(), 100)
+      return
+    }
+    setTimeout(() => {
+      app.relaunch()
+      app.exit(0)
+    }, 100)
+  })
 }

@@ -1,11 +1,13 @@
 import type {
+  AppDataClearSelection,
   AppDataClientPayload,
   AppDataExportResult,
   AppDataImportResult,
-  AppDataSelection,
   AppSettings,
-  GitHubProxyRouteId,
-  GitHubProxyTestResult,
+  NetworkProxyTestInput,
+  NetworkProxyTestResult,
+  NetworkSettings,
+  NetworkStatus,
 } from '@shared/types'
 import { getRuntimeApi, requireRuntimeApi } from './client'
 
@@ -18,19 +20,24 @@ export async function updateSettings(input: Partial<AppSettings>): Promise<AppSe
   return requireRuntimeApi().settings.update(input)
 }
 
-export async function testGitHubProxy(
-  routeId: GitHubProxyRouteId,
-  customPrefix?: string,
-): Promise<GitHubProxyTestResult> {
-  return requireRuntimeApi().settings.testGitHubProxy(routeId, customPrefix)
+export async function getNetworkStatus(): Promise<NetworkStatus> {
+  return requireRuntimeApi().network.getStatus()
 }
 
-export async function initializeAppData(options: AppDataSelection): Promise<void> {
-  return requireRuntimeApi().settings.initializeAppData(options)
+export async function saveNetworkSettings(settings: NetworkSettings): Promise<NetworkSettings> {
+  return requireRuntimeApi().network.save(settings)
 }
 
-export async function clearAppCache(): Promise<void> {
-  return requireRuntimeApi().settings.clearAppCache()
+export async function testNetworkSettings(input: NetworkProxyTestInput): Promise<NetworkProxyTestResult> {
+  return requireRuntimeApi().network.test(input)
+}
+
+export async function restoreFactorySettings(): Promise<void> {
+  return requireRuntimeApi().settings.restoreFactorySettings()
+}
+
+export async function clearAppData(selection: AppDataClearSelection): Promise<void> {
+  return requireRuntimeApi().settings.clearAppData(selection)
 }
 
 export async function exportAppData(clientData: AppDataClientPayload): Promise<AppDataExportResult> {

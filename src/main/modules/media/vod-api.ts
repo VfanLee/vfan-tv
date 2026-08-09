@@ -39,7 +39,7 @@ export function normalizeVodApiResponse(
 
   return response.list
     .filter(isRecord)
-    .map((item) => normalizeVodItem(keepOnlyM3u8PlayUrls(item as VodApiItem), source))
+    .map((item) => normalizeVodItem(item as VodApiItem, source))
     .filter((item) => item.title.length > 0)
 }
 
@@ -69,44 +69,6 @@ function normalizeCategories(value: unknown): VodCatalogPage['categories'] {
   }
 
   return [...categories.values()]
-}
-
-function keepOnlyM3u8PlayUrls(item: VodApiItem): VodApiItem {
-  const playUrl = getString(item.vod_play_url)
-
-  if (!playUrl) {
-    return item
-  }
-
-  const playFromLines = getString(item.vod_play_from).split('$$$')
-  const playNoteLines = getString(item.vod_play_note).split('$$$')
-  const playServerLines = getString(item.vod_play_server).split('$$$')
-  const nextPlayFrom: string[] = []
-  const nextPlayNotes: string[] = []
-  const nextPlayServers: string[] = []
-  const nextPlayUrls: string[] = []
-
-  playUrl.split('$$$').forEach((rawLine, lineIndex) => {
-    const episodes = rawLine
-      .split('#')
-      .map((episode) => episode.trim())
-      .filter((episode) => /\.m3u8(?:$|[?#])/i.test(episode))
-
-    if (episodes.length > 0) {
-      nextPlayFrom.push(playFromLines[lineIndex]?.trim() || `m3u8-${nextPlayFrom.length + 1}`)
-      nextPlayNotes.push(playNoteLines[lineIndex]?.trim() ?? '')
-      nextPlayServers.push(playServerLines[lineIndex]?.trim() ?? '')
-      nextPlayUrls.push(episodes.join('#'))
-    }
-  })
-
-  return {
-    ...item,
-    vod_play_from: nextPlayFrom.join('$$$'),
-    vod_play_note: nextPlayNotes.join('$$$'),
-    vod_play_server: nextPlayServers.join('$$$'),
-    vod_play_url: nextPlayUrls.join('$$$'),
-  }
 }
 
 function normalizeVodItem(item: VodApiItem, source: VodSourceConfig): VodSearchResult {

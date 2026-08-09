@@ -1,13 +1,14 @@
 import Database from 'better-sqlite3'
 import { app } from 'electron'
 import { drizzle } from 'drizzle-orm/better-sqlite3'
-import { mkdirSync } from 'fs'
+import { mkdirSync, rmSync } from 'fs'
 import { join } from 'path'
 import * as schema from './schema'
 import { DB_FILE_NAME } from '@shared/constants'
 
 // SQLite 的初始化与重建入口。表结构在运行时创建，因此重置必须复用同一份 SQL。
 export type AppDatabase = ReturnType<typeof drizzle<typeof schema>>
+const IPTV_SCHEMA_VERSION = 1
 
 const createSchemaSql = `
   CREATE TABLE IF NOT EXISTS settings (
@@ -20,9 +21,9 @@ const createSchemaSql = `
     id TEXT PRIMARY KEY NOT NULL,
     name TEXT NOT NULL,
     url TEXT NOT NULL UNIQUE,
-    referer TEXT,
+    headers TEXT NOT NULL DEFAULT '{}',
     backups TEXT NOT NULL DEFAULT '[]',
-    enabled INTEGER NOT NULL,
+    disabled INTEGER NOT NULL DEFAULT 0,
     sort INTEGER NOT NULL,
     origin TEXT NOT NULL DEFAULT 'manual',
     remark TEXT,
@@ -30,15 +31,42 @@ const createSchemaSql = `
     updated_at INTEGER NOT NULL
   );
 
-  CREATE TABLE IF NOT EXISTS live_sources (
+  CREATE TABLE IF NOT EXISTS iptv_sources (
     id TEXT PRIMARY KEY NOT NULL,
     name TEXT NOT NULL,
     url TEXT NOT NULL UNIQUE,
-    enabled INTEGER NOT NULL,
+    headers TEXT NOT NULL DEFAULT '{}',
+    disabled INTEGER NOT NULL DEFAULT 0,
     sort INTEGER NOT NULL,
     origin TEXT NOT NULL DEFAULT 'manual',
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS iptv_channel_snapshots (
+    source_id TEXT PRIMARY KEY NOT NULL,
+    playlist TEXT NOT NULL,
+    fetched_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS iptv_epg_metadata (
+    cache_key TEXT PRIMARY KEY NOT NULL,
+    source_url TEXT NOT NULL,
+    provider_type TEXT NOT NULL,
+    fetched_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    error_message TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS iptv_epg_programs (
+    cache_key TEXT NOT NULL,
+    channel_key TEXT NOT NULL,
+    date TEXT NOT NULL,
+    programs TEXT NOT NULL,
+    fetched_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL,
+    UNIQUE(cache_key, channel_key, date)
   );
 
   CREATE TABLE IF NOT EXISTS recent_plays (
@@ -81,14 +109,6 @@ const createSchemaSql = `
   );
 `
 
-const dropAppTablesSql = `
-  DROP TABLE IF EXISTS vod_sources;
-  DROP TABLE IF EXISTS live_sources;
-  DROP TABLE IF EXISTS recent_plays;
-  DROP TABLE IF EXISTS favorites;
-  DROP TABLE IF EXISTS settings;
-`
-
 export function createDatabase(): AppDatabase {
   const dbDir = join(app.getPath('userData'), 'database')
   mkdirSync(dbDir, { recursive: true })
@@ -98,21 +118,45 @@ export function createDatabase(): AppDatabase {
   const sqlite = new Database(databasePath)
   // WAL 允许读取与写入并行，降低播放记录等频繁小写入对 UI 的影响。
   sqlite.pragma('journal_mode = WAL')
-  sqlite.exec(createSchemaSql)
-  ensureVodSourceBackupsColumn(sqlite)
+  const schemaVersion = sqlite.pragma('user_version', { simple: true }) as number
+  if (schemaVersion < IPTV_SCHEMA_VERSION) {
+    const rebuildIptv = sqlite.transaction(() => {
+      sqlite.exec(`
+        DROP TABLE IF EXISTS iptv_sources;
+        DROP TABLE IF EXISTS iptv_channel_snapshots;
+        DROP TABLE IF EXISTS iptv_epg_metadata;
+        DROP TABLE IF EXISTS iptv_epg_programs;
+      `)
+      sqlite.exec(createSchemaSql)
+      sqlite.pragma(`user_version = ${IPTV_SCHEMA_VERSION}`)
+    })
+    rebuildIptv()
+  } else {
+    sqlite.exec(createSchemaSql)
+  }
 
   return drizzle(sqlite, { schema })
 }
 
-function ensureVodSourceBackupsColumn(sqlite: Database.Database): void {
-  const columns = sqlite.prepare("PRAGMA table_info('vod_sources')").all() as Array<{ name: string }>
-  if (!columns.some((column) => column.name === 'backups')) {
-    sqlite.exec("ALTER TABLE vod_sources ADD COLUMN backups TEXT NOT NULL DEFAULT '[]'")
-  }
-}
-
 export function resetAppDatabase(db: AppDatabase): void {
   // 此操作不可逆；调用方须先完成用户确认与必要的备份流程。
-  db.$client.exec(dropAppTablesSql)
-  db.$client.exec(createSchemaSql)
+  const reset = db.$client.transaction(() => {
+    const tables = db.$client
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+      .all() as Array<{ name: string }>
+
+    for (const { name } of tables) {
+      db.$client.exec(`DROP TABLE IF EXISTS "${name.replaceAll('"', '""')}"`)
+    }
+    db.$client.exec(createSchemaSql)
+    db.$client.pragma(`user_version = ${IPTV_SCHEMA_VERSION}`)
+  })
+  reset()
+}
+
+export function removeDeprecatedDatabaseFiles(): void {
+  const dbDir = join(app.getPath('userData'), 'database')
+  for (const fileName of ['vfan-tv-v3.sqlite', 'vfan-tv-v3.sqlite-wal', 'vfan-tv-v3.sqlite-shm']) {
+    rmSync(join(dbDir, fileName), { force: true })
+  }
 }

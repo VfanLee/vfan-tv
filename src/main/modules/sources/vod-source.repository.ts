@@ -8,8 +8,6 @@ type VodSourceRow = typeof vodSourcesTable.$inferSelect
 function toVodSourceConfig(row: VodSourceRow): VodSourceConfig {
   return {
     ...row,
-    referer: row.referer ?? undefined,
-    backups: row.backups ?? [],
     remark: row.remark ?? undefined,
   }
 }
@@ -44,9 +42,9 @@ export class VodSourceRepository {
         target: vodSourcesTable.url,
         set: {
           name: source.name,
-          referer: source.referer,
+          headers: source.headers,
           backups: source.backups,
-          enabled: source.enabled,
+          disabled: source.disabled,
           sort: source.sort,
           origin: source.origin,
           remark: source.remark,
@@ -64,9 +62,9 @@ export class VodSourceRepository {
       .set({
         name: source.name,
         url: source.url,
-        referer: source.referer,
+        headers: source.headers,
         backups: source.backups,
-        enabled: source.enabled,
+        disabled: source.disabled,
         remark: source.remark,
         updatedAt: source.updatedAt,
       })
@@ -82,9 +80,9 @@ export class VodSourceRepository {
       .set({
         name: source.name,
         url: source.url,
-        referer: source.referer,
+        headers: source.headers,
         backups: source.backups,
-        enabled: source.enabled,
+        disabled: source.disabled,
         origin: 'subscription',
         updatedAt: source.updatedAt,
       })

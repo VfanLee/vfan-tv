@@ -64,7 +64,7 @@ export interface PlayEpisode {
 
 export interface MediaProbeInput {
   url: string
-  referer?: string
+  sourceId: string
 }
 
 export interface MediaProbeResult {

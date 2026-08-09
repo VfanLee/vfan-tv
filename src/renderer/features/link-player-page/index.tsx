@@ -1,26 +1,21 @@
 import { useState } from 'react'
 import { Link, Play } from 'lucide-react'
-import type { MediaStreamType } from '@shared/types'
 import { BasicPlayer, PageHeader } from '@renderer/components'
+import { useMediaPlaybackTarget } from '@renderer/hooks'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/ui/select'
-import { detectMediaStreamType, getMediaProxyBaseUrl } from '@renderer/platform/api'
 
 type LinkPlaybackVariant = 'vod' | 'live'
 
 const DEFAULT_LINK_PLAYBACK_URL = 'https://artplayer.org/assets/sample/video.mp4'
 
-interface PlaybackSource {
-  displayUrl: string
-  sourceType: MediaStreamType
+interface PlaybackRequest {
   url: string
   variant: LinkPlaybackVariant
 }
 
-const DEFAULT_PLAYBACK_SOURCE: PlaybackSource = {
-  displayUrl: DEFAULT_LINK_PLAYBACK_URL,
-  sourceType: 'native',
+const DEFAULT_PLAYBACK_REQUEST: PlaybackRequest = {
   url: DEFAULT_LINK_PLAYBACK_URL,
   variant: 'vod',
 }
@@ -28,43 +23,30 @@ const DEFAULT_PLAYBACK_SOURCE: PlaybackSource = {
 export function LinkPlayerPage(): React.JSX.Element {
   const [inputUrl, setInputUrl] = useState(DEFAULT_LINK_PLAYBACK_URL)
   const [playbackVariant, setPlaybackVariant] = useState<LinkPlaybackVariant>('vod')
-  const [playbackSource, setPlaybackSource] = useState<PlaybackSource>(DEFAULT_PLAYBACK_SOURCE)
-  const [errorMessage, setErrorMessage] = useState('')
-  const [isResolving, setIsResolving] = useState(false)
+  const [playbackRequest, setPlaybackRequest] = useState<PlaybackRequest>(DEFAULT_PLAYBACK_REQUEST)
+  const [validationError, setValidationError] = useState('')
+  const playbackResolution = useMediaPlaybackTarget({
+    candidates: [{ id: 'direct-link', name: '直链', url: playbackRequest.url }],
+    diagnostics: { sourceName: '直链播放' },
+  })
+  const playbackTarget = playbackResolution.target
+  const errorMessage = validationError || playbackResolution.errorMessage
 
-  const resolvePlayback = async (rawUrl: string, variant: LinkPlaybackVariant): Promise<void> => {
+  const resolvePlayback = (rawUrl: string, variant: LinkPlaybackVariant): void => {
     const displayUrl = normalizeHttpUrl(rawUrl)
     if (!displayUrl) {
-      setErrorMessage('请输入有效的 http 或 https 播放链接。')
+      setValidationError('请输入有效的 http 或 https 播放链接。')
       return
     }
 
-    setErrorMessage('')
-    setIsResolving(true)
-
-    try {
-      const knownType = getKnownStreamType(displayUrl)
-      const [detection, proxyBaseUrl] = await Promise.all([
-        knownType ? undefined : detectMediaStreamType({ url: displayUrl }),
-        getMediaProxyBaseUrl(),
-      ])
-
-      setPlaybackSource({
-        displayUrl,
-        sourceType: knownType ?? detection?.type ?? 'native',
-        url: createMediaProxyUrl(proxyBaseUrl, displayUrl),
-        variant,
-      })
-    } catch {
-      setErrorMessage('链接解析失败，请检查地址后重试。')
-    } finally {
-      setIsResolving(false)
-    }
+    setValidationError('')
+    setPlaybackRequest({ url: displayUrl, variant })
+    playbackResolution.retry()
   }
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>): Promise<void> => {
+  const handleSubmit = (event: React.FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
-    await resolvePlayback(inputUrl, playbackVariant)
+    resolvePlayback(inputUrl, playbackVariant)
   }
 
   return (
@@ -101,9 +83,9 @@ export function LinkPlayerPage(): React.JSX.Element {
                 </SelectGroup>
               </SelectContent>
             </Select>
-            <Button className="h-11 sm:min-w-28" disabled={isResolving} type="submit">
+            <Button className="h-11 sm:min-w-28" disabled={playbackResolution.isLoading} type="submit">
               <Play data-icon="inline-start" />
-              {isResolving ? '解析中' : '播放'}
+              {playbackResolution.isLoading ? '解析中' : '播放'}
             </Button>
           </div>
           {errorMessage ? <p className="text-destructive px-1 text-xs">{errorMessage}</p> : null}
@@ -111,16 +93,18 @@ export function LinkPlayerPage(): React.JSX.Element {
 
         <section className="min-h-0 flex-1 overflow-hidden rounded-xl bg-black shadow-sm">
           <BasicPlayer
-            key={`${playbackSource?.url}-${playbackSource?.variant}`}
+            key={`${playbackTarget?.src}-${playbackRequest.variant}`}
             autoPlay
             className="h-full"
             enableAutoNext={false}
-            formatPlaybackUrl={() => playbackSource?.displayUrl ?? ''}
+            formatPlaybackUrl={() => playbackRequest.url}
+            isResolvingSource={playbackResolution.isLoading}
+            mediaSessionId={playbackTarget?.mediaSessionId}
             persistPlaybackSettings={false}
-            sourceType={playbackSource?.sourceType}
-            src={playbackSource?.url}
+            sourceType={playbackTarget?.streamType}
+            src={playbackTarget?.src}
             title="直链播放"
-            variant={playbackSource?.variant}
+            variant={playbackRequest.variant}
           />
         </section>
       </div>
@@ -135,22 +119,4 @@ function normalizeHttpUrl(value: string): string | undefined {
   } catch {
     return undefined
   }
-}
-
-function getKnownStreamType(url: string): Exclude<MediaStreamType, 'native'> | undefined {
-  if (/\.m3u8(?:$|[?#])/i.test(url) || /(?:^|[/?&=])(?:m3u8|hls|iptv|tvod)(?:$|[/?&=])/i.test(url)) {
-    return 'hls'
-  }
-  if (/\.flv(?:$|[?#])/i.test(url)) return 'flv'
-  if (/\.(?:ts|m2ts)(?:$|[?#])/i.test(url)) return 'mpegts'
-  return undefined
-}
-
-function createMediaProxyUrl(proxyBaseUrl: string, sourceUrl: string): string {
-  if (!proxyBaseUrl) return sourceUrl
-
-  const proxyUrl = new URL('/media', proxyBaseUrl)
-  proxyUrl.searchParams.set('url', sourceUrl)
-  proxyUrl.searchParams.set('referer', `${new URL(sourceUrl).origin}/`)
-  return proxyUrl.toString()
 }

@@ -1,6 +1,6 @@
 import { useState, type JSX, type ReactNode } from 'react'
 import { cn } from '@/utils'
-import type { CustomSliderInput, DisplaySettingsState } from '../types'
+import type { CustomSliderInput, DisplaySettingsState, MediaTrackSelection } from '../types'
 
 interface SettingsSurfaceProps {
   bottomOffset: number
@@ -37,11 +37,14 @@ export function DisplaySettingsMenu({
 }): JSX.Element {
   return (
     <SettingsSurface bottomOffset={bottomOffset} closing={closing} className="w-80 p-2">
+      {state.videoTrack ? (
+        <DisplaySettingRow label="视频" value={state.videoTrack.label} onClick={state.videoTrack.onClick} />
+      ) : null}
+      {state.audioTrack ? (
+        <DisplaySettingRow label="音频" value={state.audioTrack.label} onClick={state.audioTrack.onClick} />
+      ) : null}
       <DisplaySettingRow label="画面比例" value={formatAspectRatio(state.aspectRatio)} onClick={state.onAspectRatio} />
       <DisplaySettingRow label="画面翻转" value={formatFlip(state.flip)} onClick={state.onFlip} />
-      {state.audioTrack ? (
-        <DisplaySettingRow label="音效" value={state.audioTrack.label} onClick={state.audioTrack.onClick} />
-      ) : null}
       {state.showPlaybackSettings ? (
         <>
           <DisplaySettingRow label="播放速度" value={`${state.playbackRate}倍`} onClick={state.onPlaybackRate} />
@@ -62,6 +65,72 @@ export function DisplaySettingsMenu({
           onClick={state.onAutoNext}
         />
       ) : null}
+    </SettingsSurface>
+  )
+}
+
+export function MediaTrackDialog({
+  input,
+  closing,
+  onBack,
+  bottomOffset,
+}: {
+  input: MediaTrackSelection
+  closing: boolean
+  onBack: () => void
+  bottomOffset: number
+}): JSX.Element {
+  return (
+    <SettingsSurface bottomOffset={bottomOffset} closing={closing} className="max-h-[min(70vh,34rem)] w-[26rem]">
+      <header className="flex items-center gap-3 border-b border-white/10 px-4 py-3.5">
+        <button
+          type="button"
+          aria-label="返回播放器设置"
+          className="-ml-2 flex size-8 items-center justify-center rounded-full text-white hover:bg-white/10"
+          onClick={onBack}
+        >
+          <svg
+            className="size-5"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="m15 18-6-6 6-6" />
+          </svg>
+        </button>
+        <div className="min-w-0">
+          <h2 className="text-base font-semibold text-white">{input.title}</h2>
+          {input.hint ? <p className="mt-0.5 text-xs text-white/55">{input.hint}</p> : null}
+        </div>
+      </header>
+      <div className="max-h-[calc(min(70vh,34rem)-4rem)] overflow-y-auto p-2">
+        {input.options.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            disabled={option.disabled}
+            className={cn(
+              'flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors',
+              option.disabled ? 'cursor-default opacity-60' : 'hover:bg-white/10',
+            )}
+            onClick={option.onSelect}
+          >
+            <span className="flex size-5 shrink-0 items-center justify-center text-white">
+              {option.selected ? '✓' : ''}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium text-white">{option.label}</span>
+              {option.description ? (
+                <span className="mt-0.5 block truncate text-xs text-white/55">{option.description}</span>
+              ) : null}
+            </span>
+          </button>
+        ))}
+      </div>
     </SettingsSurface>
   )
 }

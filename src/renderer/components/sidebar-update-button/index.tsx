@@ -1,9 +1,23 @@
-import { Download, Rocket } from 'lucide-react'
+import { useState } from 'react'
+import { Download, ExternalLink, Rocket } from 'lucide-react'
 import { toast } from 'sonner'
+import { RELEASE_DOWNLOAD_ROUTES } from '@shared/constants'
+import type { ReleaseDownloadRouteId } from '@shared/types'
 import { cn } from '@/utils'
 import { useAppUpdateStore } from '@/stores'
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/ui/alert-dialog'
+import { Button } from '@/ui/button'
 
 export function SidebarUpdateButton({ collapsed }: { collapsed: boolean }): React.JSX.Element | null {
+  const [isManualDownloadOpen, setIsManualDownloadOpen] = useState(false)
   const result = useAppUpdateStore((state) => state.result)
   const isDownloading = useAppUpdateStore((state) => state.isDownloading)
   const isDownloaded = useAppUpdateStore((state) => state.isDownloaded)
@@ -26,7 +40,7 @@ export function SidebarUpdateButton({ collapsed }: { collapsed: boolean }): Reac
 
   const handleClick = (): void => {
     if (!canAutoUpdate) {
-      void openManualDownload()
+      setIsManualDownloadOpen(true)
       return
     }
     if (isDownloaded) {
@@ -40,29 +54,64 @@ export function SidebarUpdateButton({ collapsed }: { collapsed: boolean }): Reac
     void download()
   }
 
+  const selectManualDownloadRoute = (routeId: ReleaseDownloadRouteId): void => {
+    setIsManualDownloadOpen(false)
+    void openManualDownload(routeId)
+  }
+
   return (
-    <button
-      aria-label={title}
-      className={cn(
-        'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-primary focus-visible:ring-ring absolute top-1/2 right-1 z-10 flex size-9 -translate-y-1/2 items-center justify-center rounded-lg transition-colors outline-none focus-visible:ring-2 active:scale-95',
-        collapsed && 'top-1 right-0.5 size-7 translate-y-0',
-        isDownloaded && 'text-primary hover:text-primary',
-        canAutoUpdate && isDownloading && 'cursor-not-allowed opacity-70',
-      )}
-      disabled={canAutoUpdate && isDownloading}
-      title={title}
-      type="button"
-      onClick={(event) => {
-        event.preventDefault()
-        event.stopPropagation()
-        handleClick()
-      }}
-    >
-      {canAutoUpdate && (isDownloading || isDownloaded || percent > 0) ? (
-        <ProgressRing percent={isDownloaded ? 100 : percent} />
-      ) : null}
-      {isDownloaded ? <Rocket size={collapsed ? 13 : 15} /> : <Download size={collapsed ? 13 : 15} />}
-    </button>
+    <>
+      <button
+        aria-label={title}
+        className={cn(
+          'text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-primary focus-visible:ring-ring absolute top-1/2 right-1 z-10 flex size-9 -translate-y-1/2 items-center justify-center rounded-lg transition-colors outline-none focus-visible:ring-2 active:scale-95',
+          collapsed && 'top-1 right-0.5 size-7 translate-y-0',
+          isDownloaded && 'text-primary hover:text-primary',
+          canAutoUpdate && isDownloading && 'cursor-not-allowed opacity-70',
+        )}
+        disabled={canAutoUpdate && isDownloading}
+        title={title}
+        type="button"
+        onClick={(event) => {
+          event.preventDefault()
+          event.stopPropagation()
+          handleClick()
+        }}
+      >
+        {canAutoUpdate && (isDownloading || isDownloaded || percent > 0) ? (
+          <ProgressRing percent={isDownloaded ? 100 : percent} />
+        ) : null}
+        {isDownloaded ? <Rocket size={collapsed ? 13 : 15} /> : <Download size={collapsed ? 13 : 15} />}
+      </button>
+      <AlertDialog open={isManualDownloadOpen} onOpenChange={setIsManualDownloadOpen}>
+        <AlertDialogContent className="max-w-sm" size="default">
+          <AlertDialogHeader>
+            <AlertDialogTitle>选择下载方式</AlertDialogTitle>
+            <AlertDialogDescription>
+              {result.manualDownloadUrl
+                ? `将在系统浏览器中下载 ${result.manualDownloadName ?? `Vfan TV v${result.latestVersion}`}，不受应用网络设置影响。`
+                : '当前平台没有匹配的安装包，将打开 GitHub Release 页面。'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="grid gap-2">
+            {(result.manualDownloadUrl ? RELEASE_DOWNLOAD_ROUTES : RELEASE_DOWNLOAD_ROUTES.slice(0, 1)).map((route) => (
+              <Button
+                className="w-full justify-between"
+                key={route.id}
+                variant="outline"
+                onClick={() => selectManualDownloadRoute(route.id)}
+              >
+                {result.manualDownloadUrl ? route.label : '打开 Release 页面'}
+                <ExternalLink />
+              </Button>
+            ))}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }
 

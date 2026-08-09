@@ -1,6 +1,7 @@
 import { DOMParser } from '@xmldom/xmldom'
-import { resolveGitHubUrl } from '@shared/constants'
-import type { AppSettings, UpdateCheckResult } from '@shared/types'
+import { randomUUID } from 'crypto'
+import type { UpdateCheckResult } from '@shared/types'
+import type { ContentNetworkService } from '../../infrastructure/network/content-network.service'
 
 const REPOSITORY_URL = 'https://github.com/vfanlee/vfan-tv'
 const LATEST_RELEASE_API_PATH = 'https://api.github.com/repos/vfanlee/vfan-tv/releases/latest'
@@ -8,10 +9,6 @@ const RELEASES_FEED_PATH = `${REPOSITORY_URL}/releases.atom`
 const LATEST_RELEASE_PATH = `${REPOSITORY_URL}/releases/latest`
 const REQUEST_HEADERS = { 'User-Agent': 'vfan-tv-update-checker' }
 const REQUEST_TIMEOUT_MS = 10_000
-const DEFAULT_GITHUB_PROXY_SETTINGS: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'> = {
-  githubProxyCustomPrefix: '',
-  githubProxyRoute: 'gh-proxy',
-}
 
 // 独立于 electron-updater 的 Release 检查，保证 macOS/Linux 也能展示可下载的新版本。
 export interface LatestRelease {
@@ -108,8 +105,8 @@ export function parseLatestReleasePayload(payload: GitHubReleasePayload): Latest
   }
 }
 
-async function fetchLatestReleaseFromApi(): Promise<LatestRelease> {
-  const response = await fetch(LATEST_RELEASE_API_PATH, {
+async function fetchLatestReleaseFromApi(network: ContentNetworkService): Promise<LatestRelease> {
+  const response = await fetchUpdate(network, LATEST_RELEASE_API_PATH, {
     headers: {
       ...REQUEST_HEADERS,
       'Accept': 'application/vnd.github+json',
@@ -151,8 +148,8 @@ function parseReleaseFeed(xml: string): LatestRelease {
   }
 }
 
-async function fetchLatestReleaseFromFeed(): Promise<LatestRelease> {
-  const response = await fetch(RELEASES_FEED_PATH, {
+async function fetchLatestReleaseFromFeed(network: ContentNetworkService): Promise<LatestRelease> {
+  const response = await fetchUpdate(network, RELEASES_FEED_PATH, {
     headers: {
       ...REQUEST_HEADERS,
       Accept: 'application/atom+xml',
@@ -167,8 +164,8 @@ async function fetchLatestReleaseFromFeed(): Promise<LatestRelease> {
   return parseReleaseFeed(await response.text())
 }
 
-async function fetchLatestReleaseFromRedirect(): Promise<LatestRelease> {
-  const response = await fetch(LATEST_RELEASE_PATH, {
+async function fetchLatestReleaseFromRedirect(network: ContentNetworkService): Promise<LatestRelease> {
+  const response = await fetchUpdate(network, LATEST_RELEASE_PATH, {
     headers: REQUEST_HEADERS,
     redirect: 'manual',
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -188,15 +185,15 @@ async function fetchLatestReleaseFromRedirect(): Promise<LatestRelease> {
   }
 }
 
-async function fetchLatestRelease(): Promise<LatestRelease> {
+async function fetchLatestRelease(network: ContentNetworkService): Promise<LatestRelease> {
   try {
-    return await fetchLatestReleaseFromApi()
+    return await fetchLatestReleaseFromApi(network)
   } catch (apiError) {
     try {
-      return await fetchLatestReleaseFromFeed()
+      return await fetchLatestReleaseFromFeed(network)
     } catch (feedError) {
       try {
-        return await fetchLatestReleaseFromRedirect()
+        return await fetchLatestReleaseFromRedirect(network)
       } catch (redirectError) {
         throw new Error(formatReleaseFetchErrors([apiError, feedError, redirectError]))
       }
@@ -224,9 +221,9 @@ function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-async function assetExists(url: string): Promise<boolean> {
+async function assetExists(network: ContentNetworkService, url: string): Promise<boolean> {
   try {
-    const response = await fetch(url, {
+    const response = await fetchUpdate(network, url, {
       headers: {
         ...REQUEST_HEADERS,
         Range: 'bytes=0-0',
@@ -249,7 +246,7 @@ async function resolveDownloadAsset(
   version: string,
   platform: NodeJS.Platform,
   arch: string,
-  settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'>,
+  network: ContentNetworkService,
   releaseAssets: DownloadAsset[] = [],
 ): Promise<DownloadAsset | undefined> {
   const assetNames = getReleaseAssetNames(version, platform, arch)
@@ -261,7 +258,7 @@ async function resolveDownloadAsset(
     }
 
     const canonicalUrl = `${REPOSITORY_URL}/releases/download/${tag}/${name}`
-    const exists = await assetExists(resolveGitHubUrl(canonicalUrl, settings))
+    const exists = await assetExists(network, canonicalUrl)
     if (exists) {
       return { name, url: canonicalUrl }
     }
@@ -272,29 +269,60 @@ async function resolveDownloadAsset(
 
 export async function checkLatestRelease(
   currentVersion: string,
-  settings: Pick<AppSettings, 'githubProxyCustomPrefix' | 'githubProxyRoute'> = DEFAULT_GITHUB_PROXY_SETTINGS,
+  network: ContentNetworkService,
   platform: NodeJS.Platform = process.platform,
   arch: string = process.arch,
 ): Promise<UpdateCheckResult> {
-  const release = await fetchLatestRelease()
+  const release = await fetchLatestRelease(network)
   const latestVersion = release.tag.replace(/^v/, '')
-  const downloadAsset = await resolveDownloadAsset(release.tag, latestVersion, platform, arch, settings, release.assets)
+  const downloadAsset = await resolveDownloadAsset(release.tag, latestVersion, platform, arch, network, release.assets)
   const updateAvailable = isNewerVersion(latestVersion, currentVersion)
 
   return {
     arch,
     canAutoUpdate: false,
     currentVersion,
-    downloadName: downloadAsset?.name,
-    downloadUrl: downloadAsset && resolveGitHubUrl(downloadAsset.url, settings),
     latestVersion,
     manualDownloadName: downloadAsset?.name,
-    manualDownloadUrl: downloadAsset && resolveGitHubUrl(downloadAsset.url, settings),
+    manualDownloadUrl: downloadAsset?.url,
     platform,
     releaseName: release.name,
     releaseNotes: release.notes,
     releaseUrl: release.url,
     status: updateAvailable ? 'available' : 'not-available',
     updateAvailable,
+  }
+}
+
+async function fetchUpdate(network: ContentNetworkService, url: string, init: RequestInit): Promise<Response> {
+  const requestId = randomUUID()
+  const startedAt = Date.now()
+  const target = getSafeHost(url)
+  const route = network.getRouteDescription('update')
+  console.info(`[更新请求] 开始 | requestId=${requestId} | 网络=${route} | 目标=${target}`)
+  try {
+    const response = await network.withUpdateContext((context) => network.fetch(url, init, context))
+    const contentType = response.headers.get('content-type')?.split(';', 1)[0] || '未提供'
+    const message = `requestId=${requestId} | 网络=${route} | 目标=${target} | 状态码=${response.status} | Content-Type=${contentType} | 耗时=${Date.now() - startedAt}ms`
+    if (response.ok || (response.status >= 300 && response.status < 400)) console.info(`[更新请求] 成功 | ${message}`)
+    else console.warn(`[更新请求] 失败 | ${message}`)
+    return response
+  } catch (error) {
+    console.warn(
+      `[更新请求] 失败 | requestId=${requestId} | 网络=${route} | 目标=${target} | 状态码=— | Content-Type=— | 原因=${getErrorMessage(
+        error,
+      )
+        .replace(/https?:\/\/[^\s)]+/gi, '[已脱敏地址]')
+        .slice(0, 160)} | 耗时=${Date.now() - startedAt}ms`,
+    )
+    throw error
+  }
+}
+
+function getSafeHost(value: string): string {
+  try {
+    return new URL(value).host
+  } catch {
+    return '无效地址'
   }
 }

@@ -8,20 +8,37 @@ import type {
   VodSourceInput,
   VodSourceSpeedResult,
 } from './source'
-import type { AppDataClientPayload, AppDataExportResult, AppDataImportResult, AppDataSelection } from './app-data'
-import type { AppSettings, GitHubProxyRouteId, GitHubProxyTestResult } from './settings'
+import type { AppDataClearSelection, AppDataClientPayload, AppDataExportResult, AppDataImportResult } from './app-data'
+import type {
+  AppSettings,
+  NetworkProxyTestInput,
+  NetworkProxyTestResult,
+  NetworkSettings,
+  NetworkStatus,
+} from './settings'
 import type { FavoriteInput, FavoriteItem } from './favorite'
 import type {
-  LivePlaylist,
-  LiveSourceConfig,
-  LiveSourceExportResult,
-  LiveSourceFileResult,
-  LiveSourceImportPreview,
-  LiveSourceImportResult,
-  LiveSourceInput,
-} from './live'
+  IptvEpgSettings,
+  IptvEpgTestResult,
+  IptvPlaybackTarget,
+  IptvPlaylist,
+  IptvProgramScheduleResult,
+  IptvProgramsResult,
+  IptvSourceConfig,
+  IptvSourceExportResult,
+  IptvSourceFileResult,
+  IptvSourceImportPreview,
+  IptvSourceImportResult,
+  IptvSourceInput,
+} from './iptv'
 import type { RecentPlayInput, RecentPlayItem } from './recent'
-import type { MediaStreamDetectionInput, MediaStreamDetectionResult } from './media'
+import type {
+  MediaImageSourceType,
+  MediaPlaybackEvent,
+  MediaPlaybackSessionInfo,
+  MediaPlaybackTargetInput,
+  MediaPlaybackTargetResult,
+} from './media'
 import type { RadioCategory, RadioChannel, RadioLiveProgram, RadioRegion, RadioSearchResult } from './radio'
 import type {
   MiniWindowMoveInput,
@@ -94,17 +111,17 @@ export interface AppApi {
     syncSubscription: (subscriptionId: string) => Promise<SourceSubscriptionResult>
     deleteSubscription: (subscriptionId: string) => Promise<void>
   }
-  liveSources: {
-    list: () => Promise<LiveSourceConfig[]>
-    create: (input: LiveSourceInput) => Promise<LiveSourceConfig>
-    update: (id: string, input: LiveSourceInput) => Promise<LiveSourceConfig>
-    reorder: (sourceIds: string[]) => Promise<LiveSourceConfig[]>
+  iptvSources: {
+    list: () => Promise<IptvSourceConfig[]>
+    create: (input: IptvSourceInput) => Promise<IptvSourceConfig>
+    update: (id: string, input: IptvSourceInput) => Promise<IptvSourceConfig>
+    reorder: (sourceIds: string[]) => Promise<IptvSourceConfig[]>
     delete: (id: string) => Promise<void>
     clear: () => Promise<void>
-    previewImport: (payload: unknown) => Promise<LiveSourceImportPreview>
-    confirmImport: (payload: unknown) => Promise<LiveSourceImportResult>
-    importFromFile: () => Promise<LiveSourceFileResult>
-    exportToFile: () => Promise<LiveSourceExportResult>
+    previewImport: (payload: unknown) => Promise<IptvSourceImportPreview>
+    confirmImport: (payload: unknown) => Promise<IptvSourceImportResult>
+    importFromFile: () => Promise<IptvSourceFileResult>
+    exportToFile: () => Promise<IptvSourceExportResult>
   }
   home: {
     get: () => Promise<HomeData>
@@ -129,8 +146,12 @@ export interface AppApi {
     probeMedia: (input: MediaProbeInput) => Promise<MediaProbeResult>
     onSearchEvent: (listener: (event: SearchEvent) => void) => () => void
   }
-  live: {
-    loadPlaylist: (url: string) => Promise<LivePlaylist>
+  iptv: {
+    getCatalog: (sourceId: string, force?: boolean) => Promise<IptvPlaylist>
+    getPrograms: (sourceId: string, channelIds: string[]) => Promise<IptvProgramsResult>
+    getProgramSchedule: (sourceId: string, channelId: string, date: string) => Promise<IptvProgramScheduleResult>
+    getPlaybackTarget: (sourceId: string, channelId: string, streamId: string) => Promise<IptvPlaybackTarget>
+    testEpg: (settings?: IptvEpgSettings) => Promise<IptvEpgTestResult>
   }
   radio: {
     getCategories: () => Promise<RadioCategory[]>
@@ -140,19 +161,34 @@ export interface AppApi {
     getLivePrograms: (channelIds: number[]) => Promise<RadioLiveProgram[]>
     getRegions: () => Promise<RadioRegion[]>
     getBillboard: (categoryId: number, regionId: number) => Promise<RadioChannel[]>
+    getPlaybackUrl: (channelId: number) => Promise<string>
   }
   media: {
-    getProxyBaseUrl: () => Promise<string>
-    detectStreamType: (input: MediaStreamDetectionInput) => Promise<MediaStreamDetectionResult>
+    getPlaybackTarget: (input: MediaPlaybackTargetInput) => Promise<MediaPlaybackTargetResult>
+    getAssociatedAudioUrl: (mediaSessionId: string, url: string) => Promise<string>
+    getImageUrl: (
+      sourceType: MediaImageSourceType,
+      sourceId: string | undefined,
+      url: string,
+      baseUrl?: string,
+    ) => Promise<string>
+    getPlaybackSessionInfo: (mediaSessionId: string) => Promise<MediaPlaybackSessionInfo>
+    retainPlaybackSession: (mediaSessionId: string) => Promise<void>
+    releasePlaybackSession: (mediaSessionId: string) => Promise<void>
+    reportPlaybackEvent: (event: MediaPlaybackEvent) => Promise<void>
   }
   settings: {
     get: () => Promise<AppSettings>
     update: (input: Partial<AppSettings>) => Promise<AppSettings>
-    testGitHubProxy: (routeId: GitHubProxyRouteId, customPrefix?: string) => Promise<GitHubProxyTestResult>
-    initializeAppData: (options: AppDataSelection) => Promise<void>
-    clearAppCache: () => Promise<void>
+    restoreFactorySettings: () => Promise<void>
+    clearAppData: (selection: AppDataClearSelection) => Promise<void>
     exportAppData: (clientData: AppDataClientPayload) => Promise<AppDataExportResult>
     importAppData: () => Promise<AppDataImportResult>
+  }
+  network: {
+    getStatus: () => Promise<NetworkStatus>
+    save: (settings: NetworkSettings) => Promise<NetworkSettings>
+    test: (input: NetworkProxyTestInput) => Promise<NetworkProxyTestResult>
   }
   updates: {
     getCurrentVersion: () => Promise<string>
@@ -165,6 +201,7 @@ export interface AppApi {
     isMaximized: () => Promise<boolean>
     toggleMaximize: () => Promise<boolean>
     quitApp: () => Promise<void>
+    restartApp: () => Promise<void>
     enterMiniWindowMode: (context: MiniWindowPlaybackContext) => Promise<void>
     getMiniWindowPlayback: () => Promise<MiniWindowPlaybackContext | undefined>
     updateMiniWindowPlayback: (input: MiniWindowPlaybackExit) => Promise<void>

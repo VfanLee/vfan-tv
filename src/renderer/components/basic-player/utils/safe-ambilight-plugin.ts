@@ -1,4 +1,4 @@
-import type Artplayer from 'artplayer'
+import Artplayer from 'artplayer'
 
 interface AmbilightOption {
   blur?: string
@@ -14,7 +14,7 @@ interface AmbilightOption {
 export function createSafeAmbilightPlugin(option: AmbilightOption = {}) {
   return (art: Artplayer) => {
     const { $video } = art.template
-    const { createElement, addClass, setStyles } = art.constructor.utils
+    const { createElement, addClass, setStyles } = Artplayer.utils
     const { blur = '50px', opacity = 0.5, frequency = 10, duration = 0.3 } = option
 
     const $ambilight = createElement('div') as HTMLDivElement
@@ -25,10 +25,10 @@ export function createSafeAmbilightPlugin(option: AmbilightOption = {}) {
     $video.parentNode?.insertBefore($ambilight, $video)
     setStyles($ambilight, {
       position: 'absolute',
-      top: 0,
-      left: 0,
-      zIndex: 9,
-      inset: 0,
+      top: '0',
+      left: '0',
+      zIndex: '9',
+      inset: '0',
       display: 'grid',
       gridTemplateColumns: '1fr 1fr 1fr',
       gridTemplateRows: '1fr 1fr 1fr',
@@ -36,7 +36,7 @@ export function createSafeAmbilightPlugin(option: AmbilightOption = {}) {
 
     for (const $item of gridItems) {
       setStyles($item, {
-        opacity,
+        opacity: String(opacity),
         filter: `blur(${blur})`,
         transition: `background-color ${duration}s ease`,
       })

@@ -12,6 +12,7 @@ export interface GroupedSearchResult {
   key: string
   title: string
   poster?: string
+  posterSourceId?: string
   posterSourceUrl?: string
   meta: string
   remarks?: string

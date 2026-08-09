@@ -10,7 +10,7 @@ import { formatZodError, isZodError } from '../../ipc/utils'
 
 // 点播源 IPC：文件导入导出留在 main，以避免 renderer 获得任意文件系统权限。
 export function registerSourcesIpc(context: ApplicationContext): void {
-  const { source, liveSource, settings } = context.services
+  const { source, iptvSource, settings } = context.services
   const { httpClient } = context.utilities
   ipcMain.handle(IPC_CHANNELS.sources.list, () => source.list())
   ipcMain.handle(IPC_CHANNELS.sources.create, (_event, input: Parameters<AppApi['sources']['create']>[0]) =>
@@ -64,6 +64,7 @@ export function registerSourcesIpc(context: ApplicationContext): void {
       const parsedUrl = new URL(subscription.url)
       if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('订阅地址仅支持 HTTP 或 HTTPS')
       const encoded = await httpClient.get<string>(parsedUrl.toString(), {
+        requestLabel: '订阅同步',
         responseType: 'text',
         maxContentLength: 2 * 1024 * 1024,
       })
@@ -71,12 +72,12 @@ export function registerSourcesIpc(context: ApplicationContext): void {
         // 订阅内容在解码后仍需 schema 校验，远程输入不能直接写入本地数据库。
         const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bs58.decode(encoded.trim()))
         const payload = sourceSubscriptionSchema.parse(JSON.parse(decoded))
-        // 点播源、直播源与当前订阅必须作为一次完整切换提交，防止任一步失败后留下混合数据。
+        // VOD 源、IPTV 源与当前订阅必须作为一次完整切换提交，防止任一步失败后留下混合数据。
         return context.db.$client.transaction(() => {
           const result = {
             vod: source.syncSubscription(payload.vod),
-            live: liveSource.syncSubscription(payload.live),
-            updatedAt: payload.updatedAt,
+            iptv: iptvSource.syncSubscription(payload.iptv),
+            updatedAt: Date.now(),
           }
           settings.update({ activeSubscriptionId: subscriptionId })
           return result
@@ -93,7 +94,7 @@ export function registerSourcesIpc(context: ApplicationContext): void {
     if (!current.subscriptions.some((item) => item.id === subscriptionId)) throw new Error('订阅源不存在')
     if (current.activeSubscriptionId === subscriptionId) {
       context.repositories.source.clearSubscription()
-      context.repositories.liveSource.clearSubscription()
+      context.repositories.iptvSource.clearSubscription()
     }
     const subscriptions = current.subscriptions.filter((item) => item.id !== subscriptionId)
     settings.update({

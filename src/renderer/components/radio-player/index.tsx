@@ -13,10 +13,10 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { RadioChannel } from '@shared/types'
-import { resolveImageUrl } from '@shared/utils/media-image'
 import {
   enterMiniWindowMode,
-  getMediaProxyBaseUrl,
+  getRadioPlaybackUrl,
+  getSourceImageUrl,
   getRadioChannelDetail,
   getRadioLivePrograms,
   isApiAvailable,
@@ -85,7 +85,6 @@ export function RadioStreamEngine({
   const channelRef = useRef(channel)
   const commandRef = useRef(command)
   const callbacksRef = useRef({ onError, onStatusChange })
-  const [proxyBaseUrl, setProxyBaseUrl] = useState('')
 
   useEffect(() => {
     channelRef.current = channel
@@ -102,20 +101,6 @@ export function RadioStreamEngine({
     statusRef.current = 'error'
     callbacksRef.current.onError(message)
   }
-
-  useEffect(() => {
-    let active = true
-    void getMediaProxyBaseUrl()
-      .then((baseUrl) => {
-        if (active) setProxyBaseUrl(baseUrl)
-      })
-      .catch(() => {
-        if (active) reportError('本地音频代理未就绪，请重试。')
-      })
-    return () => {
-      active = false
-    }
-  }, [])
 
   useEffect(() => {
     const audio = audioRef.current
@@ -174,11 +159,6 @@ export function RadioStreamEngine({
       return
     }
     if (!currentChannel || !['play', 'retry'].includes(currentCommand)) return
-    if (!proxyBaseUrl) {
-      reportError('本地音频代理未就绪，请重试。')
-      return
-    }
-
     const resumeLoadedChannel =
       currentCommand === 'play' && loadedChannelIdRef.current === currentChannel.id && Boolean(audio.currentSrc)
     if (resumeLoadedChannel) {
@@ -188,25 +168,34 @@ export function RadioStreamEngine({
 
     teardownPlayback(audio, hlsRef)
     loadedChannelIdRef.current = currentChannel.id
-    const playbackUrl = createMediaProxyUrl(proxyBaseUrl, createRadioStreamUrl(currentChannel.id))
     reportStatus('loading')
-
-    if (Hls.isSupported()) {
-      const hls = new Hls({ enableWorker: true, lowLatencyMode: true })
-      hlsRef.current = hls
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        void audio.play().catch(() => reportError('无法开始播放，请重试。'))
+    let active = true
+    void getRadioPlaybackUrl(currentChannel.id)
+      .then((playbackUrl) => {
+        if (!active) return
+        if (Hls.isSupported()) {
+          const hls = new Hls({ enableWorker: true, lowLatencyMode: true })
+          hlsRef.current = hls
+          hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            void audio.play().catch(() => reportError('无法开始播放，请重试。'))
+          })
+          hls.on(Hls.Events.ERROR, (_event, data) => {
+            if (data.fatal) reportError('播放失败，请重试。')
+          })
+          hls.loadSource(playbackUrl)
+          hls.attachMedia(audio)
+        } else {
+          audio.src = playbackUrl
+          void audio.play().catch(() => reportError('无法开始播放，请重试。'))
+        }
       })
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (data.fatal) reportError('播放失败，请重试。')
+      .catch(() => {
+        if (active) reportError('本地音频代理未就绪，请重试。')
       })
-      hls.loadSource(playbackUrl)
-      hls.attachMedia(audio)
-    } else {
-      audio.src = playbackUrl
-      void audio.play().catch(() => reportError('无法开始播放，请重试。'))
+    return () => {
+      active = false
     }
-  }, [commandId, proxyBaseUrl])
+  }, [commandId])
 
   useEffect(() => {
     const audio = audioRef.current
@@ -567,15 +556,21 @@ export function RadioStationCover({
   channel: RadioChannel
   className: string
 }): React.JSX.Element {
-  if (channel.coverUrl) {
-    return (
-      <img
-        alt=""
-        className={cn('bg-muted object-cover', className)}
-        draggable={false}
-        src={resolveImageUrl(channel.coverUrl)}
-      />
-    )
+  const [resolvedCover, setResolvedCover] = useState<{ key: string; url?: string }>()
+  const coverUrl = resolvedCover && resolvedCover.key === channel.coverUrl ? resolvedCover.url : undefined
+  useEffect(() => {
+    let active = true
+    if (channel.coverUrl) {
+      void getSourceImageUrl(undefined, channel.coverUrl, undefined, 'radio').then((url) => {
+        if (active) setResolvedCover({ key: channel.coverUrl ?? '', url })
+      })
+    }
+    return () => {
+      active = false
+    }
+  }, [channel.coverUrl])
+  if (coverUrl) {
+    return <img alt="" className={cn('bg-muted object-cover', className)} draggable={false} src={coverUrl} />
   }
   return (
     <span
@@ -615,17 +610,6 @@ function teardownPlayback(audio: HTMLAudioElement, hlsRef: React.MutableRefObjec
   hlsRef.current = null
   audio.removeAttribute('src')
   audio.load()
-}
-
-function createRadioStreamUrl(channelId: number): string {
-  return `https://ls.qingting.fm/live/${channelId}/64k.m3u8`
-}
-
-function createMediaProxyUrl(proxyBaseUrl: string, sourceUrl: string): string {
-  const proxyUrl = new URL('/media', proxyBaseUrl)
-  proxyUrl.searchParams.set('url', sourceUrl)
-  proxyUrl.searchParams.set('referer', `${new URL(sourceUrl).origin}/`)
-  return proxyUrl.toString()
 }
 
 function formatAudience(value: number | undefined): string | undefined {

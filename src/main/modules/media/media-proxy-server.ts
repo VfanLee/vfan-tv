@@ -1,15 +1,137 @@
-import axios, { type AxiosResponseHeaders, type RawAxiosResponseHeaders } from 'axios'
+import { randomUUID } from 'crypto'
+import { net } from 'electron'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'http'
 import { Readable } from 'stream'
+import { pipeline } from 'stream/promises'
+import type {
+  IptvStreamRequestHeaders,
+  MediaPlaybackEvent,
+  MediaPlaybackSessionInfo,
+  MediaStreamType,
+} from '@shared/types'
+import type { ContentNetworkContext, ContentNetworkService } from '../../infrastructure/network/content-network.service'
+import {
+  filterSensitiveRequestHeaders,
+  resolveSourceRequestHeaders,
+} from '../../infrastructure/http/source-request-headers'
 
 const PLAYLIST_CONTENT_TYPES = ['application/vnd.apple.mpegurl', 'application/x-mpegurl', 'audio/mpegurl']
-const RADIO_API_ORIGINS = new Set(['https://rapi.qtfm.cn', 'https://rapi.qingting.fm', 'https://search.qingting.fm'])
-
-// 本地回环代理：转发受信任的电台 API，并补齐请求头、重写 HLS 子资源，避免 renderer 直接跨域请求第三方资源。
+const DOUBAN_IMAGE_REFERER = 'https://movie.douban.com/explore'
+const MAX_PROXY_IMAGE_BYTES = 20 * 1024 * 1024
+// 本地回环代理：补齐请求头并重写 HLS 子资源，避免 renderer 直接跨域请求第三方资源。
 export class MediaProxyServer {
   private server?: Server
   private baseUrl?: string
   private startPromise?: Promise<string>
+  private readonly bindings = new Map<string, ProxyBinding>()
+  private readonly mediaSessions = new Map<string, MediaSession>()
+  private readonly cleanupTimer: NodeJS.Timeout
+
+  constructor(private readonly network: ContentNetworkService) {
+    this.cleanupTimer = setInterval(() => this.pruneBindings(), 30 * 60 * 1_000)
+    this.cleanupTimer.unref()
+  }
+
+  clearSessions(): void {
+    for (const sessionId of [...this.mediaSessions.keys()]) this.destroyMediaSession(sessionId)
+    for (const [token, binding] of this.bindings) {
+      if (!binding.mediaSessionId) this.network.releaseContext(binding.context)
+      this.bindings.delete(token)
+    }
+  }
+
+  async createMediaSession(
+    targetUrl: string,
+    requestHeaders: IptvStreamRequestHeaders,
+    context: ContentNetworkContext,
+    streamType: MediaStreamType,
+    requestId: string,
+  ): Promise<{ src: string; mediaSessionId: string }> {
+    const parsedTargetUrl = new URL(targetUrl)
+    if (!['http:', 'https:'].includes(parsedTargetUrl.protocol)) throw new Error('仅支持 HTTP 或 HTTPS 播放地址')
+    const mediaSessionId = randomUUID()
+    this.network.retainContext(context)
+    const mediaSession: MediaSession = {
+      id: mediaSessionId,
+      requestId,
+      originalUrl: parsedTargetUrl.toString(),
+      headerOriginUrl: parsedTargetUrl.toString(),
+      headers: sanitizeMediaHeaders(requestHeaders.headers),
+      context,
+      streamType,
+      createdAt: Date.now(),
+      expiresAt: Date.now() + 12 * 60 * 60 * 1_000,
+      references: 1,
+      validated: false,
+      tokens: new Set(),
+    }
+    this.mediaSessions.set(mediaSessionId, mediaSession)
+    const token = this.registerSessionBinding(mediaSession, parsedTargetUrl.toString(), 'media')
+    return { src: await this.createTokenUrl('media', token), mediaSessionId }
+  }
+
+  async createMediaUrl(
+    targetUrl: string,
+    requestHeaders: IptvStreamRequestHeaders,
+    context: ContentNetworkContext,
+  ): Promise<string> {
+    const token = this.registerStandaloneBinding(targetUrl, requestHeaders.headers, context, 'media')
+    return this.createTokenUrl('media', token)
+  }
+
+  async createImageUrl(
+    targetUrl: string,
+    headers: Record<string, string>,
+    context: ContentNetworkContext,
+  ): Promise<string> {
+    const token = this.registerStandaloneBinding(targetUrl, headers, context, 'image')
+    return this.createTokenUrl('image', token)
+  }
+
+  async createAssociatedAudioUrl(mediaSessionId: string, targetUrl: string): Promise<string> {
+    const session = this.requireMediaSession(mediaSessionId)
+    const token = this.registerSessionBinding(session, targetUrl, 'media')
+    return this.createTokenUrl('media', token)
+  }
+
+  getPlaybackSessionInfo(mediaSessionId: string): MediaPlaybackSessionInfo {
+    const value = this.requireMediaSession(mediaSessionId)
+    return {
+      mediaSessionId,
+      originalUrl: value.originalUrl,
+      finalUrl: value.finalUrl,
+      streamType: value.streamType,
+      network: this.network.getRouteDescription(value.context.route),
+      createdAt: value.createdAt,
+    }
+  }
+
+  retainPlaybackSession(mediaSessionId: string): void {
+    const value = this.requireMediaSession(mediaSessionId)
+    value.references += 1
+    value.expiresAt = Date.now() + 12 * 60 * 60 * 1_000
+  }
+
+  releasePlaybackSession(mediaSessionId: string): void {
+    const value = this.mediaSessions.get(mediaSessionId)
+    if (!value) return
+    value.references = Math.max(0, value.references - 1)
+    if (value.references === 0) this.destroyMediaSession(mediaSessionId)
+  }
+
+  reportPlaybackEvent(event: MediaPlaybackEvent): void {
+    const value = this.requireMediaSession(event.mediaSessionId)
+    const fields = [
+      `[媒体播放] ${getPlaybackEventLabel(event.type)}`,
+      `requestId=${value.requestId}`,
+      `mediaSessionId=${value.id}`,
+      `网络=${this.network.getRouteDescription(value.context.route)}`,
+      event.elapsedMs !== undefined ? `耗时=${Math.max(0, Math.round(event.elapsedMs))}ms` : undefined,
+      event.success !== undefined ? `结果=${event.success ? '成功' : '失败'}` : undefined,
+      event.message ? `原因=${sanitizeLogMessage(event.message)}` : undefined,
+    ].filter(Boolean)
+    console.info(fields.join(' | '))
+  }
 
   getBaseUrl(): Promise<string> {
     if (this.baseUrl) {
@@ -22,17 +144,6 @@ export class MediaProxyServer {
     }
 
     return this.startPromise
-  }
-
-  async createRadioApiUrl(targetUrl: string): Promise<string> {
-    const parsedTargetUrl = new URL(targetUrl)
-    if (!RADIO_API_ORIGINS.has(parsedTargetUrl.origin)) {
-      throw new Error('不支持代理该电台服务地址')
-    }
-
-    const proxyUrl = new URL('/radio-api', await this.getBaseUrl())
-    proxyUrl.searchParams.set('url', parsedTargetUrl.toString())
-    return proxyUrl.toString()
   }
 
   private start(): Promise<string> {
@@ -56,6 +167,7 @@ export class MediaProxyServer {
   }
 
   private async handleRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {
+    const startedAt = Date.now()
     if (request.method === 'OPTIONS') {
       writeCorsHeaders(response)
       response.writeHead(204)
@@ -64,60 +176,62 @@ export class MediaProxyServer {
     }
 
     const requestUrl = new URL(request.url ?? '/', 'http://127.0.0.1')
-    // 仅暴露固定路径，代理本身不能成为任意本地 HTTP 服务。
-    if (!['/media', '/image', '/resolve', '/radio-api'].includes(requestUrl.pathname)) {
+    const routeMatch = requestUrl.pathname.match(/^\/(media|image|resolve)\/([0-9a-f-]{36})$/i)
+    if (!routeMatch) {
       response.writeHead(404)
       response.end('Not found')
       return
     }
-
-    const targetUrl = requestUrl.searchParams.get('url')
-    if (!targetUrl) {
-      response.writeHead(400)
-      response.end('Missing media url')
-      return
-    }
+    const route = routeMatch[1].toLowerCase() as ProxyBinding['kind']
+    const token = routeMatch[2]
+    let binding: ProxyBinding | undefined
 
     try {
-      const parsedTargetUrl = new URL(targetUrl)
-      if (!['http:', 'https:'].includes(parsedTargetUrl.protocol)) {
-        response.writeHead(400)
-        response.end('Only http/https media resources are supported')
+      binding = this.getBinding(token, route)
+
+      if (route === 'resolve') {
+        this.network.retainContext(binding.context)
+        try {
+          await resolveMediaUrl(
+            response,
+            binding.targetUrl,
+            binding.headers,
+            this.network,
+            binding.context,
+            (finalUrl) => this.updateFinalUrl(binding!, finalUrl),
+          )
+        } finally {
+          this.network.releaseContext(binding.context)
+        }
         return
       }
 
-      if (requestUrl.pathname === '/radio-api') {
-        if (!RADIO_API_ORIGINS.has(parsedTargetUrl.origin)) {
-          writeCorsHeaders(response)
-          response.writeHead(403)
-          response.end('Unsupported radio API origin')
+      this.network.retainContext(binding.context)
+      try {
+        if (route === 'image' && binding.context.route === 'douban' && isDoubanImageUrl(binding.targetUrl)) {
+          await proxyDoubanImageRequest(response, binding, (result) =>
+            this.recordProxyResult(binding!, result, Date.now() - startedAt),
+          )
           return
         }
-
-        await proxyRadioApiRequest(response, parsedTargetUrl.toString())
-        return
-      }
-
-      if (requestUrl.pathname === '/resolve') {
-        await resolveMediaUrl(
+        await proxyMediaRequest(
+          request,
           response,
-          parsedTargetUrl.toString(),
-          requestUrl.searchParams.get('referer') ?? `${parsedTargetUrl.origin}/`,
-          requestUrl.searchParams.get('user-agent') ?? undefined,
+          binding.targetUrl,
+          binding,
+          this.network,
+          (targetUrl) => this.createChildMediaUrl(binding!, targetUrl),
+          (finalUrl) => this.updateFinalUrl(binding!, finalUrl),
+          (result) => this.recordProxyResult(binding!, result, Date.now() - startedAt),
         )
-        return
+      } finally {
+        this.network.releaseContext(binding.context)
       }
-
-      await proxyMediaRequest(
-        request,
-        response,
-        parsedTargetUrl.toString(),
-        this.baseUrl ?? '',
-        requestUrl.searchParams.get('referer') ?? `${parsedTargetUrl.origin}/`,
-        requestUrl.searchParams.get('user-agent') ?? undefined,
-      )
     } catch (error) {
-      console.error('Local proxy request failed:', targetUrl, error)
+      if (isExpectedProxyCancellation(error, response)) return
+      console.warn(
+        `[本地媒体代理] 请求失败 | requestId=${this.getRequestId(binding)} | mediaSessionId=${binding?.mediaSessionId ?? '—'} | 类型=${getProxyRequestKind(route)} | 目标=${getSafeTargetHost(binding?.targetUrl)} | 原因=${getSafeProxyErrorMessage(error)}`,
+      )
       if (!response.headersSent) {
         writeCorsHeaders(response)
         response.writeHead(502)
@@ -125,28 +239,232 @@ export class MediaProxyServer {
       response.end('Failed to fetch media resource')
     }
   }
+
+  private registerStandaloneBinding(
+    targetUrl: string,
+    headers: Record<string, string>,
+    context: ContentNetworkContext,
+    kind: ProxyBinding['kind'],
+  ): string {
+    const parsed = parseTargetUrl(targetUrl)
+    const token = randomUUID()
+    this.network.retainContext(context)
+    this.bindings.set(token, {
+      token,
+      requestId: randomUUID(),
+      kind,
+      targetUrl: parsed,
+      headerOriginUrl: parsed,
+      headers: sanitizeMediaHeaders(headers),
+      context,
+      expiresAt: Date.now() + 12 * 60 * 60 * 1_000,
+    })
+    this.pruneBindings()
+    return token
+  }
+
+  private registerSessionBinding(session: MediaSession, targetUrl: string, kind: ProxyBinding['kind']): string {
+    const token = randomUUID()
+    this.bindings.set(token, {
+      token,
+      requestId: session.requestId,
+      kind,
+      targetUrl: parseTargetUrl(targetUrl),
+      headerOriginUrl: session.headerOriginUrl,
+      headers: session.headers,
+      context: session.context,
+      mediaSessionId: session.id,
+      expiresAt: session.expiresAt,
+    })
+    session.tokens.add(token)
+    return token
+  }
+
+  private getBinding(token: string, kind: ProxyBinding['kind']): ProxyBinding {
+    const value = this.bindings.get(token)
+    if (!value || value.kind !== kind || value.expiresAt <= Date.now()) {
+      this.removeBinding(token)
+      throw new Error('媒体请求令牌已失效')
+    }
+    value.expiresAt = Date.now() + 12 * 60 * 60 * 1_000
+    const mediaSession = value.mediaSessionId ? this.mediaSessions.get(value.mediaSessionId) : undefined
+    if (value.mediaSessionId && !mediaSession) throw new Error('媒体播放会话已失效')
+    if (mediaSession) mediaSession.expiresAt = value.expiresAt
+    return value
+  }
+
+  private requireMediaSession(mediaSessionId: string): MediaSession {
+    const value = this.mediaSessions.get(mediaSessionId)
+    if (!value || value.expiresAt <= Date.now()) {
+      this.destroyMediaSession(mediaSessionId)
+      throw new Error('媒体播放会话已失效')
+    }
+    return value
+  }
+
+  private async createTokenUrl(kind: ProxyBinding['kind'], token: string): Promise<string> {
+    return new URL(`/${kind}/${token}`, await this.getBaseUrl()).toString()
+  }
+
+  private createChildMediaUrl(binding: ProxyBinding, targetUrl: string): string {
+    const token = binding.mediaSessionId
+      ? this.registerSessionBinding(this.requireMediaSession(binding.mediaSessionId), targetUrl, 'media')
+      : this.registerStandaloneBinding(targetUrl, binding.headers, binding.context, 'media')
+    return new URL(`/media/${token}`, this.baseUrl).toString()
+  }
+
+  private updateFinalUrl(binding: ProxyBinding, finalUrl: string): void {
+    if (!binding.mediaSessionId) return
+    const session = this.mediaSessions.get(binding.mediaSessionId)
+    if (session && binding.targetUrl === session.originalUrl) session.finalUrl = finalUrl
+  }
+
+  private recordProxyResult(binding: ProxyBinding, result: ProxyRequestResult, elapsedMs: number): void {
+    const session = binding.mediaSessionId ? this.mediaSessions.get(binding.mediaSessionId) : undefined
+    const fields = [
+      `requestId=${binding.requestId}`,
+      `mediaSessionId=${binding.mediaSessionId ?? '—'}`,
+      `网络=${this.network.getRouteDescription(binding.context.route)}`,
+      `状态码=${result.status}`,
+      `Content-Type=${sanitizeContentType(result.contentType)}`,
+      `目标=${getSafeTargetHost(result.finalUrl)}`,
+      `耗时=${elapsedMs}ms`,
+    ]
+    if (result.status >= 400) {
+      console.warn(`[媒体请求] 失败 | ${fields.join(' | ')}`)
+      return
+    }
+    if (binding.kind === 'image') return
+    if (session && !session.validated) {
+      session.validated = true
+      console.info(`[媒体请求] 首次验证成功 | ${fields.join(' | ')}`)
+      return
+    }
+    if (result.isPlaylist) console.info(`[媒体清单] 加载成功 | ${fields.join(' | ')}`)
+  }
+
+  private getRequestId(binding?: ProxyBinding): string {
+    return binding?.requestId ?? 'unknown'
+  }
+
+  private pruneBindings(): void {
+    const now = Date.now()
+    for (const [sessionId, value] of this.mediaSessions) {
+      if (value.expiresAt <= now) this.destroyMediaSession(sessionId)
+    }
+    for (const [token, value] of this.bindings) {
+      if (value.expiresAt <= now || this.bindings.size > 768) this.removeBinding(token)
+    }
+  }
+
+  private removeBinding(token: string): void {
+    const value = this.bindings.get(token)
+    if (!value) return
+    this.bindings.delete(token)
+    if (value.mediaSessionId) {
+      this.mediaSessions.get(value.mediaSessionId)?.tokens.delete(token)
+    } else {
+      this.network.releaseContext(value.context)
+    }
+  }
+
+  private destroyMediaSession(mediaSessionId: string): void {
+    const value = this.mediaSessions.get(mediaSessionId)
+    if (!value) return
+    this.mediaSessions.delete(mediaSessionId)
+    for (const token of value.tokens) this.bindings.delete(token)
+    this.network.releaseContext(value.context)
+  }
 }
 
-async function proxyRadioApiRequest(response: ServerResponse, targetUrl: string): Promise<void> {
-  const upstream = await axios.get<unknown>(targetUrl, {
-    headers: {
-      'Accept': 'application/json, text/plain, */*',
-      'User-Agent':
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36',
-    },
-    proxy: false,
-    responseType: 'text',
-    timeout: 12_000,
-    transformResponse: [(value) => value],
-    validateStatus: () => true,
-  })
-  const contentType = getResponseHeader(upstream.headers, 'content-type') ?? 'application/json; charset=utf-8'
-  writeCorsHeaders(response)
-  response.writeHead(upstream.status, {
-    'Content-Type': contentType,
-    'Cache-Control': 'no-store',
-  })
-  response.end(upstream.data)
+interface ProxyBinding {
+  token: string
+  requestId: string
+  kind: 'media' | 'image' | 'resolve'
+  targetUrl: string
+  headerOriginUrl: string
+  headers: Record<string, string>
+  context: ContentNetworkContext
+  mediaSessionId?: string
+  expiresAt: number
+}
+
+function parseTargetUrl(targetUrl: string): string {
+  const parsed = new URL(targetUrl)
+  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('仅支持 HTTP 或 HTTPS 媒体地址')
+  return parsed.toString()
+}
+
+function getPlaybackEventLabel(type: MediaPlaybackEvent['type']): string {
+  if (type === 'first-frame') return '首帧成功'
+  if (type === 'player-error') return '播放器错误'
+  if (type === 'manual-route-switch') return '手动换线'
+  return '自动换线'
+}
+
+function sanitizeLogMessage(value: string): string {
+  return value
+    .replace(/https?:\/\/[^\s)]+/gi, '[已脱敏地址]')
+    .replace(/[\r\n\t]+/g, ' ')
+    .trim()
+    .slice(0, 180)
+}
+
+interface MediaSession {
+  id: string
+  requestId: string
+  originalUrl: string
+  finalUrl?: string
+  headerOriginUrl: string
+  headers: Record<string, string>
+  context: ContentNetworkContext
+  streamType: MediaStreamType
+  createdAt: number
+  expiresAt: number
+  references: number
+  validated: boolean
+  tokens: Set<string>
+}
+
+interface ProxyRequestResult {
+  status: number
+  contentType: string
+  finalUrl: string
+  isPlaylist: boolean
+}
+
+function sanitizeContentType(value: string): string {
+  return value.split(';', 1)[0].trim().slice(0, 80) || '未提供'
+}
+
+function getSafeProxyErrorMessage(error: unknown): string {
+  if (error instanceof DOMException && error.name === 'AbortError') return '请求已取消'
+  const message = error instanceof Error ? error.message.toLowerCase() : ''
+  if (message.includes('invalid referrer') || message.includes('invalid referer')) return 'Referer 无效'
+  if (message.includes('timeout') || message.includes('timed out')) return '连接超时'
+  if (message.includes('enotfound') || message.includes('name_not_resolved')) return '域名解析失败'
+  if (message.includes('econnrefused') || message.includes('connection_refused')) return '连接被拒绝'
+  if (message.includes('certificate') || message.includes('cert_')) return '证书校验失败'
+  return '无法连接上游资源'
+}
+
+function isExpectedProxyCancellation(error: unknown, response: ServerResponse): boolean {
+  return response.destroyed && error instanceof DOMException && error.name === 'AbortError'
+}
+
+function getProxyRequestKind(pathname: string): string {
+  if (pathname === 'image') return '图片'
+  if (pathname === 'resolve') return '地址解析'
+  return '视频'
+}
+
+function getSafeTargetHost(targetUrl?: string): string {
+  if (!targetUrl) return 'unknown-target'
+  try {
+    return new URL(targetUrl).host
+  } catch {
+    return 'invalid-target'
+  }
 }
 
 /**
@@ -156,10 +474,13 @@ async function proxyRadioApiRequest(response: ServerResponse, targetUrl: string)
 async function resolveMediaUrl(
   response: ServerResponse,
   targetUrl: string,
-  referer: string | undefined,
-  userAgent: string | undefined,
+  configuredHeaders: Record<string, string>,
+  network: ContentNetworkService,
+  context: ContentNetworkContext,
+  onResolved: (url: string) => void,
 ): Promise<void> {
-  const resolvedUrl = await followRedirectsOnly(targetUrl, referer, userAgent)
+  const resolvedUrl = await followRedirectsOnly(targetUrl, configuredHeaders, network, context)
+  onResolved(resolvedUrl)
   const body = JSON.stringify({ url: resolvedUrl })
   writeCorsHeaders(response)
   response.writeHead(200, {
@@ -172,37 +493,30 @@ async function resolveMediaUrl(
 
 async function followRedirectsOnly(
   targetUrl: string,
-  referer: string | undefined,
-  userAgent: string | undefined,
+  configuredHeaders: Record<string, string>,
+  network: ContentNetworkService,
+  context: ContentNetworkContext,
   maxRedirects = 5,
 ): Promise<string> {
   let currentUrl = targetUrl
 
   for (let redirectCount = 0; redirectCount <= maxRedirects; redirectCount += 1) {
-    const upstream = await axios.get<Readable>(currentUrl, {
-      headers: {
-        'User-Agent':
-          userAgent ||
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36',
-        'Accept': '*/*',
-        'Accept-Encoding': 'identity',
-        ...(referer ? { Referer: referer } : {}),
+    const upstream = await network.fetch(
+      currentUrl,
+      {
+        headers: getResolveRequestHeaders(filterSensitiveRequestHeaders(targetUrl, currentUrl, configuredHeaders)),
+        redirect: 'manual',
+        signal: AbortSignal.timeout(12_000),
       },
-      maxRedirects: 0,
-      proxy: false,
-      responseType: 'stream',
-      timeout: 12_000,
-      validateStatus: () => true,
-    })
+      context,
+    )
 
     // 拿到响应头后立刻断开，绝不消费直播推流正文。
-    upstream.data.destroy()
+    await upstream.body?.cancel().catch(() => undefined)
 
     if (upstream.status >= 300 && upstream.status < 400) {
-      const location = getResponseHeader(upstream.headers, 'location')
-      if (!location) {
-        return getResponseUrl(upstream.request) ?? currentUrl
-      }
+      const location = upstream.headers.get('location')
+      if (!location) return upstream.url || currentUrl
       currentUrl = new URL(location, currentUrl).toString()
       // 跳转目标已是媒体地址时直接返回，避免再请求一次推流。
       if (/\.(?:m3u8|flv|ts|m2ts)(?:$|[?#])/i.test(currentUrl)) {
@@ -211,47 +525,65 @@ async function followRedirectsOnly(
       continue
     }
 
-    return getResponseUrl(upstream.request) ?? currentUrl
+    return upstream.url || currentUrl
   }
 
   return currentUrl
+}
+
+function getResolveRequestHeaders(configuredHeaders: Record<string, string>): Record<string, string> {
+  const sanitizedHeaders = sanitizeMediaHeaders(configuredHeaders)
+  const headers: Record<string, string> = {
+    ...sanitizedHeaders,
+    'Accept': '*/*',
+    'Accept-Encoding': 'identity',
+  }
+  return headers
 }
 
 async function proxyMediaRequest(
   request: IncomingMessage,
   response: ServerResponse,
   targetUrl: string,
-  baseUrl: string,
-  referer: string | undefined,
-  userAgent: string | undefined,
+  binding: ProxyBinding,
+  network: ContentNetworkService,
+  createChildUrl: (targetUrl: string) => string,
+  onResolved: (url: string) => void,
+  onResult: (result: ProxyRequestResult) => void,
 ): Promise<void> {
   const abortController = new AbortController()
   response.once('close', () => abortController.abort())
 
-  const upstream = await axios.get<Readable>(targetUrl, {
-    headers: getRequestHeaders(request, referer, userAgent, targetUrl),
-    proxy: false,
-    responseType: 'stream',
-    signal: abortController.signal,
-    // 直播推流是长连接，不能设整请求超时，否则约 30s 会被 axios 主动掐断，表现为「自动暂停」。
-    timeout: 0,
-    decompress: false,
-    validateStatus: () => true,
-  })
+  const upstream = await network.fetchWithRedirects(
+    targetUrl,
+    {
+      headers: getRequestHeaders(
+        request,
+        targetUrl,
+        resolveSourceRequestHeaders(binding.headerOriginUrl, targetUrl, binding.headers),
+      ),
+      redirect: 'follow',
+      signal: abortController.signal,
+    },
+    binding.context,
+    binding.headerOriginUrl,
+  )
 
-  const contentType = getResponseHeader(upstream.headers, 'content-type') ?? ''
+  const contentType = upstream.headers.get('content-type') ?? ''
   const status = normalizeStatus(upstream.status)
-  const responseUrl = getResponseUrl(upstream.request) ?? targetUrl
+  const responseUrl = upstream.url || targetUrl
+  onResolved(responseUrl)
   const isLiveMedia = isLiveMediaUrl(responseUrl, contentType)
+  const playlist = isPlaylist(responseUrl, contentType)
+  onResult({ status, contentType, finalUrl: responseUrl, isPlaylist: playlist })
 
-  if (isPlaylist(responseUrl, contentType)) {
-    const body = await readStream(upstream.data)
-    const rewrittenPlaylist = rewritePlaylist(body.toString('utf-8'), responseUrl, baseUrl, referer, userAgent)
+  if (playlist) {
+    const body = Buffer.from(await upstream.arrayBuffer())
+    const rewrittenPlaylist = rewritePlaylist(body.toString('utf-8'), responseUrl, createChildUrl)
     const headers = createResponseHeaders(
       contentType || 'application/vnd.apple.mpegurl',
       Buffer.byteLength(rewrittenPlaylist, 'utf-8'),
       undefined,
-      responseUrl,
     )
 
     writeHeaders(response, status, headers)
@@ -267,22 +599,116 @@ async function proxyMediaRequest(
       contentType || inferContentType(responseUrl),
       isLiveMedia ? 0 : getContentLength(upstream.headers),
       isLiveMedia ? undefined : upstream.headers,
-      responseUrl,
     ),
   )
-  upstream.data.pipe(response)
+  if (!upstream.body) {
+    response.end()
+    return
+  }
+  try {
+    await pipeline(Readable.fromWeb(upstream.body as Parameters<typeof Readable.fromWeb>[0]), response)
+  } catch (error) {
+    // Players routinely close probes, old HLS segments and replaced live
+    // connections. Once the downstream is gone, cancellation is expected and
+    // must not surface as an uncaught stream error in the Electron main process.
+    if (abortController.signal.aborted || response.destroyed) return
+    throw error
+  }
+}
+
+async function proxyDoubanImageRequest(
+  response: ServerResponse,
+  binding: ProxyBinding,
+  onResult: (result: ProxyRequestResult) => void,
+): Promise<void> {
+  const result = await new Promise<{
+    body: Buffer
+    contentType: string
+    status: number
+  }>((resolve, reject) => {
+    let settled = false
+    const request = net.request({
+      method: 'GET',
+      url: binding.targetUrl,
+      session: binding.context.session,
+      redirect: 'follow',
+      headers: {
+        ...sanitizeMediaHeaders(binding.headers),
+        Referer: DOUBAN_IMAGE_REFERER,
+      },
+      origin: new URL(DOUBAN_IMAGE_REFERER).origin,
+      referrerPolicy: 'unsafe-url',
+    })
+    const timeoutId = setTimeout(() => {
+      request.abort()
+      finish(() => reject(new Error('豆瓣海报请求超时')))
+    }, 12_000)
+    const finish = (callback: () => void): void => {
+      if (settled) return
+      settled = true
+      clearTimeout(timeoutId)
+      callback()
+    }
+
+    request.on('response', (upstream) => {
+      const chunks: Buffer[] = []
+      let size = 0
+      upstream.on('data', (chunk) => {
+        size += chunk.byteLength
+        if (size > MAX_PROXY_IMAGE_BYTES) {
+          request.abort()
+          finish(() => reject(new Error('豆瓣海报超过大小限制')))
+          return
+        }
+        chunks.push(chunk)
+      })
+      upstream.on('error', (error) => finish(() => reject(error)))
+      upstream.on('end', () => {
+        finish(() =>
+          resolve({
+            body: Buffer.concat(chunks),
+            contentType: getElectronResponseHeader(upstream.headers, 'content-type') ?? 'image/jpeg',
+            status: normalizeStatus(upstream.statusCode),
+          }),
+        )
+      })
+    })
+    request.on('error', (error) => finish(() => reject(error)))
+    request.end()
+  })
+
+  onResult({
+    status: result.status,
+    contentType: result.contentType,
+    finalUrl: binding.targetUrl,
+    isPlaylist: false,
+  })
+  writeHeaders(response, result.status, createResponseHeaders(result.contentType, result.body.byteLength))
+  response.end(result.body)
+}
+
+function getElectronResponseHeader(headers: Record<string, string | string[]>, name: string): string | undefined {
+  const value = headers[name.toLowerCase()]
+  return Array.isArray(value) ? value[0] : value
+}
+
+function isDoubanImageUrl(value: string): boolean {
+  try {
+    const hostname = new URL(value).hostname.toLowerCase()
+    return hostname === 'doubanio.com' || hostname.endsWith('.doubanio.com')
+  } catch {
+    return false
+  }
 }
 
 function getRequestHeaders(
   request: IncomingMessage,
-  referer: string | undefined,
-  userAgent: string | undefined,
-  targetUrl?: string,
+  targetUrl: string,
+  configuredHeaders: Record<string, string> = {},
 ): Record<string, string> {
+  const sanitizedHeaders = sanitizeMediaHeaders(configuredHeaders)
   const headers: Record<string, string> = {
-    'User-Agent':
-      userAgent ||
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36',
+    ...sanitizedHeaders,
     'Accept': '*/*',
     // 禁止压缩，避免 FLV/TS 二进制流被错误处理。
     'Accept-Encoding': 'identity',
@@ -290,12 +716,8 @@ function getRequestHeaders(
 
   const range = request.headers.range
   // 直播 FLV/TS 不应转发 Range，否则 CDN 可能只返回一小段就结束。
-  if (range && !isLiveMediaUrl(targetUrl ?? '', '')) {
+  if (range && !isLiveMediaUrl(targetUrl, '')) {
     headers.Range = range
-  }
-
-  if (referer) {
-    headers.Referer = referer
   }
 
   return headers
@@ -315,27 +737,22 @@ function isLiveMediaUrl(url: string, contentType: string): boolean {
 function createResponseHeaders(
   contentType: string,
   contentLength: number,
-  upstreamHeaders?: RawAxiosResponseHeaders | AxiosResponseHeaders,
-  resolvedUrl?: string,
+  upstreamHeaders?: Headers,
 ): Record<string, string> {
   const headers: Record<string, string> = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Range, Content-Type',
-    'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges, X-Vfan-Resolved-Url',
+    'Access-Control-Expose-Headers': 'Content-Length, Content-Range, Accept-Ranges',
     'Cache-Control': 'no-cache',
     'Content-Type': contentType,
-  }
-
-  if (resolvedUrl) {
-    headers['X-Vfan-Resolved-Url'] = encodeURIComponent(resolvedUrl)
   }
 
   if (contentLength > 0) {
     headers['Content-Length'] = String(contentLength)
   }
 
-  const acceptRanges = upstreamHeaders ? getResponseHeader(upstreamHeaders, 'accept-ranges') : undefined
-  const contentRange = upstreamHeaders ? getResponseHeader(upstreamHeaders, 'content-range') : undefined
+  const acceptRanges = upstreamHeaders?.get('accept-ranges') ?? undefined
+  const contentRange = upstreamHeaders?.get('content-range') ?? undefined
 
   if (acceptRanges) {
     headers['Accept-Ranges'] = acceptRanges
@@ -351,10 +768,7 @@ function createResponseHeaders(
 function writeCorsHeaders(response: ServerResponse): void {
   response.setHeader('Access-Control-Allow-Origin', '*')
   response.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type')
-  response.setHeader(
-    'Access-Control-Expose-Headers',
-    'Content-Length, Content-Range, Accept-Ranges, X-Vfan-Resolved-Url',
-  )
+  response.setHeader('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges')
 }
 
 function writeHeaders(response: ServerResponse, status: number, headers: Record<string, string>): void {
@@ -365,31 +779,10 @@ function normalizeStatus(status: number): number {
   return status >= 200 && status <= 599 ? status : 502
 }
 
-function getResponseHeader(headers: RawAxiosResponseHeaders | AxiosResponseHeaders, name: string): string | undefined {
-  const value = headers[name] ?? headers[name.toLowerCase()]
-
-  if (value === undefined) {
-    return undefined
-  }
-
-  return Array.isArray(value) ? value.join(', ') : String(value)
-}
-
-function getContentLength(headers: RawAxiosResponseHeaders | AxiosResponseHeaders): number {
-  const value = getResponseHeader(headers, 'content-length')
+function getContentLength(headers: Headers): number {
+  const value = headers.get('content-length')
   const length = value ? Number(value) : 0
   return Number.isFinite(length) && length > 0 ? length : 0
-}
-
-function getResponseUrl(request: unknown): string | undefined {
-  if (!request || typeof request !== 'object') {
-    return undefined
-  }
-
-  const maybeRequest = request as { res?: { responseUrl?: unknown }; responseURL?: unknown }
-  const responseUrl = maybeRequest.res?.responseUrl ?? maybeRequest.responseURL
-
-  return typeof responseUrl === 'string' && responseUrl ? responseUrl : undefined
 }
 
 function isPlaylist(url: string, contentType: string): boolean {
@@ -419,23 +812,7 @@ function inferContentType(url: string): string {
   return 'video/mp2t'
 }
 
-async function readStream(stream: Readable): Promise<Buffer> {
-  const chunks: Buffer[] = []
-
-  for await (const chunk of stream) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
-  }
-
-  return Buffer.concat(chunks)
-}
-
-function rewritePlaylist(
-  playlist: string,
-  playlistUrl: string,
-  baseUrl: string,
-  referer: string | undefined,
-  userAgent: string | undefined,
-): string {
+function rewritePlaylist(playlist: string, playlistUrl: string, createChildUrl: (targetUrl: string) => string): string {
   return playlist
     .split('\n')
     .map((line) => {
@@ -446,10 +823,10 @@ function rewritePlaylist(
       }
 
       if (trimmedLine.startsWith('#')) {
-        return rewritePlaylistTagUri(line, playlistUrl, baseUrl, referer, userAgent)
+        return rewritePlaylistTagUri(line, playlistUrl, createChildUrl)
       }
 
-      return createProxyUrl(baseUrl, new URL(trimmedLine, playlistUrl).toString(), referer, userAgent)
+      return createChildUrl(new URL(trimmedLine, playlistUrl).toString())
     })
     .join('\n')
 }
@@ -457,28 +834,21 @@ function rewritePlaylist(
 function rewritePlaylistTagUri(
   line: string,
   playlistUrl: string,
-  baseUrl: string,
-  referer: string | undefined,
-  userAgent: string | undefined,
+  createChildUrl: (targetUrl: string) => string,
 ): string {
   return line.replace(/URI="([^"]+)"/g, (_match, rawUri: string) => {
-    return `URI="${createProxyUrl(baseUrl, new URL(rawUri, playlistUrl).toString(), referer, userAgent)}"`
+    return `URI="${createChildUrl(new URL(rawUri, playlistUrl).toString())}"`
   })
 }
 
-function createProxyUrl(
-  baseUrl: string,
-  targetUrl: string,
-  referer: string | undefined,
-  userAgent: string | undefined,
-): string {
-  const proxyUrl = new URL('/media', baseUrl)
-  proxyUrl.searchParams.set('url', targetUrl)
-  if (referer) {
-    proxyUrl.searchParams.set('referer', referer)
+const BLOCKED_MEDIA_HEADERS = new Set(['host', 'content-length', 'connection', 'transfer-encoding', 'range'])
+
+function sanitizeMediaHeaders(headers: Record<string, string>): Record<string, string> {
+  const result: Record<string, string> = {}
+  for (const [name, value] of Object.entries(headers)) {
+    const normalized = name.trim().toLowerCase()
+    if (!normalized || BLOCKED_MEDIA_HEADERS.has(normalized) || !value) continue
+    result[name.trim()] = value
   }
-  if (userAgent) {
-    proxyUrl.searchParams.set('user-agent', userAgent)
-  }
-  return proxyUrl.toString()
+  return result
 }

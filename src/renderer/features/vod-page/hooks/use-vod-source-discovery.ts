@@ -152,7 +152,7 @@ export function useVodSourceDiscovery({
     }))
     // 探测会触发真实媒体请求，限制并发以降低对源站和本地代理的压力。
     void runWithConcurrency(targets, 4, async ({ item, url }) => {
-      const result = url ? await probeMediaSource({ url, referer: item.sourceUrl }) : undefined
+      const result = url ? await probeMediaSource({ url, sourceId: item.sourceId }) : undefined
       if (!active) return
       setSourceProbeStates((states) => ({
         ...states,

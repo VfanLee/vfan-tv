@@ -79,6 +79,7 @@ export function GroupedResults({
             baseUrl={group.posterSourceUrl}
             className="aspect-[2/3] rounded-xl"
             poster={group.poster}
+            sourceId={group.posterSourceId}
             title={group.title}
           />
           <div className="min-w-0">
@@ -167,6 +168,7 @@ function SourceResultButton({ item, onClick }: { item: VodSearchResult; onClick:
         baseUrl={item.sourceUrl}
         className="aspect-[2/3] rounded-xl"
         poster={item.poster}
+        sourceId={item.sourceId}
         title={item.title}
       />
       <div className="min-w-0 py-1">

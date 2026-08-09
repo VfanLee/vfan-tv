@@ -1,4 +1,4 @@
-import type { FavoriteInput, PlayLine, RecentPlayInput, VodSearchResult } from '@shared/types'
+import type { FavoriteInput, MediaPlaybackCandidate, PlayLine, RecentPlayInput, VodSearchResult } from '@shared/types'
 import { parseVodPlayUrl } from '@shared/utils/vod-play-url'
 import type { EpisodeSelection, PlayerLocationState } from './types'
 
@@ -13,6 +13,24 @@ export function getPlayLines(item: VodSearchResult | undefined): PlayLine[] {
 export function getDefaultSelection(lines: PlayLine[]): Pick<EpisodeSelection, 'lineIndex' | 'episodeIndex'> {
   const lineIndex = 0
   return { lineIndex, episodeIndex: lines[lineIndex] ? getPreferredEpisodeIndex(lines[lineIndex]) : 0 }
+}
+
+export function getEpisodePlaybackCandidates(
+  lines: PlayLine[],
+  selection: Pick<EpisodeSelection, 'lineIndex' | 'episodeIndex'>,
+): MediaPlaybackCandidate[] {
+  const selectedEpisode = lines[selection.lineIndex]?.episodes[selection.episodeIndex]
+  if (!selectedEpisode) return []
+  const selectedName = normalizeEpisodeName(selectedEpisode.name)
+  const seenUrls = new Set<string>()
+
+  return lines.flatMap((line, lineIndex) => {
+    const matchingEpisode = line.episodes.find((episode) => normalizeEpisodeName(episode.name) === selectedName)
+    const episode = matchingEpisode ?? line.episodes[selection.episodeIndex]
+    if (!episode || seenUrls.has(episode.url)) return []
+    seenUrls.add(episode.url)
+    return [{ id: String(lineIndex), name: line.name, url: episode.url }]
+  })
 }
 
 export function getSelectionByEpisodeUrl(
@@ -184,8 +202,20 @@ function getPreferredEpisodeIndex(line: PlayLine): number {
   return index > -1 ? index : 0
 }
 
+function normalizeEpisodeName(value: string): string {
+  return value
+    .trim()
+    .replace(/\s+/g, '')
+    .replace(/第0*(\d+)集/gi, (_match, episodeNumber: string) => `第${Number(episodeNumber)}集`)
+    .toLocaleLowerCase()
+}
+
 function isPlayableUrl(url: string): boolean {
-  return /^https?:\/\//.test(url) && /\.m3u8(?:[?#]|$)/i.test(url)
+  try {
+    return ['http:', 'https:'].includes(new URL(url).protocol)
+  } catch {
+    return false
+  }
 }
 
 function createRecordId(...parts: string[]): string {

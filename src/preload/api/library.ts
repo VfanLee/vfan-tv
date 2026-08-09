@@ -29,6 +29,7 @@ export function createLibraryApi(): Pick<AppApi, 'home' | 'recent' | 'favorites'
       getLivePrograms: (channelIds) => ipcRenderer.invoke(IPC_CHANNELS.radio.getLivePrograms, channelIds),
       getRegions: () => ipcRenderer.invoke(IPC_CHANNELS.radio.getRegions),
       getBillboard: (categoryId, regionId) => ipcRenderer.invoke(IPC_CHANNELS.radio.getBillboard, categoryId, regionId),
+      getPlaybackUrl: (channelId) => ipcRenderer.invoke(IPC_CHANNELS.radio.getPlaybackUrl, channelId),
     },
   }
 }
