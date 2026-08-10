@@ -234,7 +234,7 @@ export function VodPage(): React.JSX.Element {
       className={cn(
         isTheaterMode
           ? 'fixed inset-0 z-50 flex flex-col bg-black'
-          : 'text-foreground min-h-screen overflow-y-auto bg-transparent px-5 py-6 sm:px-8 sm:py-8',
+          : 'text-foreground min-h-full overflow-y-auto bg-transparent px-5 py-6 sm:px-8 sm:py-8',
       )}
     >
       {isTheaterMode ? (
@@ -265,7 +265,7 @@ export function VodPage(): React.JSX.Element {
         </div>
       ) : (
         <>
-          <section className="h-[calc(100vh-3rem)] sm:h-[calc(100vh-4rem)]">
+          <section className="h-[calc(100vh-76px-3rem)] sm:h-[calc(100vh-76px-4rem)]">
             <div className="flex h-full flex-col gap-6">
               <header className="flex h-10 shrink-0 items-center justify-between gap-6">
                 <button

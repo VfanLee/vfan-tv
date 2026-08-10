@@ -7,7 +7,13 @@ import { toast } from 'sonner'
 import { IPTV_SELECTED_SOURCE_STORAGE_KEY, IPTV_WALL_STATE_STORAGE_KEY } from '@shared/constants'
 import type { IptvChannelPrograms, IptvPlaylist, IptvSourceConfig } from '@shared/types'
 import { EmptyState } from '@renderer/components'
-import { getIptvCatalog, getIptvPrograms, listIptvSources } from '@renderer/platform/api'
+import {
+  getIptvCatalog,
+  getIptvPrograms,
+  listIptvSources,
+  onAppDataChange,
+  openSettingsWindow,
+} from '@renderer/platform/api'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/ui/select'
@@ -20,6 +26,7 @@ export function IptvPage(): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null)
   const [sources, setSources] = useState<IptvSourceConfig[]>([])
   const [sourceId, setSourceId] = useState(() => readWallState().sourceId)
+  const [sourceConfigRevision, setSourceConfigRevision] = useState(0)
   const [playlist, setPlaylist] = useState<IptvPlaylist>()
   const [keyword, setKeyword] = useState(() => readWallState().keyword)
   const deferredKeyword = useDeferredValue(keyword.trim().toLowerCase())
@@ -66,15 +73,30 @@ export function IptvPage(): React.JSX.Element {
 
   useEffect(() => {
     let active = true
-    void listIptvSources().then((items) => {
-      if (!active) return
-      const available = items.filter((item) => !item.disabled)
-      setSources(available)
-      setSourceId((current) => (available.some((item) => item.id === current) ? current : (available[0]?.id ?? '')))
-      setIsLoading(false)
+    const refreshSources = (invalidateCatalog = false): void => {
+      void listIptvSources()
+        .then((items) => {
+          if (!active) return
+          const available = items.filter((item) => !item.disabled)
+          setSources(available)
+          setSourceId((current) => (available.some((item) => item.id === current) ? current : (available[0]?.id ?? '')))
+          setPrograms({})
+          if (invalidateCatalog) setSourceConfigRevision((revision) => revision + 1)
+        })
+        .catch((error: unknown) => {
+          if (active) toast.error('IPTV 源读取失败', { description: toErrorMessage(error) })
+        })
+        .finally(() => {
+          if (active) setIsLoading(false)
+        })
+    }
+    refreshSources()
+    const unsubscribe = onAppDataChange((domain) => {
+      if (domain === 'iptv-sources' || domain === 'app-data') refreshSources(true)
     })
     return () => {
       active = false
+      unsubscribe()
     }
   }, [])
 
@@ -98,7 +120,7 @@ export function IptvPage(): React.JSX.Element {
     return () => {
       active = false
     }
-  }, [sourceId])
+  }, [sourceConfigRevision, sourceId])
 
   useEffect(() => {
     const element = scrollRef.current
@@ -174,7 +196,7 @@ export function IptvPage(): React.JSX.Element {
   }
 
   return (
-    <div className="flex h-screen min-h-0 flex-col overflow-hidden">
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
       <header className="border-border bg-background/88 z-20 shrink-0 border-b px-5 py-4 backdrop-blur-xl sm:px-8">
         <div className="flex flex-wrap items-center gap-3">
           <div className="mr-auto min-w-44">
@@ -299,7 +321,7 @@ export function IptvPage(): React.JSX.Element {
                   ? {
                       icon: Settings2,
                       label: '添加 IPTV 源',
-                      onClick: () => navigate('/settings', { state: { section: 'iptv' } }),
+                      onClick: () => void openSettingsWindow('iptv'),
                     }
                   : undefined
               }

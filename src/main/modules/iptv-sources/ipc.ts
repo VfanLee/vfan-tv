@@ -1,35 +1,54 @@
-import { dialog, ipcMain, type BrowserWindow } from 'electron'
+import { BrowserWindow, dialog, ipcMain, type WebContents } from 'electron'
 import { randomUUID } from 'crypto'
 import { readFile, writeFile } from 'fs/promises'
 import { DEFAULT_IPTV_SOURCES_EXPORT_NAME } from '@shared/constants'
 import { IPC_CHANNELS } from '@shared/ipc'
 import type { AppApi } from '@shared/types'
 import type { ApplicationContext } from '../../app/composition-root'
+import { broadcastAppDataChange } from '../../ipc/broadcast'
 
 // IPTV 源的文件读写与播放列表读取均留在 main 进程执行。
 export function registerIptvSourcesIpc(context: ApplicationContext): void {
   const { iptvSource, iptvCatalog, iptvEpg, iptvPlayback, mediaPlaybackTarget } = context.services
   ipcMain.handle(IPC_CHANNELS.iptvSources.list, () => iptvSource.list())
-  ipcMain.handle(IPC_CHANNELS.iptvSources.create, (_event, input: Parameters<AppApi['iptvSources']['create']>[0]) =>
-    iptvSource.create(input),
-  )
+  ipcMain.handle(IPC_CHANNELS.iptvSources.create, (_event, input: Parameters<AppApi['iptvSources']['create']>[0]) => {
+    const result = iptvSource.create(input)
+    broadcastAppDataChange('iptv-sources')
+    return result
+  })
   ipcMain.handle(
     IPC_CHANNELS.iptvSources.update,
-    (_event, id: string, input: Parameters<AppApi['iptvSources']['update']>[1]) => iptvSource.update(id, input),
+    (_event, id: string, input: Parameters<AppApi['iptvSources']['update']>[1]) => {
+      const result = iptvSource.update(id, input)
+      broadcastAppDataChange('iptv-sources')
+      return result
+    },
   )
-  ipcMain.handle(IPC_CHANNELS.iptvSources.reorder, (_event, ids: Parameters<AppApi['iptvSources']['reorder']>[0]) =>
-    iptvSource.reorder(ids),
-  )
-  ipcMain.handle(IPC_CHANNELS.iptvSources.delete, (_event, id: string) => iptvSource.delete(id))
-  ipcMain.handle(IPC_CHANNELS.iptvSources.clear, () => iptvSource.clear())
+  ipcMain.handle(IPC_CHANNELS.iptvSources.reorder, (_event, ids: Parameters<AppApi['iptvSources']['reorder']>[0]) => {
+    const result = iptvSource.reorder(ids)
+    broadcastAppDataChange('iptv-sources')
+    return result
+  })
+  ipcMain.handle(IPC_CHANNELS.iptvSources.delete, (_event, id: string) => {
+    const result = iptvSource.delete(id)
+    broadcastAppDataChange('iptv-sources')
+    return result
+  })
+  ipcMain.handle(IPC_CHANNELS.iptvSources.clear, () => {
+    const result = iptvSource.clear()
+    broadcastAppDataChange('iptv-sources')
+    return result
+  })
   ipcMain.handle(IPC_CHANNELS.iptvSources.previewImport, (_event, payload: unknown) =>
     iptvSource.previewImport(payload),
   )
-  ipcMain.handle(IPC_CHANNELS.iptvSources.confirmImport, (_event, payload: unknown) =>
-    iptvSource.confirmImport(payload),
-  )
-  ipcMain.handle(IPC_CHANNELS.iptvSources.importFromFile, async () => {
-    const window = requireWindow(context)
+  ipcMain.handle(IPC_CHANNELS.iptvSources.confirmImport, (_event, payload: unknown) => {
+    const result = iptvSource.confirmImport(payload)
+    broadcastAppDataChange('iptv-sources')
+    return result
+  })
+  ipcMain.handle(IPC_CHANNELS.iptvSources.importFromFile, async (event) => {
+    const window = requireWindow(event.sender)
     const result = await dialog.showOpenDialog(window, {
       title: '导入 IPTV 源 JSON',
       properties: ['openFile'],
@@ -38,10 +57,12 @@ export function registerIptvSourcesIpc(context: ApplicationContext): void {
     if (result.canceled || !result.filePaths[0])
       return { cancelled: true, created: [], overwritten: [], skipped: [], invalid: [] }
     const filePath = result.filePaths[0]
-    return { ...iptvSource.confirmImport(JSON.parse(await readFile(filePath, 'utf8'))), filePath, cancelled: false }
+    const imported = iptvSource.confirmImport(JSON.parse(await readFile(filePath, 'utf8')))
+    broadcastAppDataChange('iptv-sources')
+    return { ...imported, filePath, cancelled: false }
   })
-  ipcMain.handle(IPC_CHANNELS.iptvSources.exportToFile, async () => {
-    const window = requireWindow(context)
+  ipcMain.handle(IPC_CHANNELS.iptvSources.exportToFile, async (event) => {
+    const window = requireWindow(event.sender)
     const items = iptvSource.exportItems()
     const result = await dialog.showSaveDialog(window, {
       title: '导出 IPTV 源 JSON',
@@ -140,8 +161,8 @@ function sanitizeLogValue(value: string): string {
     .slice(0, 160)
 }
 
-function requireWindow(context: ApplicationContext): BrowserWindow {
-  const window = context.getMainWindow()
-  if (!window) throw new Error('Main window is not available')
+function requireWindow(sender: WebContents): BrowserWindow {
+  const window = BrowserWindow.fromWebContents(sender)
+  if (!window) throw new Error('The requesting window is not available')
   return window
 }

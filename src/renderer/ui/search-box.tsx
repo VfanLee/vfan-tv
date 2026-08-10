@@ -1,9 +1,12 @@
 import { Search, X } from 'lucide-react'
+import type { Ref } from 'react'
 import { cn } from '@/utils'
 
 export function SearchBox({
   ariaLabel,
+  autoFocus = false,
   className,
+  inputRef,
   onChange,
   onClear,
   onSubmit,
@@ -12,7 +15,9 @@ export function SearchBox({
   value,
 }: {
   ariaLabel: string
+  autoFocus?: boolean
   className?: string
+  inputRef?: Ref<HTMLInputElement>
   onChange: (value: string) => void
   onClear?: () => void
   onSubmit: () => void
@@ -35,8 +40,10 @@ export function SearchBox({
       <Search className="text-muted-foreground size-5 shrink-0" />
       <input
         aria-label={ariaLabel}
+        autoFocus={autoFocus}
         className="text-foreground placeholder:text-muted-foreground h-full min-w-0 flex-1 bg-transparent text-sm font-medium outline-none"
         placeholder={placeholder}
+        ref={inputRef}
         value={value}
         onChange={(event) => onChange(event.target.value)}
       />

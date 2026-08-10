@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { RecentPlayItem } from '@shared/types'
-import { listRecentPlays, removeRecentPlay } from '@renderer/platform/api'
+import { listRecentPlays, onAppDataChange, removeRecentPlay } from '@renderer/platform/api'
 
 interface UseRecentPlaysOptions {
   limit?: number
@@ -16,21 +16,23 @@ export function useRecentPlays({ limit }: UseRecentPlaysOptions = {}): {
 
   useEffect(() => {
     let active = true
-
-    void listRecentPlays(limit)
-      .then((items) => {
-        if (active) {
-          setRecentPlays(items)
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setIsLoading(false)
-        }
-      })
+    const refresh = (): void => {
+      void listRecentPlays(limit)
+        .then((items) => {
+          if (active) setRecentPlays(items)
+        })
+        .finally(() => {
+          if (active) setIsLoading(false)
+        })
+    }
+    refresh()
+    const unsubscribe = onAppDataChange((domain) => {
+      if (domain === 'app-data') refresh()
+    })
 
     return () => {
       active = false
+      unsubscribe()
     }
   }, [limit])
 

@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { VOD_CATALOG_SELECTED_SOURCE_STORAGE_KEY } from '@shared/constants'
 import type { VodCatalogCategory, VodSearchResult, VodSourceConfig } from '@shared/types'
 import { EmptyState, MediaPoster, PosterCardSkeleton, VodSourceBackupSwitcher } from '@renderer/components'
-import { getVodDetail } from '@renderer/platform/api'
+import { getVodDetail, openSettingsWindow } from '@renderer/platform/api'
 import {
   Button,
   Pagination,
@@ -118,7 +118,12 @@ export function CatalogHomePage(): React.JSX.Element {
   }
 
   if (!sourcesState.isLoading && sourcesState.sources.length === 0) {
-    return <NoSourceState errorMessage={sourcesState.errorMessage} onOpenSettings={() => navigate('/settings')} />
+    return (
+      <NoSourceState
+        errorMessage={sourcesState.errorMessage}
+        onOpenSettings={() => void openSettingsWindow('vod-sources')}
+      />
+    )
   }
 
   return (

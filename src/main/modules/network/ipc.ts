@@ -3,6 +3,7 @@ import { IPC_CHANNELS } from '@shared/ipc'
 import { networkSettingsSchema } from '@shared/schemas'
 import type { AppApi } from '@shared/types'
 import type { ApplicationContext } from '../../app/composition-root'
+import { broadcastAppDataChange } from '../../ipc/broadcast'
 
 export function registerNetworkIpc(context: ApplicationContext): void {
   const { network, settings } = context.services
@@ -13,6 +14,8 @@ export function registerNetworkIpc(context: ApplicationContext): void {
   ipcMain.handle(IPC_CHANNELS.network.save, async (_event, input: Parameters<AppApi['network']['save']>[0]) => {
     const parsed = networkSettingsSchema.parse(input)
     await network.applySettings(parsed)
-    return settings.update({ network: parsed }).network
+    const updated = settings.update({ network: parsed }).network
+    broadcastAppDataChange('settings')
+    return updated
   })
 }

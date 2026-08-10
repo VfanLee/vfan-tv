@@ -1,10 +1,9 @@
-import { createHashRouter, Navigate, RouterProvider } from 'react-router'
+import { createHashRouter, Navigate, RouterProvider, useParams, useSearchParams } from 'react-router'
 import { AppLayout, AppRouteErrorPage } from '@renderer/components'
 import {
   CatalogHomePage,
   HomePage,
   FavoritesPage,
-  HotPage,
   LinkPlayerPage,
   IptvPage,
   IptvPlayerPage,
@@ -19,27 +18,27 @@ import { useLayoutPreferencesStore } from '@/stores'
 
 const router = createHashRouter([
   { path: 'mini-window', element: <MiniWindowPage /> },
+  { path: 'settings', element: <SettingsWindowRoute /> },
   {
     path: '/',
     element: <AppLayout />,
     errorElement: <AppRouteErrorPage />,
     children: [
       { index: true, element: <StyleHomePage /> },
-      { path: 'hot', element: <Navigate replace to="/hot/movie" /> },
-      { path: 'hot/:category', element: <HotPage />, handle: { showGlobalSearch: true } },
+      { path: 'hot', element: <LegacyHotRedirect /> },
+      { path: 'hot/:category', element: <LegacyHotRedirect /> },
 
-      { path: 'recent', element: <RecentPage />, handle: { hideTopBar: true } },
-      { path: 'favorites', element: <FavoritesPage />, handle: { hideTopBar: true } },
+      { path: 'recent', element: <RecentPage /> },
+      { path: 'favorites', element: <FavoritesPage /> },
 
-      { path: 'settings', element: <SettingsPage />, handle: { hideTopBar: true } },
-      { path: 'about', element: <Navigate replace to="/settings" state={{ section: 'about' }} /> },
+      { path: 'about', element: <Navigate replace to="/" /> },
 
-      { path: 'search', element: <SearchPage />, handle: { showGlobalSearch: true } },
-      { path: 'iptv', element: <IptvPage />, handle: { hideTopBar: true } },
-      { path: 'iptv/:sourceId/:channelId', element: <IptvPlayerPage />, handle: { hideTopBar: true } },
-      { path: 'radio', element: <RadioPage />, handle: { hideTopBar: true } },
-      { path: 'link-player', element: <LinkPlayerPage />, handle: { hideTopBar: true } },
-      { path: 'vod/:sourceId/:vodId', element: <VodPage />, handle: { hideTopBar: true } },
+      { path: 'search', element: <SearchPage /> },
+      { path: 'iptv', element: <IptvPage /> },
+      { path: 'iptv/:sourceId/:channelId', element: <IptvPlayerPage /> },
+      { path: 'radio', element: <RadioPage /> },
+      { path: 'link-player', element: <LinkPlayerPage /> },
+      { path: 'vod/:sourceId/:vodId', element: <VodPage /> },
     ],
   },
 ])
@@ -51,4 +50,22 @@ export function AppRouter(): React.JSX.Element {
 function StyleHomePage(): React.JSX.Element {
   const appStyle = useLayoutPreferencesStore((state) => state.appStyle)
   return appStyle === 'catalog' ? <CatalogHomePage /> : <HomePage />
+}
+
+function SettingsWindowRoute(): React.JSX.Element {
+  return (
+    <main className="bg-background text-foreground h-screen overflow-y-auto">
+      <SettingsPage />
+    </main>
+  )
+}
+
+function LegacyHotRedirect(): React.JSX.Element {
+  const { category = 'movie' } = useParams()
+  const [searchParams] = useSearchParams()
+  const next = new URLSearchParams()
+  next.set('doubanCategory', category)
+  const type = searchParams.get('type')
+  if (type) next.set('doubanType', type)
+  return <Navigate replace to={`/?${next.toString()}`} />
 }

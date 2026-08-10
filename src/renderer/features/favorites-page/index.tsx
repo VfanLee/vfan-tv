@@ -4,7 +4,7 @@ import { Heart, Loader2, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import type { FavoriteItem } from '@shared/types'
 import { ConfirmDialog, EmptyState, MediaPoster, PageHeader, PosterPlayOverlay } from '@renderer/components'
-import { listFavorites, removeFavorite } from '@renderer/platform/api'
+import { listFavorites, onAppDataChange, removeFavorite } from '@renderer/platform/api'
 import { favoriteToVodSearchResult } from '@renderer/platform/playback'
 import { useSearchContextStore } from '@/stores'
 
@@ -17,20 +17,23 @@ export function FavoritesPage(): React.JSX.Element {
 
   useEffect(() => {
     let active = true
-    void listFavorites()
-      .then((nextItems) => {
-        if (active) {
-          setItems(nextItems)
-        }
-      })
-      .finally(() => {
-        if (active) {
-          setIsLoading(false)
-        }
-      })
+    const refresh = (): void => {
+      void listFavorites()
+        .then((nextItems) => {
+          if (active) setItems(nextItems)
+        })
+        .finally(() => {
+          if (active) setIsLoading(false)
+        })
+    }
+    refresh()
+    const unsubscribe = onAppDataChange((domain) => {
+      if (domain === 'app-data') refresh()
+    })
 
     return () => {
       active = false
+      unsubscribe()
     }
   }, [])
 

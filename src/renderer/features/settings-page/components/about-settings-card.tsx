@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
-import { CircleUserRound, MessageCircle, SquareArrowOutUpRight } from 'lucide-react'
+import { CircleUserRound, Download, MessageCircle, Rocket, SquareArrowOutUpRight } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { FaGithub } from 'react-icons/fa'
 import { SettingsCard } from '@renderer/components'
 import logoMarkUrl from '@renderer/assets/logo-mark.svg'
 import { getCurrentVersion, isApiAvailable } from '@renderer/platform/api'
 import { Badge } from '@/ui/badge'
+import { Button } from '@/ui/button'
 import { cn, openExternalUrl } from '@/utils'
 import { useAppUpdateStore } from '@/stores'
 
@@ -16,8 +17,15 @@ const FEEDBACK_URL = `${REPOSITORY_URL}/issues/new`
 export function AboutSettingsCard(): React.JSX.Element {
   const apiAvailable = isApiAvailable()
   const [currentVersion, setCurrentVersion] = useState('')
-  const latestVersion = useAppUpdateStore((state) => state.result?.latestVersion)
-  const updateAvailable = useAppUpdateStore((state) => state.result?.updateAvailable === true)
+  const updateResult = useAppUpdateStore((state) => state.result)
+  const latestVersion = updateResult?.latestVersion
+  const updateAvailable = updateResult?.updateAvailable === true
+  const isDownloading = useAppUpdateStore((state) => state.isDownloading)
+  const isDownloaded = useAppUpdateStore((state) => state.isDownloaded)
+  const downloadProgress = useAppUpdateStore((state) => state.downloadProgress)
+  const download = useAppUpdateStore((state) => state.download)
+  const install = useAppUpdateStore((state) => state.install)
+  const openManualDownload = useAppUpdateStore((state) => state.openManualDownload)
 
   useEffect(() => {
     if (!apiAvailable) return
@@ -60,6 +68,32 @@ export function AboutSettingsCard(): React.JSX.Element {
             value={latestVersion ? (updateAvailable ? `v${latestVersion}（有更新）` : `v${latestVersion}`) : '检查中'}
           />
         </div>
+
+        {updateAvailable && updateResult ? (
+          <div className="border-primary/20 bg-primary/5 flex flex-wrap items-center justify-between gap-4 rounded-xl border p-4">
+            <div>
+              <p className="font-semibold">新版本 v{updateResult.latestVersion} 可用</p>
+              <p className="text-muted-foreground mt-1 text-sm">
+                {isDownloading
+                  ? `正在下载 ${Math.round(downloadProgress?.percent ?? 0)}%`
+                  : isDownloaded
+                    ? '更新已下载，重启应用即可完成安装。'
+                    : '可在这里下载并安装最新版本。'}
+              </p>
+            </div>
+            <Button
+              disabled={isDownloading}
+              onClick={() => {
+                if (isDownloaded) void install()
+                else if (updateResult.canAutoUpdate) void download()
+                else void openManualDownload('direct')
+              }}
+            >
+              {isDownloaded ? <Rocket /> : <Download />}
+              {isDownloaded ? '安装并重启' : updateResult.canAutoUpdate ? '下载更新' : '手动下载'}
+            </Button>
+          </div>
+        ) : null}
 
         <div className="grid gap-3 sm:grid-cols-2">
           <LinkCard href={AUTHOR_URL} icon={CircleUserRound} title="关于作者" />

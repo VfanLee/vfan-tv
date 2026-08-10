@@ -3,6 +3,7 @@ import { IPC_CHANNELS } from '@shared/ipc'
 import { appDataClearSelectionSchema } from '@shared/schemas'
 import type { AppApi } from '@shared/types'
 import type { ApplicationContext } from '../../app/composition-root'
+import { broadcastAppDataChange } from '../../ipc/broadcast'
 import { removeDeprecatedDatabaseFiles, resetAppDatabase } from '../../infrastructure/database/client'
 
 // 设置 IPC 只协调原生会话清理；具体设置校验与持久化由 SettingsService 负责。
@@ -15,6 +16,7 @@ export function registerSettingsIpc(context: ApplicationContext): void {
     if (input.iptvEpg && (previous.mode !== updated.iptvEpg.mode || previous.url !== updated.iptvEpg.url)) {
       context.repositories.iptvCache.clearEpg()
     }
+    broadcastAppDataChange('settings')
     return updated
   })
   ipcMain.handle(IPC_CHANNELS.settings.restoreFactorySettings, async () => {
@@ -29,6 +31,7 @@ export function registerSettingsIpc(context: ApplicationContext): void {
     await context.services.network.clearCache()
     context.services.mediaProxy.clearSessions()
     context.services.mediaPlaybackTarget.clearDetectionCache()
+    broadcastAppDataChange('app-data')
   })
   ipcMain.handle(
     IPC_CHANNELS.settings.clearAppData,
@@ -56,6 +59,7 @@ export function registerSettingsIpc(context: ApplicationContext): void {
         context.services.mediaProxy.clearSessions()
         context.services.mediaPlaybackTarget.clearDetectionCache()
       }
+      broadcastAppDataChange('app-data')
     },
   )
 }

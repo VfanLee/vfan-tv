@@ -7,6 +7,7 @@ import { registerIpcHandlers } from '../ipc/register-handlers'
 import { createApplicationContext, type ApplicationContext } from './composition-root'
 import { createMainWindow } from '../windows/main-window'
 import { showActiveMiniWindow } from '../windows/mini-window-mode'
+import { closeSettingsWindow, configureSettingsWindowManager } from '../windows/settings-window'
 import { APP_DISPLAY_NAME, APP_ID, USER_DATA_DIR_NAME } from '@shared/constants'
 import packageJson from '../../../package.json'
 
@@ -204,6 +205,7 @@ app.whenReady().then(async () => {
   electronApp.setAppUserModelId(APP_ID)
   createApplicationMenu()
   applicationContext = await createApplicationContext()
+  configureSettingsWindowManager({ icon, getMainWindow: applicationContext.getMainWindow })
   registerIpcHandlers(applicationContext)
 
   // Default open or close DevTools by F12 in development
@@ -242,6 +244,7 @@ function createWindow(): void {
     onCreated: (window) => {
       context.setMainWindow(window)
       window.once('closed', () => {
+        closeSettingsWindow()
         if (context.getMainWindow() === window) context.setMainWindow(null)
       })
     },

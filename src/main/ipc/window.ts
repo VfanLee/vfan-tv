@@ -1,6 +1,8 @@
 import { app, ipcMain } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc'
+import type { SettingsSectionId } from '@shared/types'
 import type { ApplicationContext } from '../app/composition-root'
+import { showSettingsWindow } from '../windows/settings-window'
 import {
   enterMiniWindowMode,
   exitMiniWindowMode,
@@ -14,6 +16,9 @@ import {
 } from '../windows/mini-window-mode'
 
 export function registerWindowIpc(context: ApplicationContext): void {
+  ipcMain.handle(IPC_CHANNELS.window.openSettings, (_event, section?: unknown) => {
+    showSettingsWindow(parseSettingsSection(section))
+  })
   ipcMain.handle(IPC_CHANNELS.window.isMaximized, () => context.getMainWindow()?.isMaximized() ?? false)
   ipcMain.handle(IPC_CHANNELS.window.enterMiniWindowMode, (_event, playback) => {
     const window = context.getMainWindow()
@@ -74,4 +79,20 @@ export function registerWindowIpc(context: ApplicationContext): void {
       app.exit(0)
     }, 100)
   })
+}
+
+const SETTINGS_SECTIONS = new Set<SettingsSectionId>([
+  'appearance',
+  'network',
+  'subscriptions',
+  'vod-sources',
+  'iptv',
+  'data-management',
+  'about',
+])
+
+function parseSettingsSection(value: unknown): SettingsSectionId | undefined {
+  return typeof value === 'string' && SETTINGS_SECTIONS.has(value as SettingsSectionId)
+    ? (value as SettingsSectionId)
+    : undefined
 }

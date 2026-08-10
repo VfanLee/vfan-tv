@@ -57,6 +57,11 @@ import type {
 } from './vod'
 import type { UpdateCheckResult, UpdateEvent } from './update'
 
+export type SettingsSectionId =
+  'appearance' | 'network' | 'subscriptions' | 'vod-sources' | 'iptv' | 'data-management' | 'about'
+
+export type AppDataChangeDomain = 'vod-sources' | 'iptv-sources' | 'settings' | 'app-data'
+
 export interface HomeData {
   recentPlays: RecentPlayItem[]
   recommendations: RecommendationItem[]
@@ -198,6 +203,9 @@ export interface AppApi {
     onUpdateEvent: (listener: (event: UpdateEvent) => void) => () => void
   }
   window: {
+    openSettingsWindow: (section?: SettingsSectionId) => Promise<void>
+    onSettingsSectionChange: (listener: (section: SettingsSectionId) => void) => () => void
+    onAppDataChange: (listener: (domain: AppDataChangeDomain) => void) => () => void
     isMaximized: () => Promise<boolean>
     toggleMaximize: () => Promise<boolean>
     quitApp: () => Promise<void>

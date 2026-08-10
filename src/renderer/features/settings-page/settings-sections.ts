@@ -1,5 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 import { DatabaseBackup, Info, MonitorPlay, Network, Palette, Rss, Video } from 'lucide-react'
+import type { SettingsSectionId } from '@shared/types'
 
 export const settingsSections = [
   { id: 'appearance', label: '外观', icon: Palette },
@@ -9,6 +10,6 @@ export const settingsSections = [
   { id: 'iptv', label: 'IPTV', icon: MonitorPlay },
   { id: 'data-management', label: '数据管理', icon: DatabaseBackup },
   { id: 'about', label: '关于', icon: Info },
-] as const satisfies ReadonlyArray<{ id: string; label: string; icon: LucideIcon }>
+] as const satisfies ReadonlyArray<{ id: SettingsSectionId; label: string; icon: LucideIcon }>
 
-export type SettingsSectionId = (typeof settingsSections)[number]['id']
+export type { SettingsSectionId } from '@shared/types'

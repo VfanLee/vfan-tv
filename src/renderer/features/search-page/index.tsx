@@ -1,8 +1,11 @@
+import { useEffect, useRef, useState } from 'react'
 import { Settings2, Video } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router'
 import type { VodSearchResult } from '@shared/types'
 import { EmptyState } from '@renderer/components'
 import { useSearchContextStore } from '@/stores'
+import { SearchBox } from '@/ui'
+import { openSettingsWindow } from '@renderer/platform/api'
 import { SearchHistory } from './components/search-history'
 import {
   GroupedResults,
@@ -16,10 +19,42 @@ import type { GroupedSearchResult } from './types'
 import { normalizeTitle } from './utils'
 
 export function SearchPage(): React.JSX.Element {
-  const navigate = useNavigate()
   const [searchParams] = useSearchParams()
+  const urlKeyword = searchParams.get('keyword')?.trim() ?? ''
+  return <SearchPageContent key={urlKeyword || '__empty__'} urlKeyword={urlKeyword} />
+}
+
+function SearchPageContent({ urlKeyword }: { urlKeyword: string }): React.JSX.Element {
+  const navigate = useNavigate()
   const setContext = useSearchContextStore((state) => state.setContext)
-  const search = useVodSearch(searchParams.get('keyword')?.trim() ?? '')
+  const [keyword, setKeyword] = useState(urlKeyword)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const search = useVodSearch(urlKeyword)
+
+  useEffect(() => {
+    const focusSearch = (): void => inputRef.current?.focus()
+    const frame = window.requestAnimationFrame(focusSearch)
+    window.addEventListener('vfan-tv:focus-search', focusSearch)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      window.removeEventListener('vfan-tv:focus-search', focusSearch)
+    }
+  }, [])
+
+  const submitSearch = (): void => {
+    const nextKeyword = keyword.trim()
+    if (!nextKeyword) {
+      inputRef.current?.focus()
+      return
+    }
+    navigate(`/search?keyword=${encodeURIComponent(nextKeyword)}`)
+  }
+
+  const clearSearch = (): void => {
+    setKeyword('')
+    navigate('/search')
+    window.requestAnimationFrame(() => inputRef.current?.focus())
+  }
 
   const openGroupedPlayer = (group: GroupedSearchResult): void => {
     const firstItem = group.items[0]
@@ -36,21 +71,27 @@ export function SearchPage(): React.JSX.Element {
     navigate(`/vod/${item.sourceId}/${item.vodId}`)
   }
 
-  if (search.isSourcesReady && !search.hasAvailableSources) {
-    return (
-      <EmptyState
-        action={{ icon: Settings2, label: '打开设置', onClick: () => navigate('/settings') }}
-        density="page"
-        description="请先在设置中添加点播源，或启用一个已有的点播源后再搜索。"
-        icon={Video}
-        title="还没有可用的点播源"
-      />
-    )
-  }
-
   return (
-    <div className="text-foreground min-h-full bg-transparent px-10 pb-10">
-      <div className="w-full pt-8">
+    <div className="text-foreground min-h-full bg-transparent px-5 pb-10 sm:px-8 lg:px-10">
+      <div className="mx-auto w-full max-w-[1800px] pt-8">
+        <section className="border-border bg-card/90 rounded-[24px] border p-5 shadow-sm backdrop-blur sm:p-6">
+          <div className="mb-4">
+            <h1 className="text-2xl font-bold tracking-tight">全局搜索</h1>
+            <p className="text-muted-foreground mt-1 text-sm">同时搜索所有已启用的点播源</p>
+          </div>
+          <SearchBox
+            ariaLabel="全局搜索"
+            autoFocus
+            inputRef={inputRef}
+            placeholder="输入影片名称"
+            submitLabel="搜索"
+            value={keyword}
+            onChange={setKeyword}
+            onClear={clearSearch}
+            onSubmit={submitSearch}
+          />
+        </section>
+
         <SearchHistory
           histories={search.histories}
           onClear={search.clearHistories}
@@ -58,40 +99,50 @@ export function SearchPage(): React.JSX.Element {
           onRemove={search.removeHistory}
         />
 
-        <section className="border-border mt-8 border-t pt-6">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
-            <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-              <h1 className="text-2xl font-semibold tracking-tight">搜索结果</h1>
-              <SearchStats stats={search.stats} />
+        {search.isSourcesReady && !search.hasAvailableSources ? (
+          <EmptyState
+            action={{ icon: Settings2, label: '打开设置', onClick: () => void openSettingsWindow('vod-sources') }}
+            density="page"
+            description="请先在设置中添加点播源，或启用一个已有的点播源后再搜索。"
+            icon={Video}
+            title="还没有可用的点播源"
+          />
+        ) : (
+          <section className="border-border mt-8 border-t pt-6">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-4">
+              <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+                <h1 className="text-2xl font-semibold tracking-tight">搜索结果</h1>
+                <SearchStats stats={search.stats} />
+              </div>
+              <div className="flex items-center gap-3">
+                {search.isSearching || search.searchId ? (
+                  <button
+                    className="border-primary bg-card text-primary hover:bg-accent focus-visible:ring-ring h-10 rounded-xl border px-4 text-sm font-semibold outline-none focus-visible:ring-2"
+                    type="button"
+                    onClick={() => void search.cancelSearch()}
+                  >
+                    停止搜索
+                  </button>
+                ) : null}
+                <ViewModeSwitch value={search.viewMode} onChange={search.changeViewMode} />
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-              {search.isSearching || search.searchId ? (
-                <button
-                  className="border-primary bg-card text-primary hover:bg-accent focus-visible:ring-ring h-10 rounded-xl border px-4 text-sm font-semibold outline-none focus-visible:ring-2"
-                  type="button"
-                  onClick={() => void search.cancelSearch()}
-                >
-                  停止搜索
-                </button>
-              ) : null}
-              <ViewModeSwitch value={search.viewMode} onChange={search.changeViewMode} />
-            </div>
-          </div>
 
-          {search.hasSearched ? (
-            search.viewMode === 'grouped' ? (
-              <GroupedResults
-                groups={search.groupedResults}
-                isSearching={search.isSearching}
-                onOpen={openGroupedPlayer}
-              />
+            {search.hasSearched ? (
+              search.viewMode === 'grouped' ? (
+                <GroupedResults
+                  groups={search.groupedResults}
+                  isSearching={search.isSearching}
+                  onOpen={openGroupedPlayer}
+                />
+              ) : (
+                <SourceResults sources={search.sourceList} onOpen={openSourcePlayer} />
+              )
             ) : (
-              <SourceResults sources={search.sourceList} onOpen={openSourcePlayer} />
-            )
-          ) : (
-            <SearchEmptyState />
-          )}
-        </section>
+              <SearchEmptyState />
+            )}
+          </section>
+        )}
       </div>
     </div>
   )

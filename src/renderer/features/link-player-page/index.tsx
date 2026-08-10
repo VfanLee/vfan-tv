@@ -50,7 +50,7 @@ export function LinkPlayerPage(): React.JSX.Element {
   }
 
   return (
-    <div className="text-foreground h-screen overflow-hidden bg-transparent px-5 py-6 sm:px-8 sm:py-8">
+    <div className="text-foreground h-full overflow-hidden bg-transparent px-5 py-6 sm:px-8 sm:py-8">
       <div className="flex h-full min-h-0 w-full flex-col gap-5">
         <PageHeader className="mb-0 shrink-0" title="直链播放" />
 

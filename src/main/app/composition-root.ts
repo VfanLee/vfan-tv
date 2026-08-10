@@ -27,6 +27,7 @@ import { SettingsRepository } from '../modules/settings/settings.repository'
 import { SettingsService } from '../modules/settings/settings.service'
 import { UpdateService } from '../modules/updates/update.service'
 import { configureRadioSessionHeaders, RadioService } from '../modules/radio/radio.service'
+import { broadcastUpdateEvent } from '../ipc/broadcast'
 
 // main 进程唯一的组合根：在此处集中装配依赖，领域模块不得自行创建全局实例。
 export interface ApplicationContext {
@@ -81,13 +82,12 @@ export async function createApplicationContext(): Promise<ApplicationContext> {
   configureRadioSessionHeaders(network.getContext('radio').session)
   const httpClient = new HttpClient(network, 'content')
   const radioHttpClient = new HttpClient(network, 'radio')
-  // IPC 事件只投递给当前主窗口，避免业务服务直接持有 BrowserWindow。
+  // 搜索事件只属于主窗口；更新事件广播给所有应用窗口，业务服务不直接持有 BrowserWindow。
   let mainWindow: BrowserWindow | null = null
   const getMainWindow = (): BrowserWindow | null => mainWindow
   const emitSearchEvent = (event: SearchEvent): void =>
     mainWindow?.webContents.send(IPC_CHANNELS.vod.searchEvent, event)
-  const emitUpdateEvent: ConstructorParameters<typeof UpdateService>[0] = (event) =>
-    mainWindow?.webContents.send(IPC_CHANNELS.updates.event, event)
+  const emitUpdateEvent: ConstructorParameters<typeof UpdateService>[0] = broadcastUpdateEvent
   const sourceService = new SourceService(source, httpClient)
   const douban = new DoubanService(network)
   const mediaProxy = new MediaProxyServer(network)

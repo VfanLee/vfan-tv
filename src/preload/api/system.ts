@@ -1,7 +1,7 @@
 import { ipcRenderer } from 'electron'
 import type { IpcRendererEvent } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc'
-import type { AppApi, MiniWindowPlaybackExit, UpdateEvent } from '@shared/types'
+import type { AppApi, AppDataChangeDomain, MiniWindowPlaybackExit, SettingsSectionId, UpdateEvent } from '@shared/types'
 
 // 系统能力按白名单暴露，不向 renderer 透传 ipcRenderer 或任意 channel 调用权。
 export function createSystemApi(): Pick<AppApi, 'settings' | 'network' | 'updates' | 'window' | 'shell'> {
@@ -24,9 +24,17 @@ export function createSystemApi(): Pick<AppApi, 'settings' | 'network' | 'update
       check: () => ipcRenderer.invoke(IPC_CHANNELS.updates.check),
       download: () => ipcRenderer.invoke(IPC_CHANNELS.updates.download),
       install: () => ipcRenderer.invoke(IPC_CHANNELS.updates.install),
-      onUpdateEvent: (listener) => subscribe(IPC_CHANNELS.updates.event, listener),
+      onUpdateEvent: (listener) => {
+        const unsubscribe = subscribe(IPC_CHANNELS.updates.event, listener)
+        ipcRenderer.send(IPC_CHANNELS.updates.requestSnapshot)
+        return unsubscribe
+      },
     },
     window: {
+      openSettingsWindow: (section) => ipcRenderer.invoke(IPC_CHANNELS.window.openSettings, section),
+      onSettingsSectionChange: (listener) =>
+        subscribe<SettingsSectionId>(IPC_CHANNELS.window.settingsSectionChanged, listener),
+      onAppDataChange: (listener) => subscribe<AppDataChangeDomain>(IPC_CHANNELS.window.appDataChanged, listener),
       isMaximized: () => ipcRenderer.invoke(IPC_CHANNELS.window.isMaximized),
       toggleMaximize: () => ipcRenderer.invoke(IPC_CHANNELS.window.toggleMaximize),
       quitApp: () => ipcRenderer.invoke(IPC_CHANNELS.window.quitApp),
@@ -49,7 +57,7 @@ export function createSystemApi(): Pick<AppApi, 'settings' | 'network' | 'update
   }
 }
 
-function subscribe<T extends UpdateEvent | MiniWindowPlaybackExit>(
+function subscribe<T extends UpdateEvent | MiniWindowPlaybackExit | SettingsSectionId | AppDataChangeDomain>(
   channel: string,
   listener: (event: T) => void,
 ): () => void {

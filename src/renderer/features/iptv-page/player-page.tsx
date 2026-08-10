@@ -266,7 +266,7 @@ export function IptvPlayerPage(): React.JSX.Element {
   ) : null
 
   return (
-    <div className="bg-background flex h-screen min-h-0 flex-col overflow-hidden">
+    <div className="bg-background flex h-full min-h-0 flex-col overflow-hidden">
       <header className="border-border bg-background/95 flex h-14 shrink-0 items-center gap-3 border-b px-3 backdrop-blur sm:px-5">
         <Button aria-label="返回" className="-ml-1 gap-2" variant="ghost" onClick={() => navigate('/iptv')}>
           <ArrowLeft className="size-4" />

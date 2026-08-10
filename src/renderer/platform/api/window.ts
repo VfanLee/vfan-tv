@@ -1,10 +1,27 @@
 import type {
+  AppDataChangeDomain,
   MiniWindowMoveInput,
   MiniWindowPlaybackContext,
   MiniWindowPlaybackExit,
   MiniWindowResizeInput,
+  SettingsSectionId,
 } from '@shared/types'
 import { getRuntimeApi } from './client'
+
+export async function openSettingsWindow(section?: SettingsSectionId): Promise<void> {
+  const api = getRuntimeApi()
+  if (api) await api.window.openSettingsWindow(section)
+}
+
+export function onSettingsSectionChange(listener: (section: SettingsSectionId) => void): () => void {
+  const api = getRuntimeApi()
+  return api ? api.window.onSettingsSectionChange(listener) : () => {}
+}
+
+export function onAppDataChange(listener: (domain: AppDataChangeDomain) => void): () => void {
+  const api = getRuntimeApi()
+  return api ? api.window.onAppDataChange(listener) : () => {}
+}
 
 export async function isWindowMaximized(): Promise<boolean> {
   const api = getRuntimeApi()

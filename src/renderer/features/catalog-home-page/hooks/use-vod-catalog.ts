@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { VodCatalogCategory, VodSearchResult, VodSourceConfig } from '@shared/types'
-import { getVodCatalogPage, listSources, switchSourceBackup } from '@renderer/platform/api'
+import { getVodCatalogPage, listSources, onAppDataChange, switchSourceBackup } from '@renderer/platform/api'
 import {
   pruneVodCategoryCache,
   readCachedVodCategories,
@@ -46,20 +46,28 @@ export function useEnabledVodSources(): {
 
   useEffect(() => {
     let active = true
-    void listSources()
-      .then((items) => {
-        if (!active) return
-        pruneVodCategoryCache(items)
-        setSources(items.filter((item) => !item.disabled))
-      })
-      .catch((error: unknown) => {
-        if (active) setErrorMessage(toErrorMessage(error))
-      })
-      .finally(() => {
-        if (active) setIsLoading(false)
-      })
+    const refresh = (): void => {
+      void listSources()
+        .then((items) => {
+          if (!active) return
+          pruneVodCategoryCache(items)
+          setSources(items.filter((item) => !item.disabled))
+          setErrorMessage('')
+        })
+        .catch((error: unknown) => {
+          if (active) setErrorMessage(toErrorMessage(error))
+        })
+        .finally(() => {
+          if (active) setIsLoading(false)
+        })
+    }
+    refresh()
+    const unsubscribe = onAppDataChange((domain) => {
+      if (domain === 'vod-sources' || domain === 'app-data') refresh()
+    })
     return () => {
       active = false
+      unsubscribe()
     }
   }, [])
 

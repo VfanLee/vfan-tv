@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useLocation } from 'react-router'
+import { useSearchParams } from 'react-router'
 import { MonitorPlay, Video } from 'lucide-react'
-import { ConfirmDialog, LayoutPreferencesSettings, ThemeSettings } from '@renderer/components'
-import { isApiAvailable } from '@renderer/platform/api'
+import { ConfirmDialog, LayoutPreferencesSettings } from '@renderer/components'
+import { isApiAvailable, onSettingsSectionChange } from '@renderer/platform/api'
 import { AboutSettingsCard } from './components/about-settings-card'
 import { DataManagementCard, SubscriptionSettingsCard } from './components/settings-cards'
 import { NetworkSettingsCard } from './components/network-settings-card'
@@ -24,7 +24,7 @@ import { getConfirmDescription, getConfirmTitle } from './utils'
 
 // 设置页负责协调各设置领域 hook；具体数据读写仍由对应 hook 和 main IPC 完成。
 export function SettingsPage(): React.JSX.Element {
-  const location = useLocation()
+  const [searchParams] = useSearchParams()
   const apiAvailable = isApiAvailable()
   const vod = useVodSources(apiAvailable)
   const iptv = useIptvSources(apiAvailable)
@@ -108,11 +108,19 @@ export function SettingsPage(): React.JSX.Element {
   }, [selectSection])
 
   useEffect(() => {
-    const section = (location.state as { section?: SettingsSectionId } | null)?.section
+    const section = searchParams.get('section') as SettingsSectionId | null
     if (!section || !settingsSections.some((item) => item.id === section)) return
     const frame = window.requestAnimationFrame(() => selectSectionRef.current(section))
     return () => window.cancelAnimationFrame(frame)
-  }, [location.state])
+  }, [searchParams])
+
+  useEffect(
+    () =>
+      onSettingsSectionChange((section) => {
+        if (settingsSections.some((item) => item.id === section)) selectSectionRef.current(section)
+      }),
+    [],
+  )
 
   const confirm = async (): Promise<void> => {
     if (!confirmState) return
@@ -134,10 +142,7 @@ export function SettingsPage(): React.JSX.Element {
 
         <div className="grid min-w-0 gap-5 [&>section]:min-w-0">
           <section id="appearance" className="scroll-mt-8">
-            <div className="grid gap-5">
-              <LayoutPreferencesSettings />
-              <ThemeSettings />
-            </div>
+            <LayoutPreferencesSettings />
           </section>
 
           <section id="network" className="scroll-mt-8">

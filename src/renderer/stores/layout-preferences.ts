@@ -1,20 +1,19 @@
+import { useEffect } from 'react'
 import { create } from 'zustand'
 import { LAYOUT_PREFERENCES_STORAGE_KEY } from '@shared/constants'
 
 export type AppStyle = 'catalog' | 'trending'
-export type ConfigurableNavigationItem = 'favorites' | 'linkPlayer' | 'radio' | 'recent'
+export type ConfigurableNavigationItem = 'linkPlayer' | 'radio'
 
 export interface NavigationVisibility {
-  favorites: boolean
   linkPlayer: boolean
   radio: boolean
-  recent: boolean
 }
 
 interface StoredLayoutPreferences {
   appStyle: AppStyle
   navigationVisibility: NavigationVisibility
-  version: 1
+  version: 2
 }
 
 interface LayoutPreferencesState extends Omit<StoredLayoutPreferences, 'version'> {
@@ -24,8 +23,8 @@ interface LayoutPreferencesState extends Omit<StoredLayoutPreferences, 'version'
 
 const defaultPreferences: StoredLayoutPreferences = {
   appStyle: 'catalog',
-  navigationVisibility: { favorites: true, linkPlayer: false, radio: true, recent: true },
-  version: 1,
+  navigationVisibility: { linkPlayer: false, radio: true },
+  version: 2,
 }
 
 const initialPreferences = readLayoutPreferences()
@@ -49,27 +48,45 @@ export const useLayoutPreferencesStore = create<LayoutPreferencesState>((set) =>
   },
 }))
 
+export function useLayoutPreferencesSync(): void {
+  useEffect(() => {
+    const synchronize = (event: StorageEvent): void => {
+      if (event.key !== null && event.key !== LAYOUT_PREFERENCES_STORAGE_KEY) return
+      const preferences = readLayoutPreferences()
+      useLayoutPreferencesStore.setState({
+        appStyle: preferences.appStyle,
+        navigationVisibility: preferences.navigationVisibility,
+      })
+    }
+    window.addEventListener('storage', synchronize)
+    return () => window.removeEventListener('storage', synchronize)
+  }, [])
+}
+
 function readLayoutPreferences(): StoredLayoutPreferences {
   if (typeof window === 'undefined') return defaultPreferences
 
   try {
     const raw = window.localStorage.getItem(LAYOUT_PREFERENCES_STORAGE_KEY)
     if (!raw) return defaultPreferences
-    const parsed = JSON.parse(raw) as Partial<StoredLayoutPreferences>
-    if (parsed.version !== 1 || (parsed.appStyle !== 'catalog' && parsed.appStyle !== 'trending')) {
+    const parsed = JSON.parse(raw) as {
+      appStyle?: unknown
+      navigationVisibility?: Record<string, unknown>
+      version?: unknown
+    }
+    if (parsed.appStyle !== 'catalog' && parsed.appStyle !== 'trending') {
       return defaultPreferences
     }
     const visibility = parsed.navigationVisibility
-    if (
-      !visibility ||
-      typeof visibility.favorites !== 'boolean' ||
-      typeof visibility.linkPlayer !== 'boolean' ||
-      typeof visibility.radio !== 'boolean' ||
-      typeof visibility.recent !== 'boolean'
-    ) {
+    if (!visibility || typeof visibility.linkPlayer !== 'boolean' || typeof visibility.radio !== 'boolean') {
       return defaultPreferences
     }
-    return { appStyle: parsed.appStyle, navigationVisibility: visibility, version: 1 }
+    if (parsed.version !== 1 && parsed.version !== 2) return defaultPreferences
+    return {
+      appStyle: parsed.appStyle,
+      navigationVisibility: { linkPlayer: visibility.linkPlayer, radio: visibility.radio },
+      version: 2,
+    }
   } catch {
     return defaultPreferences
   }
@@ -80,7 +97,7 @@ function persistLayoutPreferences(state: Pick<LayoutPreferencesState, 'appStyle'
     const stored: StoredLayoutPreferences = {
       appStyle: state.appStyle,
       navigationVisibility: state.navigationVisibility,
-      version: 1,
+      version: 2,
     }
     window.localStorage.setItem(LAYOUT_PREFERENCES_STORAGE_KEY, JSON.stringify(stored))
   } catch {

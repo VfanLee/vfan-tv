@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto'
-import { dialog, ipcMain, type BrowserWindow } from 'electron'
+import { BrowserWindow, dialog, ipcMain, type WebContents } from 'electron'
 import { readFile, writeFile } from 'fs/promises'
 import { DEFAULT_APP_DATA_EXPORT_NAME } from '@shared/constants'
 import { IPC_CHANNELS } from '@shared/ipc'
@@ -7,14 +7,15 @@ import { appDataBackupSchema, appDataClientPayloadSchema } from '@shared/schemas
 import type { AppApi, AppDataBackup, AppDataOperationCounts } from '@shared/types'
 import { resetAppDatabase } from '../../infrastructure/database/client'
 import type { ApplicationContext } from '../../app/composition-root'
+import { broadcastAppDataChange } from '../../ipc/broadcast'
 import { formatZodError, isZodError } from '../../ipc/utils'
 
 // 应用备份跨越多个领域；这里负责将数据库数据与 renderer 持有的搜索历史合并为单一文件。
 export function registerAppDataIpc(context: ApplicationContext): void {
   ipcMain.handle(
     IPC_CHANNELS.settings.exportAppData,
-    async (_event, clientData: Parameters<AppApi['settings']['exportAppData']>[0]) => {
-      const window = requireWindow(context)
+    async (event, clientData: Parameters<AppApi['settings']['exportAppData']>[0]) => {
+      const window = requireWindow(event.sender)
       const payload = appDataClientPayloadSchema.parse(clientData)
       const { selection } = payload
       const { source, iptvSource, settings } = context.services
@@ -60,8 +61,8 @@ export function registerAppDataIpc(context: ApplicationContext): void {
       return { cancelled: false, filePath: result.filePath, counts: getAppDataCounts(backup) }
     },
   )
-  ipcMain.handle(IPC_CHANNELS.settings.importAppData, async () => {
-    const window = requireWindow(context)
+  ipcMain.handle(IPC_CHANNELS.settings.importAppData, async (event) => {
+    const window = requireWindow(event.sender)
     const result = await dialog.showOpenDialog(window, {
       title: '导入应用数据 JSON',
       properties: ['openFile'],
@@ -105,13 +106,14 @@ export function registerAppDataIpc(context: ApplicationContext): void {
       })
     for (const item of backup.recent) recentPlay.upsert(item)
     for (const item of backup.favorites) favorite.importItem(item)
+    broadcastAppDataChange('app-data')
     return { cancelled: false, filePath, counts: getAppDataCounts(backup), searchHistory: backup.searchHistory }
   })
 }
 
-function requireWindow(context: ApplicationContext): BrowserWindow {
-  const window = context.getMainWindow()
-  if (!window) throw new Error('Main window is not available')
+function requireWindow(sender: WebContents): BrowserWindow {
+  const window = BrowserWindow.fromWebContents(sender)
+  if (!window) throw new Error('The requesting window is not available')
   return window
 }
 

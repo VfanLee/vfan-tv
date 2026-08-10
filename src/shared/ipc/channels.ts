@@ -85,12 +85,16 @@ export const IPC_CHANNELS = {
   },
   updates: {
     getCurrentVersion: 'updates:get-current-version',
+    requestSnapshot: 'updates:request-snapshot',
     check: 'updates:check',
     download: 'updates:download',
     install: 'updates:install',
     event: 'updates:event',
   },
   window: {
+    openSettings: 'window:open-settings',
+    settingsSectionChanged: 'window:settings-section-changed',
+    appDataChanged: 'window:app-data-changed',
     isMaximized: 'window:is-maximized',
     toggleMaximize: 'window:toggle-maximize',
     quitApp: 'window:quit-app',

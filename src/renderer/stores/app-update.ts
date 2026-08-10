@@ -77,8 +77,8 @@ export const useAppUpdateStore = create<AppUpdateState>((set, get) => ({
   },
 }))
 
-/** Subscribe to update events and run a silent check once when the app shell mounts. */
-export function useAppUpdateSync(): void {
+/** Subscribe to update events and optionally run a silent check when the window mounts. */
+export function useAppUpdateSync(checkOnMount = true): void {
   const check = useAppUpdateStore((state) => state.check)
   const setCurrentVersion = useAppUpdateStore((state) => state.setCurrentVersion)
 
@@ -129,12 +129,12 @@ export function useAppUpdateSync(): void {
     void getCurrentVersion().then((version) => {
       if (!active) return
       setCurrentVersion(version)
-      void check()
+      if (checkOnMount) void check()
     })
 
     return () => {
       active = false
       unsubscribe()
     }
-  }, [check, setCurrentVersion])
+  }, [check, checkOnMount, setCurrentVersion])
 }

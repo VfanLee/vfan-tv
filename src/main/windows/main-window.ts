@@ -23,21 +23,25 @@ export function createMainWindow({ icon, onCreated }: CreateMainWindowOptions): 
     mainWindow.maximize()
     mainWindow.show()
   })
+  configureWindowNavigation(mainWindow)
+  void mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY)
+}
+
+export function configureWindowNavigation(window: BrowserWindow): void {
   // 阻止渲染页自行打开新窗口；合法外链仍需显式确认后交给系统浏览器。
-  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+  window.webContents.setWindowOpenHandler(({ url }) => {
     if (isAllowedExternalUrl(url))
       void openExternalUrl(url).catch((error: unknown) => console.error('Failed to open external URL:', url, error))
     return { action: 'deny' }
   })
   // 只允许应用自身源内导航，防止远程页面接管 Electron 渲染进程。
-  mainWindow.webContents.on('will-navigate', (event, url) => {
-    if (isSameAppOrigin(mainWindow, url)) return
+  window.webContents.on('will-navigate', (event, url) => {
+    if (isSameAppOrigin(window, url)) return
+    event.preventDefault()
     if (isAllowedExternalUrl(url)) {
-      event.preventDefault()
       void openExternalUrl(url).catch((error: unknown) => console.error('Failed to open external URL:', url, error))
     }
   })
-  void mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY)
 }
 
 function isSameAppOrigin(window: BrowserWindow, url: string): boolean {

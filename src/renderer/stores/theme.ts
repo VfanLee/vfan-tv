@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { create } from 'zustand'
 import { THEME_STORAGE_KEY } from '@shared/constants'
 
@@ -24,3 +25,14 @@ export const useThemeStore = create<ThemeState>((set) => ({
     set({ mode })
   },
 }))
+
+export function useThemeSync(): void {
+  useEffect(() => {
+    const synchronize = (event: StorageEvent): void => {
+      if (event.key !== null && event.key !== THEME_STORAGE_KEY) return
+      useThemeStore.setState({ mode: readInitialTheme() })
+    }
+    window.addEventListener('storage', synchronize)
+    return () => window.removeEventListener('storage', synchronize)
+  }, [])
+}

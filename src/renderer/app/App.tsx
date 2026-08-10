@@ -1,24 +1,25 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Toaster } from 'sonner'
 import { DisclaimerOverlay, ThemeProvider } from '../components'
 import { DISCLAIMER_SKIP_STORAGE_KEY } from '@shared/constants'
 import { AppRouter } from './routes/AppRouter'
-import { useAppDataStore, useLayoutPreferencesStore, useThemeStore } from '@/stores'
+import { useAppUpdateSync, useLayoutPreferencesSync, useThemeStore, useThemeSync } from '@/stores'
 
 function App(): React.JSX.Element {
   const mode = useThemeStore((state) => state.mode)
-  const appStyle = useLayoutPreferencesStore((state) => state.appStyle)
-  const initializeHomeData = useAppDataStore((state) => state.initialize)
   const [disclaimerDismissed, setDisclaimerDismissed] = useState(readDisclaimerPreference)
+  const isSettingsWindow = window.location.hash.startsWith('#/settings')
 
-  useEffect(() => {
-    if (appStyle === 'trending') void initializeHomeData()
-  }, [appStyle, initializeHomeData])
+  useAppUpdateSync(!isSettingsWindow)
+  useLayoutPreferencesSync()
+  useThemeSync()
 
   return (
     <ThemeProvider>
       <AppRouter />
-      {disclaimerDismissed ? null : <DisclaimerOverlay onAcknowledge={() => setDisclaimerDismissed(true)} />}
+      {disclaimerDismissed || isSettingsWindow ? null : (
+        <DisclaimerOverlay onAcknowledge={() => setDisclaimerDismissed(true)} />
+      )}
       <Toaster richColors theme={mode === 'system' ? 'system' : mode} />
     </ThemeProvider>
   )

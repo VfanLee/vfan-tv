@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { SEARCH_VIEW_MODE_STORAGE_KEY } from '@shared/constants'
+import { SEARCH_HISTORY_STORAGE_KEY, SEARCH_VIEW_MODE_STORAGE_KEY } from '@shared/constants'
 import type { VodSearchResult } from '@shared/types'
-import { cancelVodSearch, isApiAvailable, listSources, onVodSearchEvent, searchVod } from '@renderer/platform/api'
+import {
+  cancelVodSearch,
+  isApiAvailable,
+  listSources,
+  onAppDataChange,
+  onVodSearchEvent,
+  searchVod,
+} from '@renderer/platform/api'
 import type { GroupedSearchResult, ResultViewMode, SearchSourceStats, SourceSearchState } from '../types'
 import {
   getSourceStats,
@@ -114,7 +121,18 @@ export function useVodSearch(initialKeyword: string): VodSearchState {
 
   useEffect(() => {
     queueMicrotask(() => void refreshEnabledSourceCount())
+    return onAppDataChange((domain) => {
+      if (domain === 'vod-sources' || domain === 'app-data') void refreshEnabledSourceCount()
+    })
   }, [refreshEnabledSourceCount])
+
+  useEffect(() => {
+    const synchronizeHistories = (event: StorageEvent): void => {
+      if (event.key === null || event.key === SEARCH_HISTORY_STORAGE_KEY) setHistories(loadHistories())
+    }
+    window.addEventListener('storage', synchronizeHistories)
+    return () => window.removeEventListener('storage', synchronizeHistories)
+  }, [])
 
   useEffect(() => {
     if (!isSourcesReady) return
