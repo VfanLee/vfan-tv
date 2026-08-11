@@ -77,7 +77,7 @@ export function registerIptvSourcesIpc(context: ApplicationContext): void {
     IPC_CHANNELS.iptv.getCatalog,
     async (_event, sourceId: Parameters<AppApi['iptv']['getCatalog']>[0], force?: boolean) => {
       if (force) mediaPlaybackTarget.clearDetectionCache()
-      return logIptvRequest(context, '频道目录', 'content', async () => {
+      return logIptvRequest(context, '频道目录', async () => {
         const result = await iptvCatalog.get(sourceId, force)
         return { result, summary: `频道数=${result.channels.length} | 缓存=${result.cached ? '是' : '否'}` }
       })
@@ -86,13 +86,13 @@ export function registerIptvSourcesIpc(context: ApplicationContext): void {
   ipcMain.handle(
     IPC_CHANNELS.iptv.getPrograms,
     (_event, sourceId: string, channelIds: Parameters<AppApi['iptv']['getPrograms']>[1]) =>
-      logIptvRequest(context, '节目单', 'content', async () => {
+      logIptvRequest(context, '节目单', async () => {
         const result = await iptvEpg.getPrograms(sourceId, channelIds)
         return { result, summary: `频道数=${channelIds.length} | 结果数=${result.items.length}` }
       }),
   )
   ipcMain.handle(IPC_CHANNELS.iptv.getProgramSchedule, (_event, sourceId: string, channelId: string, date: string) =>
-    logIptvRequest(context, '单日节目单', 'content', async () => {
+    logIptvRequest(context, '单日节目单', async () => {
       const result = await iptvEpg.getProgramSchedule(sourceId, channelId, date)
       return { result, summary: `日期=${sanitizeLogValue(date)} | 节目数=${result.programs.length}` }
     }),
@@ -104,7 +104,6 @@ export function registerIptvSourcesIpc(context: ApplicationContext): void {
       return logIptvRequest(
         context,
         '播放解析',
-        'playback',
         async () => {
           const result = await iptvPlayback.getTarget(sourceId, channelId, streamId, requestId)
           return {
@@ -124,17 +123,14 @@ export function registerIptvSourcesIpc(context: ApplicationContext): void {
 async function logIptvRequest<T>(
   context: ApplicationContext,
   action: string,
-  route: 'content' | 'playback',
   task: () => Promise<{ result: T; summary?: string }>,
   requestId = randomUUID(),
 ): Promise<T> {
   const startedAt = Date.now()
-  const network = context.services.network.getStatus().routes[route]
+  const network = context.services.network.getStatus().routes.iptv
   const networkLabel =
     network.mode === 'direct'
-      ? route === 'content'
-        ? '内容直连'
-        : '视频直连'
+      ? 'IPTV 直连'
       : network.mode === 'system'
         ? '跟随系统'
         : `自定义代理(${sanitizeLogValue(network.activeProfileName ?? '未选择')})`

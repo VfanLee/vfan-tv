@@ -17,19 +17,21 @@ export function useMediaPlaybackTarget(input: MediaPlaybackTargetInput | undefin
   const [retryKey, setRetryKey] = useState(0)
   const candidatesKey = JSON.stringify(input?.candidates ?? [])
   const sourceId = input?.sourceId
+  const networkMode = input?.networkMode
   const sourceName = input?.diagnostics?.sourceName
   const episodeName = input?.diagnostics?.episodeName
   const requestKey = useMemo(
-    () => `${candidatesKey}\u0000${sourceId ?? ''}\u0000${sourceName ?? ''}\u0000${episodeName ?? ''}\u0000${retryKey}`,
-    [candidatesKey, episodeName, retryKey, sourceId, sourceName],
+    () =>
+      `${candidatesKey}\u0000${sourceId ?? ''}\u0000${networkMode ?? ''}\u0000${sourceName ?? ''}\u0000${episodeName ?? ''}\u0000${retryKey}`,
+    [candidatesKey, episodeName, networkMode, retryKey, sourceId, sourceName],
   )
   const stableCandidates = useMemo(() => JSON.parse(candidatesKey) as MediaPlaybackCandidate[], [candidatesKey])
   const requestInput = useMemo<MediaPlaybackTargetInput | undefined>(
     () =>
       stableCandidates.length > 0
-        ? { candidates: stableCandidates, sourceId, diagnostics: { sourceName, episodeName } }
+        ? { candidates: stableCandidates, sourceId, networkMode, diagnostics: { sourceName, episodeName } }
         : undefined,
-    [episodeName, sourceId, sourceName, stableCandidates],
+    [episodeName, networkMode, sourceId, sourceName, stableCandidates],
   )
   const [state, setState] = useState<ResolutionState>({ key: '' })
   const ownedSessionIdRef = useRef<string | undefined>(undefined)

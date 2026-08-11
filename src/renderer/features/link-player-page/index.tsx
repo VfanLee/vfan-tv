@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, Play } from 'lucide-react'
+import type { LinkPlaybackNetworkMode } from '@shared/types'
 import { BasicPlayer, PageHeader } from '@renderer/components'
 import { useMediaPlaybackTarget } from '@renderer/hooks'
 import { Button } from '@/ui/button'
@@ -13,26 +14,34 @@ const DEFAULT_LINK_PLAYBACK_URL = 'https://artplayer.org/assets/sample/video.mp4
 interface PlaybackRequest {
   url: string
   variant: LinkPlaybackVariant
+  networkMode: LinkPlaybackNetworkMode
 }
 
 const DEFAULT_PLAYBACK_REQUEST: PlaybackRequest = {
   url: DEFAULT_LINK_PLAYBACK_URL,
   variant: 'vod',
+  networkMode: 'direct',
 }
 
 export function LinkPlayerPage(): React.JSX.Element {
   const [inputUrl, setInputUrl] = useState(DEFAULT_LINK_PLAYBACK_URL)
   const [playbackVariant, setPlaybackVariant] = useState<LinkPlaybackVariant>('vod')
+  const [networkMode, setNetworkMode] = useState<LinkPlaybackNetworkMode>('direct')
   const [playbackRequest, setPlaybackRequest] = useState<PlaybackRequest>(DEFAULT_PLAYBACK_REQUEST)
   const [validationError, setValidationError] = useState('')
   const playbackResolution = useMediaPlaybackTarget({
-    candidates: [{ id: 'direct-link', name: '直链', url: playbackRequest.url }],
-    diagnostics: { sourceName: '直链播放' },
+    candidates: [{ id: 'direct-link', name: '播放链接', url: playbackRequest.url }],
+    networkMode: playbackRequest.networkMode,
+    diagnostics: { sourceName: 'URL 解析播放' },
   })
   const playbackTarget = playbackResolution.target
   const errorMessage = validationError || playbackResolution.errorMessage
 
-  const resolvePlayback = (rawUrl: string, variant: LinkPlaybackVariant): void => {
+  const resolvePlayback = (
+    rawUrl: string,
+    variant: LinkPlaybackVariant,
+    selectedNetworkMode: LinkPlaybackNetworkMode,
+  ): void => {
     const displayUrl = normalizeHttpUrl(rawUrl)
     if (!displayUrl) {
       setValidationError('请输入有效的 http 或 https 播放链接。')
@@ -40,19 +49,19 @@ export function LinkPlayerPage(): React.JSX.Element {
     }
 
     setValidationError('')
-    setPlaybackRequest({ url: displayUrl, variant })
+    setPlaybackRequest({ url: displayUrl, variant, networkMode: selectedNetworkMode })
     playbackResolution.retry()
   }
 
   const handleSubmit = (event: React.FormEvent<HTMLFormElement>): void => {
     event.preventDefault()
-    resolvePlayback(inputUrl, playbackVariant)
+    resolvePlayback(inputUrl, playbackVariant, networkMode)
   }
 
   return (
     <div className="text-foreground h-full overflow-hidden bg-transparent px-5 py-6 sm:px-8 sm:py-8">
       <div className="flex h-full min-h-0 w-full flex-col gap-5">
-        <PageHeader className="mb-0 shrink-0" title="直链播放" />
+        <PageHeader className="mb-0 shrink-0" title="URL 解析播放" />
 
         <form className="flex shrink-0 flex-col gap-2" onSubmit={handleSubmit}>
           <label className="sr-only" htmlFor="playback-url">
@@ -83,6 +92,17 @@ export function LinkPlayerPage(): React.JSX.Element {
                 </SelectGroup>
               </SelectContent>
             </Select>
+            <Select value={networkMode} onValueChange={(value) => setNetworkMode(value as LinkPlaybackNetworkMode)}>
+              <SelectTrigger aria-label="播放网络" className="!h-11 w-full sm:w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectGroup>
+                  <SelectItem value="direct">直连</SelectItem>
+                  <SelectItem value="system">系统代理</SelectItem>
+                </SelectGroup>
+              </SelectContent>
+            </Select>
             <Button className="h-11 sm:min-w-28" disabled={playbackResolution.isLoading} type="submit">
               <Play data-icon="inline-start" />
               {playbackResolution.isLoading ? '解析中' : '播放'}
@@ -93,7 +113,7 @@ export function LinkPlayerPage(): React.JSX.Element {
 
         <section className="min-h-0 flex-1 overflow-hidden rounded-xl bg-black shadow-sm">
           <BasicPlayer
-            key={`${playbackTarget?.src}-${playbackRequest.variant}`}
+            key={`${playbackTarget?.src}-${playbackRequest.variant}-${playbackRequest.networkMode}`}
             autoPlay
             className="h-full"
             enableAutoNext={false}
@@ -103,7 +123,7 @@ export function LinkPlayerPage(): React.JSX.Element {
             persistPlaybackSettings={false}
             sourceType={playbackTarget?.streamType}
             src={playbackTarget?.src}
-            title="直链播放"
+            title="URL 解析播放"
             variant={playbackRequest.variant}
           />
         </section>

@@ -28,7 +28,10 @@ export function registerMediaIpc(context: ApplicationContext): void {
     async (_event, input: Parameters<AppApi['media']['getPlaybackTarget']>[0]) => {
       const startedAt = Date.now()
       const requestId = randomUUID()
-      const diagnostics = formatPlaybackDiagnostics(input, context.services.network.getStatus())
+      const diagnostics = formatPlaybackDiagnostics(
+        input,
+        context.services.network.getRouteDescription(getPlaybackNetworkRoute(input)),
+      )
       console.info(`[媒体解析] 开始 | requestId=${requestId} | ${diagnostics}`)
       try {
         const source = input.sourceId ? context.repositories.source.findById(input.sourceId) : undefined
@@ -107,21 +110,29 @@ function isMediaImageSourceType(value: unknown): value is MediaImageSourceType {
 }
 
 function getImageNetworkRoute(sourceType: MediaImageSourceType): ContentNetworkRoute {
+  if (sourceType === 'vod') return 'vod'
   if (sourceType === 'douban') return 'douban'
   if (sourceType === 'radio') return 'radio'
-  return 'content'
+  return 'iptv'
+}
+
+function getPlaybackNetworkRoute(
+  input: Parameters<AppApi['media']['getPlaybackTarget']>[0],
+): 'vodPlayback' | 'linkPlaybackDirect' | 'linkPlaybackSystem' {
+  if (input.sourceId || input.networkMode === undefined) return 'vodPlayback'
+  return input.networkMode === 'system' ? 'linkPlaybackSystem' : 'linkPlaybackDirect'
 }
 
 function formatPlaybackDiagnostics(
   input: Parameters<AppApi['media']['getPlaybackTarget']>[0],
-  network: ReturnType<ApplicationContext['services']['network']['getStatus']>,
+  network: string,
 ): string {
   const diagnostics = input?.diagnostics
   return [
     diagnostics?.sourceName ? `来源=${sanitizeLogText(diagnostics.sourceName)}` : undefined,
     diagnostics?.episodeName ? `剧集=${sanitizeLogText(diagnostics.episodeName)}` : undefined,
     `候选=${formatCandidateNames(input?.candidates)}`,
-    `网络=${formatPlaybackNetwork(network)}`,
+    `网络=${network}`,
   ]
     .filter(Boolean)
     .join(' | ')
@@ -133,13 +144,6 @@ function formatCandidateNames(candidates: Parameters<AppApi['media']['getPlaybac
     .slice(0, 8)
     .map((candidate) => sanitizeLogText(candidate.name || candidate.id, 32))
     .join(',')
-}
-
-function formatPlaybackNetwork(network: ReturnType<ApplicationContext['services']['network']['getStatus']>): string {
-  const playback = network.routes.playback
-  if (playback.mode === 'direct') return '视频直连'
-  if (playback.mode === 'system') return '跟随系统'
-  return playback.activeProfileName ? `自定义代理(${sanitizeLogText(playback.activeProfileName)})` : '自定义代理'
 }
 
 function getSafeMediaErrorMessage(error: unknown): string {

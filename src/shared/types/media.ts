@@ -1,5 +1,6 @@
 export type MediaStreamType = 'hls' | 'flv' | 'mpegts' | 'native'
 export type MediaImageSourceType = 'vod' | 'iptv' | 'douban' | 'radio'
+export type LinkPlaybackNetworkMode = 'direct' | 'system'
 
 export interface MediaPlaybackCandidate {
   id: string
@@ -10,6 +11,7 @@ export interface MediaPlaybackCandidate {
 export interface MediaPlaybackTargetInput {
   candidates: MediaPlaybackCandidate[]
   sourceId?: string
+  networkMode?: LinkPlaybackNetworkMode
   diagnostics?: {
     sourceName?: string
     episodeName?: string

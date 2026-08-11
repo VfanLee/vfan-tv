@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { CheckCircle2, CircleAlert, Gauge, RadioTower, Save } from 'lucide-react'
 import type { IptvEpgMode, IptvEpgSettings } from '@shared/types'
-import { SettingsCard } from '@renderer/components'
+import { SettingsSection } from '@renderer/components'
 import { Alert, AlertDescription } from '@/ui/alert'
 import { Badge } from '@/ui/badge'
 import { Button } from '@/ui/button'
@@ -34,8 +34,8 @@ export function IptvEpgSettingsCard({
   const selected = modeOptions.find((item) => item.value === form.mode)
 
   return (
-    <SettingsCard description="设置应用内所有 IPTV 源使用的节目单服务。" title="节目单设置">
-      <div className="flex flex-col gap-5 px-5 py-5">
+    <SettingsSection description="设置应用内所有 IPTV 源使用的节目单服务。" id="iptv-epg" title="IPTV EPG">
+      <div className="flex flex-col gap-5">
         <div className="grid gap-2">
           <label className="text-foreground text-sm font-medium" htmlFor="iptv-epg-mode">
             EPG 服务
@@ -106,7 +106,7 @@ export function IptvEpgSettingsCard({
           </div>
         </div>
       </div>
-    </SettingsCard>
+    </SettingsSection>
   )
 }
 

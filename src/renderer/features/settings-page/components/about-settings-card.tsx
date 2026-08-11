@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { CircleUserRound, Download, MessageCircle, Rocket, SquareArrowOutUpRight } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { FaGithub } from 'react-icons/fa'
-import { SettingsCard } from '@renderer/components'
+import { SettingsSection } from '@renderer/components'
 import logoMarkUrl from '@renderer/assets/logo-mark.svg'
 import { getCurrentVersion, isApiAvailable } from '@renderer/platform/api'
 import { Badge } from '@/ui/badge'
@@ -39,8 +39,8 @@ export function AboutSettingsCard(): React.JSX.Element {
   }, [apiAvailable])
 
   return (
-    <SettingsCard description="应用信息与版本。" title="关于">
-      <div className="flex flex-col gap-5 p-5">
+    <SettingsSection description="应用信息、版本与项目入口。" title="应用信息">
+      <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex min-w-0 items-center gap-4">
             <img alt="Vfan TV" className="size-14 shrink-0" draggable={false} src={logoMarkUrl} />
@@ -95,14 +95,14 @@ export function AboutSettingsCard(): React.JSX.Element {
           </div>
         ) : null}
 
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="border-border divide-border divide-y border-y">
           <LinkCard href={AUTHOR_URL} icon={CircleUserRound} title="关于作者" />
           <LinkCard href={FEEDBACK_URL} icon={MessageCircle} title="意见反馈" />
         </div>
 
         <p className="text-muted-foreground text-center text-sm">Copyright © 2026 VfanLee</p>
       </div>
-    </SettingsCard>
+    </SettingsSection>
   )
 }
 
@@ -119,8 +119,8 @@ function LinkCard({ href, icon: Icon, title }: { href: string; icon: LucideIcon;
   return (
     <button
       className={cn(
-        'border-border bg-card text-card-foreground hover:bg-accent hover:text-accent-foreground focus-visible:ring-ring',
-        'flex min-h-16 w-full items-center gap-3 rounded-xl border px-4 text-left shadow-sm transition-colors outline-none focus-visible:ring-2',
+        'text-foreground hover:bg-accent hover:text-accent-foreground focus-visible:ring-ring',
+        'flex min-h-16 w-full items-center gap-3 px-1 text-left transition-colors outline-none focus-visible:ring-2 sm:px-3',
       )}
       type="button"
       onClick={() => void openExternalUrl(href)}

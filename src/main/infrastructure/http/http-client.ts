@@ -2,7 +2,7 @@ import { Buffer } from 'buffer'
 import { randomUUID } from 'crypto'
 import type { ContentNetworkRoute, ContentNetworkService } from '../network/content-network.service'
 
-type HttpNetworkRoute = Exclude<ContentNetworkRoute, 'playback' | 'update'>
+type HttpNetworkRoute = Exclude<ContentNetworkRoute, 'vodPlayback' | 'update'>
 
 export interface HttpRequestOptions {
   headers?: Record<string, string | number | boolean | undefined>

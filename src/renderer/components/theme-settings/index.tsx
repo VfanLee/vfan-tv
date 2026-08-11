@@ -3,7 +3,7 @@ import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/utils'
 import { useLayoutPreferencesStore, type AppStyle, type ConfigurableNavigationItem } from '@/stores'
 import { Switch } from '@/ui'
-import { SettingsCard } from '../settings-card'
+import { SettingsSection } from '../settings-card'
 
 const styleItems: Array<{ style: AppStyle; label: string; description: string; icon: LucideIcon }> = [
   { style: 'catalog', label: '资源库', description: '从指定点播源浏览分类与影片', icon: Clapperboard },
@@ -17,7 +17,7 @@ const navigationItems: Array<{
   icon: LucideIcon
 }> = [
   { key: 'radio', label: '电台', description: '在顶部导航显示网络电台入口', icon: Radio },
-  { key: 'linkPlayer', label: '直链播放', description: '在顶部导航显示直链播放入口', icon: Link },
+  { key: 'linkPlayer', label: 'URL 解析播放', description: '在顶部导航显示 URL 解析播放入口', icon: Link },
 ]
 
 export function LayoutPreferencesSettings(): React.JSX.Element {
@@ -27,9 +27,9 @@ export function LayoutPreferencesSettings(): React.JSX.Element {
   const setNavigationVisible = useLayoutPreferencesStore((state) => state.setNavigationVisible)
 
   return (
-    <div className="grid gap-5">
-      <SettingsCard description="选择首页内容与主导航结构。" title="应用风格">
-        <div className="grid gap-3 p-5 sm:grid-cols-2">
+    <div className="grid gap-9 [&>section+section]:border-t [&>section+section]:pt-9">
+      <SettingsSection description="选择首页内容与主导航结构。" title="应用风格">
+        <div className="grid gap-3 sm:grid-cols-2">
           {styleItems.map((item) => {
             const active = appStyle === item.style
             return (
@@ -44,10 +44,10 @@ export function LayoutPreferencesSettings(): React.JSX.Element {
             )
           })}
         </div>
-      </SettingsCard>
+      </SettingsSection>
 
-      <SettingsCard description="选择可选的顶部导航入口。" title="主导航显示">
-        <div className="divide-border divide-y px-5">
+      <SettingsSection description="选择可选的顶部导航入口。" title="主导航显示">
+        <div className="divide-border border-border divide-y border-y">
           {navigationItems.map((item) => (
             <label key={item.key} className="flex cursor-pointer items-center gap-4 py-4">
               <span className="bg-muted text-muted-foreground flex size-9 shrink-0 items-center justify-center rounded-lg">
@@ -64,7 +64,7 @@ export function LayoutPreferencesSettings(): React.JSX.Element {
             </label>
           ))}
         </div>
-      </SettingsCard>
+      </SettingsSection>
     </div>
   )
 }
@@ -86,7 +86,7 @@ function PreferenceOptionButton({
     <button
       aria-pressed={active}
       className={cn(
-        'border-border bg-background hover:bg-accent hover:text-accent-foreground focus-visible:ring-ring rounded-xl border p-4 text-left transition-colors outline-none focus-visible:ring-2',
+        'border-border bg-background hover:bg-accent hover:text-accent-foreground focus-visible:ring-ring rounded-lg border p-4 text-left transition-colors outline-none focus-visible:ring-2',
         active && 'border-primary bg-accent text-primary',
       )}
       type="button"

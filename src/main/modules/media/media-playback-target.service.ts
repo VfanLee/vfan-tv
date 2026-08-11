@@ -1,5 +1,6 @@
 import type {
   IptvStreamRequestHeaders,
+  LinkPlaybackNetworkMode,
   MediaPlaybackCandidate,
   MediaPlaybackTarget,
   MediaPlaybackTargetInput,
@@ -40,7 +41,8 @@ export class MediaPlaybackTargetService {
   ): Promise<MediaPlaybackTarget> {
     if (!input || typeof input !== 'object') throw new Error('播放地址无效')
     const candidates = parsePlaybackCandidates(input.candidates)
-    return this.network.withPlaybackContext(async (context) => {
+    const route = getPlaybackNetworkRoute(input.networkMode, source !== undefined)
+    return this.network.withContext(route, async (context) => {
       const failures: string[] = []
       for (const candidate of prioritizeCandidates(candidates)) {
         try {
@@ -65,9 +67,7 @@ export class MediaPlaybackTargetService {
     requestId: string = randomUUID(),
   ): Promise<MediaPlaybackTarget> {
     const targetUrl = parsePlaybackUrl(url)
-    return this.network.withPlaybackContext((context) =>
-      this.resolveTarget(targetUrl, requestHeaders, context, requestId),
-    )
+    return this.network.withIptvContext((context) => this.resolveTarget(targetUrl, requestHeaders, context, requestId))
   }
 
   clearDetectionCache(): void {
@@ -96,7 +96,7 @@ export class MediaPlaybackTargetService {
       const message = [
         detection.errorMessage ? '[媒体解析] 探测失败' : '[媒体解析] 探测成功',
         `requestId=${requestId}`,
-        `网络=${this.network.getRouteDescription('playback')}`,
+        `网络=${this.network.getRouteDescription(context.route)}`,
         `状态码=${detection.statusCode ?? '—'}`,
         `Content-Type=${sanitizeContentType(detection.contentType)}`,
         `类型=${detection.type}`,
@@ -184,6 +184,16 @@ export class MediaPlaybackTargetService {
     }
     this.activeDetections = Math.max(0, this.activeDetections - 1)
   }
+}
+
+function getPlaybackNetworkRoute(
+  networkMode: LinkPlaybackNetworkMode | undefined,
+  hasVodSource: boolean,
+): 'vodPlayback' | 'linkPlaybackDirect' | 'linkPlaybackSystem' {
+  if (hasVodSource || networkMode === undefined) return 'vodPlayback'
+  if (networkMode === 'direct') return 'linkPlaybackDirect'
+  if (networkMode === 'system') return 'linkPlaybackSystem'
+  throw new Error('URL 解析播放网络模式无效')
 }
 
 function formatTargetForLog(value: string): string {

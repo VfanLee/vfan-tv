@@ -1,5 +1,6 @@
 import type {
   SourceSubscriptionResult,
+  SubscriptionNetworkMode,
   VodSourceConfig,
   VodSourceExportResult,
   VodSourceFileResult,
@@ -57,8 +58,7 @@ import type {
 } from './vod'
 import type { UpdateCheckResult, UpdateEvent } from './update'
 
-export type SettingsSectionId =
-  'appearance' | 'network' | 'subscriptions' | 'vod-sources' | 'iptv' | 'data-management' | 'about'
+export type SettingsSectionId = 'appearance' | 'subscriptions' | 'vod-sources' | 'iptv' | 'data-management' | 'about'
 
 export type AppDataChangeDomain = 'vod-sources' | 'iptv-sources' | 'settings' | 'app-data'
 
@@ -113,7 +113,7 @@ export interface AppApi {
     confirmImport: (payload: unknown) => Promise<VodSourceImportResult>
     importFromFile: () => Promise<VodSourceFileResult>
     exportToFile: () => Promise<VodSourceExportResult>
-    syncSubscription: (subscriptionId: string) => Promise<SourceSubscriptionResult>
+    syncSubscription: (subscriptionId: string, mode: SubscriptionNetworkMode) => Promise<SourceSubscriptionResult>
     deleteSubscription: (subscriptionId: string) => Promise<void>
   }
   iptvSources: {

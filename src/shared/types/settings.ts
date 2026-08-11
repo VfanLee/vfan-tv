@@ -1,7 +1,7 @@
 export type ThemeMode = 'light' | 'dark' | 'system'
 export type NetworkRouteMode = 'direct' | 'system' | 'custom'
 export type NetworkProxyProtocol = 'http' | 'https' | 'socks5'
-export type NetworkRouteKey = 'content' | 'playback'
+export type NetworkRouteKey = 'iptv'
 
 export interface NetworkProxyProfile {
   id: string
@@ -18,8 +18,7 @@ export interface NetworkRouteSettings {
 
 export interface NetworkSettings {
   profiles: NetworkProxyProfile[]
-  content: NetworkRouteSettings
-  playback: NetworkRouteSettings
+  iptv: NetworkRouteSettings
 }
 
 export interface NetworkRouteStatus extends NetworkRouteSettings {

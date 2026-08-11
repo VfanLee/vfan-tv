@@ -1,5 +1,6 @@
 import type {
   SourceSubscriptionResult,
+  SubscriptionNetworkMode,
   VodSourceConfig,
   VodSourceExportResult,
   VodSourceFileResult,
@@ -59,8 +60,11 @@ export async function exportSourcesToFile(): Promise<VodSourceExportResult> {
   return requireRuntimeApi().sources.exportToFile()
 }
 
-export async function syncSourceSubscription(subscriptionId: string): Promise<SourceSubscriptionResult> {
-  return requireRuntimeApi().sources.syncSubscription(subscriptionId)
+export async function syncSourceSubscription(
+  subscriptionId: string,
+  mode: SubscriptionNetworkMode,
+): Promise<SourceSubscriptionResult> {
+  return requireRuntimeApi().sources.syncSubscription(subscriptionId, mode)
 }
 
 export async function deleteSourceSubscription(subscriptionId: string): Promise<void> {

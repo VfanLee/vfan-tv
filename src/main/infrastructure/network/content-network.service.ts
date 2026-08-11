@@ -17,11 +17,20 @@ const PROXY_TEST_URL = 'https://example.com/'
 const PROXY_TEST_TIMEOUT_MS = 8_000
 const DEFAULT_NETWORK_SETTINGS: NetworkSettings = {
   profiles: [],
-  content: { mode: 'direct' },
-  playback: { mode: 'direct' },
+  iptv: { mode: 'direct' },
 }
 
-export type ContentNetworkRoute = NetworkRouteKey | 'douban' | 'radio' | 'update'
+export type ContentNetworkRoute =
+  | NetworkRouteKey
+  | 'subscriptionDirect'
+  | 'subscriptionSystem'
+  | 'linkPlaybackDirect'
+  | 'linkPlaybackSystem'
+  | 'vod'
+  | 'vodPlayback'
+  | 'douban'
+  | 'radio'
+  | 'update'
 
 export interface ContentNetworkContext {
   readonly id: string
@@ -87,20 +96,24 @@ export class ContentNetworkService {
     }
   }
 
-  withContentContext<T>(callback: (context: ContentNetworkContext) => Promise<T>): Promise<T> {
-    return this.withContext('content', callback)
+  withIptvContext<T>(callback: (context: ContentNetworkContext) => Promise<T>): Promise<T> {
+    return this.withContext('iptv', callback)
   }
 
   withDoubanContext<T>(callback: (context: ContentNetworkContext) => Promise<T>): Promise<T> {
     return this.withContext('douban', callback)
   }
 
-  withRadioContext<T>(callback: (context: ContentNetworkContext) => Promise<T>): Promise<T> {
-    return this.withContext('radio', callback)
+  withVodContext<T>(callback: (context: ContentNetworkContext) => Promise<T>): Promise<T> {
+    return this.withContext('vod', callback)
   }
 
-  withPlaybackContext<T>(callback: (context: ContentNetworkContext) => Promise<T>): Promise<T> {
-    return this.withContext('playback', callback)
+  withVodPlaybackContext<T>(callback: (context: ContentNetworkContext) => Promise<T>): Promise<T> {
+    return this.withContext('vodPlayback', callback)
+  }
+
+  withRadioContext<T>(callback: (context: ContentNetworkContext) => Promise<T>): Promise<T> {
+    return this.withContext('radio', callback)
   }
 
   withUpdateContext<T>(callback: (context: ContentNetworkContext) => Promise<T>): Promise<T> {
@@ -153,8 +166,7 @@ export class ContentNetworkService {
       online: net.isOnline(),
       ipFamilies: [...families],
       routes: {
-        content: toRouteStatus(this.activeSettings.content, this.activeSettings),
-        playback: toRouteStatus(this.activeSettings.playback, this.activeSettings),
+        iptv: toRouteStatus(this.activeSettings.iptv, this.activeSettings),
       },
     }
   }
@@ -194,8 +206,16 @@ export class ContentNetworkService {
   }
 
   getRouteDescription(route: ContentNetworkRoute): string {
-    if (route === 'update') return '跟随系统'
-    if (route === 'douban' || route === 'radio') return '固定直连'
+    if (route === 'update' || route === 'subscriptionSystem' || route === 'linkPlaybackSystem') return '跟随系统'
+    if (
+      route === 'subscriptionDirect' ||
+      route === 'linkPlaybackDirect' ||
+      route === 'vod' ||
+      route === 'vodPlayback' ||
+      route === 'douban' ||
+      route === 'radio'
+    )
+      return '固定直连'
     const settings = this.activeSettings[route]
     if (settings.mode !== 'custom') return settings.mode === 'direct' ? '直连' : '跟随系统'
     const profile = this.activeSettings.profiles.find((item) => item.id === settings.activeProfileId)
@@ -226,7 +246,7 @@ export class ContentNetworkService {
   private async createRouteContexts(settings: NetworkSettings): Promise<ContentNetworkContext[]> {
     const contexts: ContentNetworkContext[] = []
     try {
-      for (const route of ['content', 'playback'] as const) {
+      for (const route of ['iptv'] as const) {
         contexts.push(await this.createContext(route, settings[route], settings))
       }
       return contexts
@@ -239,8 +259,14 @@ export class ContentNetworkService {
   private async createInitialContexts(settings: NetworkSettings): Promise<ContentNetworkContext[]> {
     const contexts = await this.createRouteContexts(settings)
     try {
+      contexts.push(await this.createFixedDirectContext('vod'))
+      contexts.push(await this.createFixedDirectContext('vodPlayback'))
       contexts.push(await this.createFixedDirectContext('douban'))
       contexts.push(await this.createFixedDirectContext('radio'))
+      contexts.push(await this.createLinkPlaybackContext('linkPlaybackDirect', 'direct'))
+      contexts.push(await this.createLinkPlaybackContext('linkPlaybackSystem', 'system'))
+      contexts.push(await this.createSubscriptionContext('subscriptionDirect', 'direct'))
+      contexts.push(await this.createSubscriptionContext('subscriptionSystem', 'system'))
       contexts.push(await this.createUpdateContext())
       return contexts
     } catch (error) {
@@ -249,7 +275,9 @@ export class ContentNetworkService {
     }
   }
 
-  private async createFixedDirectContext(route: 'douban' | 'radio'): Promise<ContentNetworkContext> {
+  private async createFixedDirectContext(
+    route: 'vod' | 'vodPlayback' | 'douban' | 'radio',
+  ): Promise<ContentNetworkContext> {
     const context: ContentNetworkContext = {
       id: randomUUID(),
       route,
@@ -267,6 +295,34 @@ export class ContentNetworkService {
       session: session.fromPartition('electron-updater', { cache: false }),
     }
     await context.session.setProxy({ mode: 'system' })
+    this.contexts.set(context.id, { context, active: false, references: 0 })
+    return context
+  }
+
+  private async createSubscriptionContext(
+    route: 'subscriptionDirect' | 'subscriptionSystem',
+    mode: 'direct' | 'system',
+  ): Promise<ContentNetworkContext> {
+    const context: ContentNetworkContext = {
+      id: randomUUID(),
+      route,
+      session: session.fromPartition(`vfan-${route}-${randomUUID()}`, { cache: false }),
+    }
+    await context.session.setProxy({ mode })
+    this.contexts.set(context.id, { context, active: false, references: 0 })
+    return context
+  }
+
+  private async createLinkPlaybackContext(
+    route: 'linkPlaybackDirect' | 'linkPlaybackSystem',
+    mode: 'direct' | 'system',
+  ): Promise<ContentNetworkContext> {
+    const context: ContentNetworkContext = {
+      id: randomUUID(),
+      route,
+      session: session.fromPartition(`vfan-${route}-${randomUUID()}`, { cache: true }),
+    }
+    await context.session.setProxy({ mode })
     this.contexts.set(context.id, { context, active: false, references: 0 })
     return context
   }
@@ -328,10 +384,15 @@ function formatProxyHost(host: string): string {
 }
 
 function getRouteLabel(route: ContentNetworkRoute): string {
-  if (route === 'content') return '普通内容'
+  if (route === 'iptv') return 'IPTV 直播'
+  if (route === 'subscriptionDirect') return '订阅直连更新'
+  if (route === 'subscriptionSystem') return '订阅系统代理更新'
+  if (route === 'linkPlaybackDirect') return 'URL 解析播放直连'
+  if (route === 'linkPlaybackSystem') return 'URL 解析播放系统代理'
+  if (route === 'vod') return '点播服务'
+  if (route === 'vodPlayback') return '点播播放'
   if (route === 'douban') return '豆瓣服务'
   if (route === 'radio') return '蜻蜓电台'
-  if (route === 'playback') return '视频播放'
   return '应用更新'
 }
 

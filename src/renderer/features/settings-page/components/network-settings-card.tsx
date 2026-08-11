@@ -9,7 +9,7 @@ import type {
   NetworkSettings,
   NetworkStatus,
 } from '@shared/types'
-import { SettingsCard } from '@renderer/components'
+import { SettingsSection } from '@renderer/components'
 import { Badge } from '@/ui/badge'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
@@ -38,14 +38,9 @@ const ROUTES: Array<{
   description: string
 }> = [
   {
-    key: 'content',
-    title: '普通内容网络',
-    description: '订阅、VOD/IPTV 目录、节目单、点播 API 和普通数据源图片。',
-  },
-  {
-    key: 'playback',
-    title: '视频播放网络',
-    description: '视频探测、IPTV 预览、视频播放、媒体分片和外挂音轨。',
+    key: 'iptv',
+    title: 'IPTV 直播网络',
+    description: 'IPTV 目录、节目单、台标、线路探测、直播墙预览、直播清单和媒体分片。',
   },
 ]
 
@@ -83,16 +78,20 @@ export function NetworkSettingsCard({ apiAvailable, network }: NetworkSettingsCa
     const profiles = network.settings.profiles.some((item) => item.id === profile.id)
       ? network.settings.profiles.map((item) => (item.id === profile.id ? profile : item))
       : [...network.settings.profiles, profile]
-    network.onTest('content', {
+    network.onTest('iptv', {
       ...network.settings,
       profiles,
-      content: { mode: 'custom', activeProfileId: profile.id },
+      iptv: { mode: 'custom', activeProfileId: profile.id },
     })
   }
 
   return (
     <>
-      <SettingsCard description="查看当前网络能力，并分别配置普通内容和视频播放使用的网络。" title="网络">
+      <SettingsSection
+        description="查看当前网络能力，并统一配置 IPTV 数据与播放使用的网络。"
+        id="iptv-network"
+        title="IPTV 网络"
+      >
         <div className="divide-border divide-y">
           <NetworkStatusSection
             disabled={!apiAvailable}
@@ -100,13 +99,13 @@ export function NetworkSettingsCard({ apiAvailable, network }: NetworkSettingsCa
             status={network.status}
             onRefresh={network.onRefreshStatus}
           />
-          <section className="space-y-4 px-5 py-5">
+          <section className="space-y-4 py-6">
             <SectionHeading
-              description="两类可配置请求相互独立，共用下方代理配置；豆瓣和蜻蜓服务固定直连。"
+              description="所有 IPTV 数据和播放请求共用同一个网络 Session；VOD（含播放）、豆瓣和蜻蜓固定直连。"
               icon={Router}
               title="请求路由"
             />
-            <div className="grid gap-4 xl:grid-cols-2">
+            <div className="grid gap-4">
               {ROUTES.map((route) => (
                 <NetworkRouteCard
                   disabled={disabled}
@@ -122,10 +121,10 @@ export function NetworkSettingsCard({ apiAvailable, network }: NetworkSettingsCa
               ))}
             </div>
           </section>
-          <section className="space-y-4 px-5 py-5">
+          <section className="space-y-4 py-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <SectionHeading
-                description="供普通内容和视频播放网络共享，支持 HTTP、HTTPS 和 SOCKS5，不支持认证。"
+                description="专供 IPTV 直播网络使用，支持 HTTP、HTTPS 和 SOCKS5，不支持认证。"
                 icon={Network}
                 title="代理配置"
               />
@@ -148,12 +147,12 @@ export function NetworkSettingsCard({ apiAvailable, network }: NetworkSettingsCa
             />
           </section>
         </div>
-      </SettingsCard>
+      </SettingsSection>
       {profileDialog !== undefined ? (
         <NetworkProfileDialog
-          isTesting={network.testingRoute === 'content'}
+          isTesting={network.testingRoute === 'iptv'}
           profile={profileDialog ?? undefined}
-          testResult={network.testResults.content}
+          testResult={network.testResults.iptv}
           onClose={() => setProfileDialog(undefined)}
           onSave={saveProfile}
           onTest={testProfile}
@@ -185,64 +184,67 @@ function NetworkRouteCard({
   const value = settings[route.key]
   const activeProfile = profiles.find((profile) => profile.id === value.activeProfileId)
   return (
-    <div className="border-border bg-background space-y-4 rounded-xl border p-4">
-      <div>
+    <div className="grid gap-5 py-1 lg:grid-cols-[minmax(220px,0.75fr)_minmax(320px,1fr)] lg:items-start">
+      <div className="pt-1">
         <div className="text-foreground text-sm font-semibold">{route.title}</div>
-        <div className="text-muted-foreground mt-1 min-h-10 text-xs leading-5">{route.description}</div>
+        <div className="text-muted-foreground mt-1 text-xs leading-5">{route.description}</div>
       </div>
-      <RadioGroup
-        className="grid gap-2"
-        disabled={disabled}
-        value={value.mode}
-        onValueChange={(mode) => onChange(mode as NetworkRouteMode)}
-      >
-        {(
-          [
-            ['direct', '直连'],
-            ['system', '跟随系统'],
-            ['custom', '自定义代理'],
-          ] as const
-        ).map(([mode, label]) => (
-          <label
-            className={cn(
-              'border-border flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm',
-              value.mode === mode && 'border-primary bg-primary/5 ring-primary/15 ring-1',
-            )}
-            key={mode}
-          >
-            <RadioGroupItem value={mode} />
-            {label}
-          </label>
-        ))}
-      </RadioGroup>
-      {value.mode === 'custom' ? (
-        <Select
-          disabled={disabled || profiles.length === 0}
-          value={value.activeProfileId}
-          onValueChange={(profileId) => onChange('custom', profileId)}
+      <div className="grid gap-3">
+        <RadioGroup
+          className="grid grid-cols-3 gap-2"
+          disabled={disabled}
+          value={value.mode}
+          onValueChange={(mode) => onChange(mode as NetworkRouteMode)}
         >
-          <SelectTrigger className="w-full">
-            <SelectValue placeholder="选择代理配置" />
-          </SelectTrigger>
-          <SelectContent>
-            {profiles.map((profile) => (
-              <SelectItem key={profile.id} value={profile.id}>
-                {profile.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      ) : null}
-      <NetworkTestResult result={result} />
-      <Button
-        className="w-full"
-        disabled={disabled || isTesting || (value.mode === 'custom' && !activeProfile)}
-        variant="outline"
-        onClick={onTest}
-      >
-        {isTesting ? <RefreshCw className="animate-spin" /> : <Gauge />}
-        {isTesting ? '测试中' : '测试网络'}
-      </Button>
+          {(
+            [
+              ['direct', '直连'],
+              ['system', '跟随系统'],
+              ['custom', '自定义代理'],
+            ] as const
+          ).map(([mode, label]) => (
+            <label
+              className={cn(
+                'border-border flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm',
+                value.mode === mode && 'border-primary bg-primary/5 text-primary ring-primary/15 ring-1',
+              )}
+              key={mode}
+            >
+              <RadioGroupItem value={mode} />
+              {label}
+            </label>
+          ))}
+        </RadioGroup>
+        {value.mode === 'custom' ? (
+          <Select
+            disabled={disabled || profiles.length === 0}
+            value={value.activeProfileId}
+            onValueChange={(profileId) => onChange('custom', profileId)}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="选择代理配置" />
+            </SelectTrigger>
+            <SelectContent>
+              {profiles.map((profile) => (
+                <SelectItem key={profile.id} value={profile.id}>
+                  {profile.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
+        <NetworkTestResult result={result} />
+        <div>
+          <Button
+            disabled={disabled || isTesting || (value.mode === 'custom' && !activeProfile)}
+            variant="outline"
+            onClick={onTest}
+          >
+            {isTesting ? <RefreshCw className="animate-spin" /> : <Gauge />}
+            {isTesting ? '测试中' : '测试网络'}
+          </Button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -262,13 +264,11 @@ function ProxyProfileList({
 }): React.JSX.Element {
   if (profiles.length === 0) {
     return (
-      <div className="border-border text-muted-foreground rounded-xl border px-4 py-6 text-center text-sm">
-        尚未添加代理配置
-      </div>
+      <div className="border-border text-muted-foreground border-y px-4 py-6 text-center text-sm">尚未添加代理配置</div>
     )
   }
   return (
-    <div className="border-border divide-border divide-y overflow-hidden rounded-xl border">
+    <div className="border-border divide-border divide-y border-y">
       {profiles.map((profile) => {
         const usedBy = ROUTES.filter(
           ({ key }) => settings[key].mode === 'custom' && settings[key].activeProfileId === profile.id,
@@ -329,8 +329,8 @@ function NetworkStatusSection({
 }): React.JSX.Element {
   const familyLabel = status?.ipFamilies.length ? status.ipFamilies.map((item) => item.toUpperCase()).join(' / ') : '—'
   return (
-    <section className="px-5 py-5">
-      <div className="bg-muted/45 grid gap-4 rounded-xl p-4 lg:grid-cols-[1fr_repeat(4,auto)] lg:items-center">
+    <section className="pb-6">
+      <div className="bg-muted/35 grid gap-4 rounded-lg px-4 py-3.5 lg:grid-cols-[1fr_repeat(4,auto)] lg:items-center">
         <div className="flex min-w-0 items-center gap-3">
           <span
             className={cn(
@@ -381,7 +381,7 @@ function SectionHeading({
 }): React.JSX.Element {
   return (
     <div className="flex items-start gap-3">
-      <span className="bg-primary/10 text-primary flex size-9 shrink-0 items-center justify-center rounded-lg">
+      <span className="text-primary flex size-7 shrink-0 items-center justify-center">
         <Icon className="size-4" />
       </span>
       <div>

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { MonitorPlay, Video } from 'lucide-react'
-import { ConfirmDialog, LayoutPreferencesSettings } from '@renderer/components'
+import { ConfirmDialog, LayoutPreferencesSettings, SettingsPageLayout } from '@renderer/components'
 import { isApiAvailable, onSettingsSectionChange } from '@renderer/platform/api'
 import { AboutSettingsCard } from './components/about-settings-card'
 import { DataManagementCard, SubscriptionSettingsCard } from './components/settings-cards'
@@ -18,13 +18,22 @@ import { useIptvSources } from './hooks/use-iptv-sources'
 import { useNetworkSettings } from './hooks/use-network-settings'
 import { useIptvSettings } from './hooks/use-iptv-settings'
 import { useVodSources } from './hooks/use-vod-sources'
-import { settingsSections, type SettingsSectionId } from './settings-sections'
+import { resolveSettingsSection, type SettingsSectionId } from './settings-sections'
 import type { ConfirmState, IptvSourceDialogState, SourceDialogState } from './types'
 import { getConfirmDescription, getConfirmTitle } from './utils'
+import { cn } from '@/utils'
+
+type IptvPageSectionId = 'iptv-sources' | 'iptv-epg' | 'iptv-network'
+
+const iptvPageSections: Array<{ id: IptvPageSectionId; label: string }> = [
+  { id: 'iptv-sources', label: '源' },
+  { id: 'iptv-epg', label: 'EPG' },
+  { id: 'iptv-network', label: '网络' },
+]
 
 // 设置页负责协调各设置领域 hook；具体数据读写仍由对应 hook 和 main IPC 完成。
 export function SettingsPage(): React.JSX.Element {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const apiAvailable = isApiAvailable()
   const vod = useVodSources(apiAvailable)
   const iptv = useIptvSources(apiAvailable)
@@ -46,80 +55,32 @@ export function SettingsPage(): React.JSX.Element {
   const [confirmState, setConfirmState] = useState<ConfirmState>()
   const [isExportDialogOpen, setIsExportDialogOpen] = useState(false)
   const [isClearDataDialogOpen, setIsClearDataDialogOpen] = useState(false)
-  const [activeSection, setActiveSection] = useState<SettingsSectionId>('appearance')
-  const isNavigatingRef = useRef(false)
-  const navigationCleanupRef = useRef<() => void>(() => undefined)
-  const selectSectionRef = useRef<(sectionId: SettingsSectionId) => void>(() => undefined)
+  const [activeIptvPageSection, setActiveIptvPageSection] = useState<IptvPageSectionId>('iptv-sources')
+  const pageRef = useRef<HTMLDivElement>(null)
+  const rawSection = searchParams.get('section')
+  const activeSection = resolveSettingsSection(rawSection) ?? 'appearance'
+
+  const selectSection = useCallback(
+    (sectionId: SettingsSectionId): void => {
+      const nextParams = new URLSearchParams(searchParams)
+      nextParams.set('section', sectionId)
+      setSearchParams(nextParams, { replace: true })
+      pageRef.current?.closest('main')?.scrollTo({ top: 0, behavior: 'auto' })
+    },
+    [searchParams, setSearchParams],
+  )
 
   useEffect(() => {
-    const elements = settingsSections
-      .map((section) => document.getElementById(section.id))
-      .filter((element): element is HTMLElement => Boolean(element))
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (isNavigatingRef.current) return
-        const visibleEntry = entries
-          .filter((entry) => entry.isIntersecting)
-          .sort((left, right) => left.boundingClientRect.top - right.boundingClientRect.top)[0]
-        if (visibleEntry) setActiveSection(visibleEntry.target.id as SettingsSectionId)
-      },
-      { rootMargin: '-32px 0px -65% 0px', threshold: 0 },
-    )
-    elements.forEach((element) => observer.observe(element))
-    return () => {
-      observer.disconnect()
-      navigationCleanupRef.current()
-    }
-  }, [])
-
-  const selectSection = useCallback((sectionId: SettingsSectionId): void => {
-    navigationCleanupRef.current()
-    isNavigatingRef.current = false
-    setActiveSection(sectionId)
-    const target = document.getElementById(sectionId)
-    if (!target) return
-
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    if (reduceMotion) {
-      target.scrollIntoView({ behavior: 'auto', block: 'start' })
-      return
-    }
-
-    isNavigatingRef.current = true
-    const scrollContainer = target.closest('main')
-    const finishNavigation = (): void => {
-      isNavigatingRef.current = false
-      setActiveSection(sectionId)
-      cleanup()
-    }
-    const cleanup = (): void => {
-      scrollContainer?.removeEventListener('scrollend', finishNavigation)
-      clearTimeout(fallbackTimer)
-    }
-
-    scrollContainer?.addEventListener('scrollend', finishNavigation, { once: true })
-    const fallbackTimer = setTimeout(finishNavigation, 2_000)
-    navigationCleanupRef.current = cleanup
-    target.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [])
-
-  useEffect(() => {
-    selectSectionRef.current = selectSection
-  }, [selectSection])
-
-  useEffect(() => {
-    const section = searchParams.get('section') as SettingsSectionId | null
-    if (!section || !settingsSections.some((item) => item.id === section)) return
-    const frame = window.requestAnimationFrame(() => selectSectionRef.current(section))
-    return () => window.cancelAnimationFrame(frame)
-  }, [searchParams])
+    if (rawSection !== activeSection) selectSection(activeSection)
+  }, [activeSection, rawSection, selectSection])
 
   useEffect(
     () =>
       onSettingsSectionChange((section) => {
-        if (settingsSections.some((item) => item.id === section)) selectSectionRef.current(section)
+        const resolvedSection = resolveSettingsSection(section)
+        if (resolvedSection) selectSection(resolvedSection)
       }),
-    [],
+    [selectSection],
   )
 
   const confirm = async (): Promise<void> => {
@@ -135,139 +96,198 @@ export function SettingsPage(): React.JSX.Element {
     setConfirmState(undefined)
   }
 
+  const selectIptvPageSection = (sectionId: IptvPageSectionId): void => {
+    setActiveIptvPageSection(sectionId)
+  }
+
   return (
-    <div className="min-h-full px-4 py-5 sm:px-6 sm:py-6 xl:px-8 xl:py-8">
+    <div className="min-h-full px-4 py-5 sm:px-6 sm:py-6 xl:px-8 xl:py-8" ref={pageRef}>
       <div className="grid min-w-0 grid-cols-[132px_minmax(0,1fr)] gap-4 sm:grid-cols-[144px_minmax(0,1fr)] sm:gap-5">
         <SettingsSidebar activeSection={activeSection} onSelect={selectSection} />
 
-        <div className="grid min-w-0 gap-5 [&>section]:min-w-0">
-          <section id="appearance" className="scroll-mt-8">
-            <LayoutPreferencesSettings />
-          </section>
+        <div className="min-w-0 pb-8">
+          {activeSection === 'appearance' ? (
+            <SettingsPageLayout description="调整首页内容风格与主导航显示。" title="外观">
+              <LayoutPreferencesSettings />
+            </SettingsPageLayout>
+          ) : null}
 
-          <section id="network" className="scroll-mt-8">
-            <NetworkSettingsCard
-              apiAvailable={apiAvailable}
-              network={{
-                settings: network.settings,
-                status: network.status,
-                testResults: network.testResults,
-                isLoading: network.isLoading,
-                isSaving: network.isSaving,
-                testingRoute: network.testingRoute,
-                onRefreshStatus: () => void network.refreshStatus(),
-                onSave: (settings) => void network.save(settings),
-                onTest: (route, settings) => void network.test(route, settings),
-              }}
-            />
-          </section>
-
-          <section id="subscriptions" className="scroll-mt-8">
-            <SubscriptionSettingsCard
-              apiAvailable={apiAvailable}
-              isSyncing={general.isSyncingSubscription}
-              subscriptions={general.subscriptions}
-              activeSubscriptionId={general.activeSubscriptionId}
-              onAdd={(url) => void general.addSubscription(url)}
-              onDelete={(subscription) => setConfirmState({ type: 'deleteSubscription', subscription })}
-              onSelect={(subscriptionId) => setConfirmState({ type: 'selectSubscription', subscriptionId })}
-              onSync={() => void general.syncSubscription()}
-            />
-          </section>
-
-          <section id="vod-sources" className="scroll-mt-8">
-            <SourceTableCard
-              addText="添加点播源"
-              allSelected={vod.allSelected}
-              apiAvailable={apiAvailable}
-              description="管理应用的点播源。"
-              emptyIcon={Video}
-              emptyText="还没有点播源"
-              enabledCount={vod.enabledCount}
-              heightClassName="max-h-[min(60vh,460px)]"
-              isBatchUpdating={vod.isBatchUpdating}
-              isClearing={vod.isClearing}
-              isReordering={vod.isReordering}
-              isTestingAll={vod.isTestingAll}
-              selectedSourceIds={vod.selectedSourceIds}
-              sources={vod.sources}
-              speedResults={vod.speedResults}
-              title="点播源"
-              onAdd={() => setDialog({ mode: 'create' })}
-              onBatchSetDisabled={(disabled) => void vod.batchSetDisabled(disabled)}
-              onClear={() => setConfirmState({ type: 'clearSources' })}
-              onDelete={(source) => setConfirmState({ type: 'deleteSource', source })}
-              onEdit={(source) => setDialog({ mode: 'edit', source })}
-              onExport={() => void vod.exportItems()}
-              onImport={() => void vod.importItems()}
-              onMoveToEdge={(sourceId, edge) => void vod.moveToEdge(sourceId, edge)}
-              onSwitchBackup={(source, backupUrl) => vod.switchBackup(source, backupUrl)}
-              onTestAll={() => void vod.testAll()}
-              onTestSingle={(sourceId) => void vod.testSingle(sourceId)}
-              onSetDisabled={(source, disabled) => void vod.setDisabled(source, disabled)}
-              onToggleAll={vod.toggleAll}
-              onToggleSelection={vod.toggleSelection}
-            />
-          </section>
-
-          <section id="iptv" className="scroll-mt-8">
-            <div className="grid gap-5">
-              <IptvEpgSettingsCard
-                key={`${iptvSettings.epg.mode}:${iptvSettings.epg.url ?? ''}:${iptvSettings.epg.lastTest.testedAt ?? 0}`}
+          {activeSection === 'subscriptions' ? (
+            <SettingsPageLayout description="添加、切换并通过指定网络更新远程订阅。" title="订阅源">
+              <SubscriptionSettingsCard
                 apiAvailable={apiAvailable}
-                isSaving={iptvSettings.isSavingEpg}
-                isTesting={iptvSettings.isTesting}
-                value={iptvSettings.epg}
-                onSave={(value) => void iptvSettings.saveEpg(value)}
-                onTest={(value) => void iptvSettings.test(value)}
+                isSyncing={general.isSyncingSubscription}
+                syncingMode={general.syncingSubscriptionMode}
+                subscriptions={general.subscriptions}
+                activeSubscriptionId={general.activeSubscriptionId}
+                onAdd={(url) => void general.addSubscription(url)}
+                onDelete={(subscription) => setConfirmState({ type: 'deleteSubscription', subscription })}
+                onSelect={(subscriptionId) => setConfirmState({ type: 'selectSubscription', subscriptionId })}
+                onSync={(mode) => void general.syncSubscription(mode)}
               />
+            </SettingsPageLayout>
+          ) : null}
+
+          {activeSection === 'vod-sources' ? (
+            <SettingsPageLayout description="管理点播接口、备用地址与可用性。" title="点播源">
               <SourceTableCard
-                addText="添加 IPTV 源"
-                allSelected={iptv.allSelected}
+                addText="添加点播源"
+                allSelected={vod.allSelected}
                 apiAvailable={apiAvailable}
-                description="管理频道列表和每个源的媒体请求配置。"
-                emptyIcon={MonitorPlay}
-                emptyText="还没有 IPTV 源"
-                enabledCount={iptv.enabledCount}
-                heightClassName="max-h-[min(55vh,360px)]"
-                isBatchUpdating={iptv.isBatchUpdating}
-                isClearing={iptv.isClearing}
-                isReordering={iptv.isReordering}
-                selectedSourceIds={iptv.selectedSourceIds}
-                sources={iptv.sources}
-                title="IPTV 源"
-                onAdd={() => setIptvSourceDialog({ mode: 'create' })}
-                onBatchSetDisabled={(disabled) => void iptv.batchSetDisabled(disabled)}
-                onClear={() => setConfirmState({ type: 'clearIptvSources' })}
-                onDelete={(source) => setConfirmState({ type: 'deleteIptvSource', source })}
-                onEdit={(source) => setIptvSourceDialog({ mode: 'edit', source })}
-                onExport={() => void iptv.exportItems()}
-                onImport={() => void iptv.importItems()}
-                onMoveToEdge={(sourceId, edge) => void iptv.moveToEdge(sourceId, edge)}
-                onSetDisabled={(source, disabled) => void iptv.setDisabled(source, disabled)}
-                onToggleAll={iptv.toggleAll}
-                onToggleSelection={iptv.toggleSelection}
+                description="管理应用的点播源。"
+                emptyIcon={Video}
+                emptyText="还没有点播源"
+                enabledCount={vod.enabledCount}
+                heightClassName="max-h-[min(60vh,460px)]"
+                isBatchUpdating={vod.isBatchUpdating}
+                isClearing={vod.isClearing}
+                isReordering={vod.isReordering}
+                isTestingAll={vod.isTestingAll}
+                selectedSourceIds={vod.selectedSourceIds}
+                sources={vod.sources}
+                speedResults={vod.speedResults}
+                title="点播源列表"
+                onAdd={() => setDialog({ mode: 'create' })}
+                onBatchSetDisabled={(disabled) => void vod.batchSetDisabled(disabled)}
+                onClear={() => setConfirmState({ type: 'clearSources' })}
+                onDelete={(source) => setConfirmState({ type: 'deleteSource', source })}
+                onEdit={(source) => setDialog({ mode: 'edit', source })}
+                onExport={() => void vod.exportItems()}
+                onImport={() => void vod.importItems()}
+                onMoveToEdge={(sourceId, edge) => void vod.moveToEdge(sourceId, edge)}
+                onSwitchBackup={(source, backupUrl) => vod.switchBackup(source, backupUrl)}
+                onTestAll={() => void vod.testAll()}
+                onTestSingle={(sourceId) => void vod.testSingle(sourceId)}
+                onSetDisabled={(source, disabled) => void vod.setDisabled(source, disabled)}
+                onToggleAll={vod.toggleAll}
+                onToggleSelection={vod.toggleSelection}
               />
-            </div>
-          </section>
+            </SettingsPageLayout>
+          ) : null}
 
-          <section id="data-management" className="scroll-mt-8">
-            <DataManagementCard
-              apiAvailable={apiAvailable}
-              isExporting={appData.isExporting}
-              isClearingData={appData.isClearingData}
-              isImporting={appData.isImporting}
-              isRestoringFactory={appData.isRestoringFactory}
-              onExport={() => setIsExportDialogOpen(true)}
-              onClearData={() => setIsClearDataDialogOpen(true)}
-              onImport={() => setConfirmState({ type: 'importAppData' })}
-              onRestoreFactory={() => setConfirmState({ type: 'restoreFactorySettings' })}
-            />
-          </section>
+          {activeSection === 'iptv' ? (
+            <SettingsPageLayout description="配置和管理 IPTV 源、EPG 与网络设置。" title="IPTV">
+              <div
+                aria-label="IPTV 设置模块"
+                className="border-border mb-8 flex h-11 items-end gap-2 border-b"
+                role="tablist"
+              >
+                {iptvPageSections.map((section) => (
+                  <button
+                    aria-controls={`${section.id}-panel`}
+                    aria-selected={activeIptvPageSection === section.id}
+                    className={cn(
+                      'focus-visible:ring-ring relative h-11 px-3 text-sm font-medium transition-colors outline-none focus-visible:ring-2',
+                      activeIptvPageSection === section.id
+                        ? 'text-primary after:bg-primary after:absolute after:right-2 after:bottom-0 after:left-2 after:h-0.5 after:rounded-full'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                    id={`${section.id}-tab`}
+                    key={section.id}
+                    role="tab"
+                    type="button"
+                    onClick={() => selectIptvPageSection(section.id)}
+                  >
+                    {section.label}
+                  </button>
+                ))}
+              </div>
+              <div
+                aria-labelledby="iptv-sources-tab"
+                hidden={activeIptvPageSection !== 'iptv-sources'}
+                id="iptv-sources-panel"
+                role="tabpanel"
+              >
+                <SourceTableCard
+                  addText="添加 IPTV 源"
+                  allSelected={iptv.allSelected}
+                  apiAvailable={apiAvailable}
+                  description="管理频道列表和每个源的媒体请求配置。"
+                  emptyIcon={MonitorPlay}
+                  emptyText="还没有 IPTV 源"
+                  enabledCount={iptv.enabledCount}
+                  heightClassName="max-h-[min(55vh,360px)]"
+                  isBatchUpdating={iptv.isBatchUpdating}
+                  isClearing={iptv.isClearing}
+                  isReordering={iptv.isReordering}
+                  sectionId="iptv-sources"
+                  selectedSourceIds={iptv.selectedSourceIds}
+                  sources={iptv.sources}
+                  title="IPTV 源"
+                  onAdd={() => setIptvSourceDialog({ mode: 'create' })}
+                  onBatchSetDisabled={(disabled) => void iptv.batchSetDisabled(disabled)}
+                  onClear={() => setConfirmState({ type: 'clearIptvSources' })}
+                  onDelete={(source) => setConfirmState({ type: 'deleteIptvSource', source })}
+                  onEdit={(source) => setIptvSourceDialog({ mode: 'edit', source })}
+                  onExport={() => void iptv.exportItems()}
+                  onImport={() => void iptv.importItems()}
+                  onMoveToEdge={(sourceId, edge) => void iptv.moveToEdge(sourceId, edge)}
+                  onSetDisabled={(source, disabled) => void iptv.setDisabled(source, disabled)}
+                  onToggleAll={iptv.toggleAll}
+                  onToggleSelection={iptv.toggleSelection}
+                />
+              </div>
+              <div
+                aria-labelledby="iptv-epg-tab"
+                hidden={activeIptvPageSection !== 'iptv-epg'}
+                id="iptv-epg-panel"
+                role="tabpanel"
+              >
+                <IptvEpgSettingsCard
+                  key={`${iptvSettings.epg.mode}:${iptvSettings.epg.url ?? ''}:${iptvSettings.epg.lastTest.testedAt ?? 0}`}
+                  apiAvailable={apiAvailable}
+                  isSaving={iptvSettings.isSavingEpg}
+                  isTesting={iptvSettings.isTesting}
+                  value={iptvSettings.epg}
+                  onSave={(value) => void iptvSettings.saveEpg(value)}
+                  onTest={(value) => void iptvSettings.test(value)}
+                />
+              </div>
+              <div
+                aria-labelledby="iptv-network-tab"
+                hidden={activeIptvPageSection !== 'iptv-network'}
+                id="iptv-network-panel"
+                role="tabpanel"
+              >
+                <NetworkSettingsCard
+                  apiAvailable={apiAvailable}
+                  network={{
+                    settings: network.settings,
+                    status: network.status,
+                    testResults: network.testResults,
+                    isLoading: network.isLoading,
+                    isSaving: network.isSaving,
+                    testingRoute: network.testingRoute,
+                    onRefreshStatus: () => void network.refreshStatus(),
+                    onSave: (settings) => void network.save(settings),
+                    onTest: (route, settings) => void network.test(route, settings),
+                  }}
+                />
+              </div>
+            </SettingsPageLayout>
+          ) : null}
 
-          <section id="about" className="scroll-mt-8">
-            <AboutSettingsCard />
-          </section>
+          {activeSection === 'data-management' ? (
+            <SettingsPageLayout description="备份、恢复或清理应用中的本地数据。" title="数据管理">
+              <DataManagementCard
+                apiAvailable={apiAvailable}
+                isExporting={appData.isExporting}
+                isClearingData={appData.isClearingData}
+                isImporting={appData.isImporting}
+                isRestoringFactory={appData.isRestoringFactory}
+                onExport={() => setIsExportDialogOpen(true)}
+                onClearData={() => setIsClearDataDialogOpen(true)}
+                onImport={() => setConfirmState({ type: 'importAppData' })}
+                onRestoreFactory={() => setConfirmState({ type: 'restoreFactorySettings' })}
+              />
+            </SettingsPageLayout>
+          ) : null}
+
+          {activeSection === 'about' ? (
+            <SettingsPageLayout description="查看应用版本、开源信息与项目入口。" title="关于">
+              <AboutSettingsCard />
+            </SettingsPageLayout>
+          ) : null}
         </div>
       </div>
 

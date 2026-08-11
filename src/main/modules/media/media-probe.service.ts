@@ -11,7 +11,7 @@ export async function probeMediaSource(
   network: ContentNetworkService,
   source?: VodSourceConfig,
 ): Promise<MediaProbeResult> {
-  return network.withPlaybackContext(async (context) => {
+  return network.withVodPlaybackContext(async (context) => {
     const startedAt = performance.now()
     try {
       const targetUrl = new URL(input.url)

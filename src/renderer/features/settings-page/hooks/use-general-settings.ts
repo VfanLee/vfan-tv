@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import type { SubscriptionConfig } from '@shared/types'
+import type { SubscriptionConfig, SubscriptionNetworkMode } from '@shared/types'
 import { deleteSourceSubscription, getSettings, syncSourceSubscription, updateSettings } from '@renderer/platform/api'
 
 interface GeneralSettingsOptions {
@@ -11,13 +11,14 @@ interface GeneralSettingsOptions {
 
 export interface GeneralSettingsState {
   isSyncingSubscription: boolean
+  syncingSubscriptionMode?: SubscriptionNetworkMode
   subscriptions: SubscriptionConfig[]
   activeSubscriptionId?: string
   resetSubscription: () => void
   addSubscription: (url: string) => Promise<void>
   deleteSubscription: (id: string) => Promise<void>
   selectSubscription: (id: string) => Promise<void>
-  syncSubscription: () => Promise<void>
+  syncSubscription: (mode: SubscriptionNetworkMode) => Promise<void>
 }
 
 export function useGeneralSettings({
@@ -27,7 +28,8 @@ export function useGeneralSettings({
 }: GeneralSettingsOptions): GeneralSettingsState {
   const [subscriptions, setSubscriptions] = useState<SubscriptionConfig[]>([])
   const [activeSubscriptionId, setActiveSubscriptionId] = useState<string>()
-  const [isSyncingSubscription, setIsSyncingSubscription] = useState(false)
+  const [syncingSubscriptionMode, setSyncingSubscriptionMode] = useState<SubscriptionNetworkMode>()
+  const isSyncingSubscription = syncingSubscriptionMode !== undefined
 
   useEffect(() => {
     let active = true
@@ -41,31 +43,33 @@ export function useGeneralSettings({
     }
   }, [])
 
-  const syncSubscription = async (): Promise<void> => {
+  const syncSubscription = async (mode: SubscriptionNetworkMode): Promise<void> => {
     if (!apiAvailable || !activeSubscriptionId) return
-    await syncSubscriptionById(activeSubscriptionId)
+    await syncSubscriptionById(activeSubscriptionId, mode)
   }
 
-  const syncSubscriptionById = async (subscriptionId: string): Promise<void> => {
+  const syncSubscriptionById = async (subscriptionId: string, mode: SubscriptionNetworkMode): Promise<void> => {
     if (!apiAvailable || !subscriptions.some((item) => item.id === subscriptionId)) return
-    setIsSyncingSubscription(true)
+    setSyncingSubscriptionMode(mode)
     try {
-      const result = await syncSourceSubscription(subscriptionId)
+      const result = await syncSourceSubscription(subscriptionId, mode)
       await Promise.all([refreshVodSources(), refreshIptvSources()])
-      toast.success('订阅同步完成', {
-        description: `已更新订阅 VOD 源和 IPTV 源：VOD ${result.vod.created + result.vod.updated} 个，IPTV ${result.iptv.created + result.iptv.updated} 个。`,
+      toast.success(`订阅${getSubscriptionNetworkLabel(mode)}更新完成`, {
+        description: `网络=${getSubscriptionNetworkDescription(mode)}；已更新 VOD ${result.vod.created + result.vod.updated} 个，IPTV ${result.iptv.created + result.iptv.updated} 个。`,
       })
     } catch (error) {
-      toast.error('订阅同步失败', { description: error instanceof Error ? error.message : String(error) })
+      toast.error(`订阅${getSubscriptionNetworkLabel(mode)}更新失败`, {
+        description: `网络=${getSubscriptionNetworkDescription(mode)}；${error instanceof Error ? error.message : String(error)}`,
+      })
     } finally {
-      setIsSyncingSubscription(false)
+      setSyncingSubscriptionMode(undefined)
     }
   }
 
   const addSubscription = async (rawUrl: string): Promise<void> => {
     const url = rawUrl.trim()
     if (!apiAvailable || !url) return
-    setIsSyncingSubscription(true)
+    setSyncingSubscriptionMode('direct')
     try {
       const parsedUrl = new URL(url)
       if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('订阅地址仅支持 HTTP 或 HTTPS')
@@ -75,7 +79,7 @@ export function useGeneralSettings({
       await updateSettings({ subscriptions: next, activeSubscriptionId: item.id })
       let result: Awaited<ReturnType<typeof syncSourceSubscription>>
       try {
-        result = await syncSourceSubscription(item.id)
+        result = await syncSourceSubscription(item.id, 'direct')
       } catch (error) {
         await updateSettings({ subscriptions, activeSubscriptionId })
         throw error
@@ -84,29 +88,33 @@ export function useGeneralSettings({
       setActiveSubscriptionId(item.id)
       await Promise.all([refreshVodSources(), refreshIptvSources()])
       toast.success('订阅源已添加', {
-        description: `已更新订阅 VOD 源和 IPTV 源：VOD ${result.vod.created + result.vod.updated} 个，IPTV ${result.iptv.created + result.iptv.updated} 个。`,
+        description: `网络=固定直连；已更新 VOD ${result.vod.created + result.vod.updated} 个，IPTV ${result.iptv.created + result.iptv.updated} 个。`,
       })
     } catch (error) {
-      toast.error('添加失败', { description: error instanceof Error ? error.message : '订阅地址无效' })
+      toast.error('添加失败', {
+        description: `网络=固定直连；${error instanceof Error ? error.message : '订阅地址无效'}`,
+      })
     } finally {
-      setIsSyncingSubscription(false)
+      setSyncingSubscriptionMode(undefined)
     }
   }
 
   const selectSubscription = async (id: string): Promise<void> => {
     if (!apiAvailable || id === activeSubscriptionId || !subscriptions.some((item) => item.id === id)) return
-    setIsSyncingSubscription(true)
+    setSyncingSubscriptionMode('direct')
     try {
-      const result = await syncSourceSubscription(id)
+      const result = await syncSourceSubscription(id, 'direct')
       setActiveSubscriptionId(id)
       await Promise.all([refreshVodSources(), refreshIptvSources()])
       toast.success('订阅源已切换', {
-        description: `已更新订阅 VOD 源和 IPTV 源：VOD ${result.vod.created + result.vod.updated} 个，IPTV ${result.iptv.created + result.iptv.updated} 个。`,
+        description: `网络=固定直连；已更新 VOD ${result.vod.created + result.vod.updated} 个，IPTV ${result.iptv.created + result.iptv.updated} 个。`,
       })
     } catch (error) {
-      toast.error('切换失败', { description: error instanceof Error ? error.message : String(error) })
+      toast.error('切换失败', {
+        description: `网络=固定直连；${error instanceof Error ? error.message : String(error)}`,
+      })
     } finally {
-      setIsSyncingSubscription(false)
+      setSyncingSubscriptionMode(undefined)
     }
   }
 
@@ -122,6 +130,7 @@ export function useGeneralSettings({
 
   return {
     isSyncingSubscription,
+    syncingSubscriptionMode,
     subscriptions,
     activeSubscriptionId,
     resetSubscription: () => {
@@ -133,4 +142,12 @@ export function useGeneralSettings({
     selectSubscription,
     syncSubscription,
   }
+}
+
+function getSubscriptionNetworkLabel(mode: SubscriptionNetworkMode): string {
+  return mode === 'direct' ? '直连' : '系统代理'
+}
+
+function getSubscriptionNetworkDescription(mode: SubscriptionNetworkMode): string {
+  return mode === 'direct' ? '固定直连' : '跟随系统'
 }

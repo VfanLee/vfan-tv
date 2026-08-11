@@ -1,6 +1,6 @@
 import type { BrowserWindow } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc'
-import type { SearchEvent } from '@shared/types'
+import type { SearchEvent, SubscriptionNetworkMode } from '@shared/types'
 import { createDatabase } from '../infrastructure/database/client'
 import { HttpClient } from '../infrastructure/http/http-client'
 import { ContentNetworkService } from '../infrastructure/network/content-network.service'
@@ -60,7 +60,7 @@ export interface ApplicationContext {
     radio: RadioService
   }
   utilities: {
-    httpClient: HttpClient
+    subscriptionHttpClients: Record<SubscriptionNetworkMode, HttpClient>
     probeMediaSource: (
       input: Parameters<typeof probeMediaSource>[0],
       source?: Parameters<typeof probeMediaSource>[2],
@@ -80,19 +80,24 @@ export async function createApplicationContext(): Promise<ApplicationContext> {
   await network.initialize(settings.get().network)
   configureDoubanSessionHeaders(network.getContext('douban').session)
   configureRadioSessionHeaders(network.getContext('radio').session)
-  const httpClient = new HttpClient(network, 'content')
+  const iptvHttpClient = new HttpClient(network, 'iptv')
+  const vodHttpClient = new HttpClient(network, 'vod')
   const radioHttpClient = new HttpClient(network, 'radio')
+  const subscriptionHttpClients: Record<SubscriptionNetworkMode, HttpClient> = {
+    direct: new HttpClient(network, 'subscriptionDirect'),
+    system: new HttpClient(network, 'subscriptionSystem'),
+  }
   // 搜索事件只属于主窗口；更新事件广播给所有应用窗口，业务服务不直接持有 BrowserWindow。
   let mainWindow: BrowserWindow | null = null
   const getMainWindow = (): BrowserWindow | null => mainWindow
   const emitSearchEvent = (event: SearchEvent): void =>
     mainWindow?.webContents.send(IPC_CHANNELS.vod.searchEvent, event)
   const emitUpdateEvent: ConstructorParameters<typeof UpdateService>[0] = broadcastUpdateEvent
-  const sourceService = new SourceService(source, httpClient)
+  const sourceService = new SourceService(source, vodHttpClient)
   const douban = new DoubanService(network)
   const mediaProxy = new MediaProxyServer(network)
   const mediaPlaybackTarget = new MediaPlaybackTargetService(mediaProxy, network)
-  const iptvPlaylist = new IptvPlaylistService(httpClient)
+  const iptvPlaylist = new IptvPlaylistService(iptvHttpClient)
   const iptvCatalog = new IptvCatalogService(iptvSource, iptvCache, iptvPlaylist)
 
   return {
@@ -107,7 +112,7 @@ export async function createApplicationContext(): Promise<ApplicationContext> {
       iptvSource: new IptvSourceService(iptvSource, iptvCache),
       iptvPlaylist,
       iptvCatalog,
-      iptvEpg: new IptvEpgService(httpClient, settings, iptvCatalog, iptvCache),
+      iptvEpg: new IptvEpgService(iptvHttpClient, settings, iptvCatalog, iptvCache),
       iptvPlayback: new IptvPlaybackService(iptvSource, iptvCatalog, mediaPlaybackTarget),
       home: new HomeService(recentPlay, douban),
       douban,
@@ -115,13 +120,13 @@ export async function createApplicationContext(): Promise<ApplicationContext> {
       network,
       mediaProxy,
       mediaPlaybackTarget,
-      vodSearch: new VodSearchService(sourceService, httpClient, new SearchTaskManager(), emitSearchEvent),
-      vodCatalog: new VodCatalogService(sourceService, httpClient),
+      vodSearch: new VodSearchService(sourceService, vodHttpClient, new SearchTaskManager(), emitSearchEvent),
+      vodCatalog: new VodCatalogService(sourceService, vodHttpClient),
       updates: new UpdateService(emitUpdateEvent, network),
       radio: new RadioService(radioHttpClient, mediaProxy, network),
     },
     utilities: {
-      httpClient,
+      subscriptionHttpClients,
       probeMediaSource: (input, source) => probeMediaSource(input, network, source),
     },
   }

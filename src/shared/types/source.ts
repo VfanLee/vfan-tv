@@ -24,6 +24,8 @@ export interface SourceSubscription {
   iptv: IptvSourceDefinition[]
 }
 
+export type SubscriptionNetworkMode = 'direct' | 'system'
+
 export type VodSourceImportItem = VodSourceDefinition
 
 export interface VodSourceExportItem extends VodSourceDefinition {

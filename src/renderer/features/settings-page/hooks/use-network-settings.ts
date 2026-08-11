@@ -11,8 +11,7 @@ import {
 
 const DEFAULT_NETWORK_SETTINGS: NetworkSettings = {
   profiles: [],
-  content: { mode: 'direct' },
-  playback: { mode: 'direct' },
+  iptv: { mode: 'direct' },
 }
 
 export interface NetworkSettingsState {
@@ -115,6 +114,5 @@ export function useNetworkSettings(apiAvailable: boolean): NetworkSettingsState 
 }
 
 function getRouteLabel(route: NetworkRouteKey): string {
-  if (route === 'content') return '普通内容网络'
-  return '视频播放网络'
+  return route === 'iptv' ? 'IPTV 直播网络' : '网络'
 }

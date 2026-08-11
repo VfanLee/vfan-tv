@@ -4,7 +4,7 @@ import bs58 from 'bs58'
 import { DEFAULT_SOURCES_EXPORT_NAME } from '@shared/constants'
 import { IPC_CHANNELS } from '@shared/ipc'
 import { sourceSubscriptionSchema } from '@shared/schemas'
-import type { AppApi } from '@shared/types'
+import type { AppApi, SubscriptionNetworkMode } from '@shared/types'
 import type { ApplicationContext } from '../../app/composition-root'
 import { broadcastAppDataChange } from '../../ipc/broadcast'
 import { formatZodError, isZodError } from '../../ipc/utils'
@@ -12,7 +12,7 @@ import { formatZodError, isZodError } from '../../ipc/utils'
 // 点播源 IPC：文件导入导出留在 main，以避免 renderer 获得任意文件系统权限。
 export function registerSourcesIpc(context: ApplicationContext): void {
   const { source, iptvSource, settings } = context.services
-  const { httpClient } = context.utilities
+  const { subscriptionHttpClients } = context.utilities
   ipcMain.handle(IPC_CHANNELS.sources.list, () => source.list())
   ipcMain.handle(IPC_CHANNELS.sources.create, (_event, input: Parameters<AppApi['sources']['create']>[0]) => {
     const result = source.create(input)
@@ -85,13 +85,18 @@ export function registerSourcesIpc(context: ApplicationContext): void {
   })
   ipcMain.handle(
     IPC_CHANNELS.sources.syncSubscription,
-    async (_event, subscriptionId: Parameters<AppApi['sources']['syncSubscription']>[0]) => {
+    async (
+      _event,
+      subscriptionId: Parameters<AppApi['sources']['syncSubscription']>[0],
+      mode: Parameters<AppApi['sources']['syncSubscription']>[1],
+    ) => {
+      if (!isSubscriptionNetworkMode(mode)) throw new Error('订阅更新网络模式无效')
       const subscription = settings.get().subscriptions.find((item) => item.id === subscriptionId)
       if (!subscription) throw new Error('订阅源不存在')
       const parsedUrl = new URL(subscription.url)
       if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('订阅地址仅支持 HTTP 或 HTTPS')
-      const encoded = await httpClient.get<string>(parsedUrl.toString(), {
-        requestLabel: '订阅同步',
+      const encoded = await subscriptionHttpClients[mode].get<string>(parsedUrl.toString(), {
+        requestLabel: mode === 'direct' ? '订阅直连更新' : '订阅系统代理更新',
         responseType: 'text',
         maxContentLength: 2 * 1024 * 1024,
       })
@@ -133,6 +138,10 @@ export function registerSourcesIpc(context: ApplicationContext): void {
     })
     broadcastAppDataChange('app-data')
   })
+}
+
+function isSubscriptionNetworkMode(value: unknown): value is SubscriptionNetworkMode {
+  return value === 'direct' || value === 'system'
 }
 
 function requireWindow(sender: WebContents): BrowserWindow {

@@ -75,7 +75,7 @@ function AppHeader({
     { to: '/', label: '推荐' },
     { to: '/iptv', label: 'IPTV' },
     ...(radioVisible ? [{ to: '/radio', label: '电台' }] : []),
-    ...(linkPlayerVisible ? [{ to: '/link-player', label: '直链' }] : []),
+    ...(linkPlayerVisible ? [{ to: '/link-player', label: 'URL 解析播放' }] : []),
   ]
 
   const openSearch = (): void => {

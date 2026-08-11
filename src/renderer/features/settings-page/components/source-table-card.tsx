@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { IptvSourceConfig, VodSourceConfig } from '@shared/types'
-import { EmptyState, SettingsCard, VodSourceBackupSwitcher } from '@renderer/components'
+import { EmptyState, SettingsSection, VodSourceBackupSwitcher } from '@renderer/components'
 import { Badge } from '@/ui/badge'
 import { Button } from '@/ui/button'
 import { Checkbox } from '@/ui/checkbox'
@@ -50,6 +50,7 @@ interface SourceTableCardProps<T extends SourceConfig> {
   isReordering: boolean
   isTestingAll?: boolean
   selectedSourceIds: Set<string>
+  sectionId?: string
   sources: T[]
   speedResults?: Record<string, VodSourceSpeedState>
   title: string
@@ -83,6 +84,7 @@ export function SourceTableCard<T extends SourceConfig>({
   isReordering,
   isTestingAll = false,
   selectedSourceIds,
+  sectionId,
   sources,
   speedResults,
   title,
@@ -201,7 +203,7 @@ export function SourceTableCard<T extends SourceConfig>({
   }
 
   return (
-    <SettingsCard
+    <SettingsSection
       description={description}
       headerActions={
         <div className="flex flex-wrap gap-2">
@@ -209,6 +211,7 @@ export function SourceTableCard<T extends SourceConfig>({
           <Badge variant="secondary">{enabledCount} 个启用</Badge>
         </div>
       }
+      id={sectionId}
       title={title}
     >
       <SourceToolbar
@@ -234,11 +237,11 @@ export function SourceTableCard<T extends SourceConfig>({
           className="isolate min-w-[1140px] table-fixed border-separate border-spacing-0"
           containerClassName={cn(
             heightClassName,
-            'isolate overscroll-x-contain overflow-auto',
+            'border-border isolate overscroll-x-contain overflow-auto border-y',
             isDragging ? 'cursor-grabbing select-none' : 'cursor-grab',
           )}
           containerProps={{
-            'aria-label': `${title}列表，可按住并左右拖动`,
+            'aria-label': `${title}，可按住并左右拖动`,
             'role': 'region',
             'tabIndex': 0,
             'onLostPointerCapture': () => {
@@ -276,14 +279,14 @@ export function SourceTableCard<T extends SourceConfig>({
             {displayedSources.length > 0 ? (
               displayedSources.map((source) => (
                 <TableRow key={source.id} className="group hover:bg-muted h-14 border-0 [&>td]:border-b">
-                  <TableCell className="bg-card group-hover:bg-muted sticky left-0 z-20 px-2 transition-colors">
+                  <TableCell className="bg-background group-hover:bg-muted sticky left-0 z-20 px-2 transition-colors">
                     <SelectionCheckbox
                       checked={selectedSourceIds.has(source.id)}
                       label={`选择 ${source.name}`}
                       onChange={() => onToggleSelection(source.id)}
                     />
                   </TableCell>
-                  <TableCell className="bg-card group-hover:bg-muted sticky left-9 z-20 px-2 transition-colors">
+                  <TableCell className="bg-background group-hover:bg-muted sticky left-9 z-20 px-2 transition-colors">
                     <StatusCell
                       checked={!source.disabled}
                       onCheckedChange={(checked) => onSetDisabled(source, !checked)}
@@ -291,7 +294,7 @@ export function SourceTableCard<T extends SourceConfig>({
                   </TableCell>
                   <TableCell
                     className={cn(
-                      'bg-card group-hover:bg-muted sticky left-[132px] z-20 px-2 transition-[background-color,box-shadow]',
+                      'bg-background group-hover:bg-muted sticky left-[132px] z-20 px-2 transition-[background-color,box-shadow]',
                       scrollEdges.left && 'shadow-[5px_0_8px_-8px_rgba(0,0,0,0.45)]',
                     )}
                   >
@@ -317,7 +320,7 @@ export function SourceTableCard<T extends SourceConfig>({
                   ) : null}
                   <TableCell
                     className={cn(
-                      'bg-card group-hover:bg-muted sticky right-0 z-20 px-2 transition-[background-color,box-shadow]',
+                      'bg-background group-hover:bg-muted sticky right-0 z-20 px-2 transition-[background-color,box-shadow]',
                       scrollEdges.right && 'shadow-[-5px_0_8px_-8px_rgba(0,0,0,0.45)]',
                     )}
                   >
@@ -347,7 +350,7 @@ export function SourceTableCard<T extends SourceConfig>({
       ) : (
         <EmptyTableState icon={emptyIcon} text={emptyText} />
       )}
-    </SettingsCard>
+    </SettingsSection>
   )
 }
 
@@ -411,7 +414,7 @@ function SourceToolbar({
   onTestAll?: () => void
 }): React.JSX.Element {
   return (
-    <div className="border-border border-b px-5 py-4">
+    <div className="mb-3">
       <div className="flex flex-wrap items-center gap-2">
         <Button
           disabled={!apiAvailable || selectedCount === 0 || isBatchUpdating}
@@ -500,8 +503,8 @@ function SourceTableHeader({
   onToggleAll: () => void
 }): React.JSX.Element {
   return (
-    <TableHeader className="bg-muted text-muted-foreground">
-      <TableRow className="hover:bg-muted border-0 [&>th]:border-b">
+    <TableHeader className="bg-muted/45 text-muted-foreground">
+      <TableRow className="hover:bg-muted/45 border-0 [&>th]:border-b">
         <TableHead className="bg-muted sticky top-0 left-0 z-40 px-2">
           <SelectionCheckbox checked={allSelected} label={allSelected ? '取消全选' : '全选源'} onChange={onToggleAll} />
         </TableHead>

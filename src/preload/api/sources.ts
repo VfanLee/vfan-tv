@@ -17,7 +17,8 @@ export function createSourcesApi(): Pick<AppApi, 'sources' | 'iptvSources'> {
       confirmImport: (payload) => ipcRenderer.invoke(IPC_CHANNELS.sources.confirmImport, payload),
       importFromFile: () => ipcRenderer.invoke(IPC_CHANNELS.sources.importFromFile),
       exportToFile: () => ipcRenderer.invoke(IPC_CHANNELS.sources.exportToFile),
-      syncSubscription: (subscriptionId) => ipcRenderer.invoke(IPC_CHANNELS.sources.syncSubscription, subscriptionId),
+      syncSubscription: (subscriptionId, mode) =>
+        ipcRenderer.invoke(IPC_CHANNELS.sources.syncSubscription, subscriptionId, mode),
       deleteSubscription: (subscriptionId) =>
         ipcRenderer.invoke(IPC_CHANNELS.sources.deleteSubscription, subscriptionId),
     },

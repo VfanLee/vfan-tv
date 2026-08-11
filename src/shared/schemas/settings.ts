@@ -27,8 +27,7 @@ export const networkRouteSettingsSchema = z
 export const networkSettingsSchema = z
   .object({
     profiles: z.array(networkProxyProfileSchema).default([]),
-    content: networkRouteSettingsSchema.default({ mode: 'direct' }),
-    playback: networkRouteSettingsSchema.default({ mode: 'direct' }),
+    iptv: networkRouteSettingsSchema.default({ mode: 'direct' }),
   })
   .superRefine((value, context) => {
     const ids = new Set<string>()
@@ -48,7 +47,7 @@ export const networkSettingsSchema = z
       }
       names.add(normalizedName)
     }
-    for (const route of ['content', 'playback'] as const) {
+    for (const route of ['iptv'] as const) {
       const routeSettings = value[route]
       if (
         routeSettings.mode === 'custom' &&
@@ -96,7 +95,6 @@ export const appSettingsSchema = z.object({
   iptvEpg: iptvEpgSettingsSchema.default({ mode: 'source', lastTest: { status: 'idle' } }),
   network: networkSettingsSchema.default({
     profiles: [],
-    content: { mode: 'direct' },
-    playback: { mode: 'direct' },
+    iptv: { mode: 'direct' },
   }),
 })
