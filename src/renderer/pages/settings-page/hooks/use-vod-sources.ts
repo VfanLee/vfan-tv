@@ -1,0 +1,280 @@
+import { useCallback, useEffect, useState } from 'react'
+import { toast } from 'sonner'
+import { mapAsync } from 'es-toolkit/array'
+import type { VodSourceConfig } from '@shared/types'
+import {
+  clearSources,
+  deleteSource,
+  exportSourcesToFile,
+  importSourcesFromFile,
+  listSources,
+  reorderSources,
+  switchSourceBackup,
+  testSourceSpeed,
+  updateSource,
+} from '@renderer/platform/api'
+import type { VodSourceSpeedState } from '../types'
+import { moveItemToEdge, toggleId } from '../utils'
+
+/** 点播源测速任务的最大并发数 */
+const SPEED_TEST_CONCURRENCY = 6
+
+export interface VodSourcesState {
+  allSelected: boolean
+  enabledCount: number
+  isBatchUpdating: boolean
+  isClearing: boolean
+  isReordering: boolean
+  isTestingAll: boolean
+  selectedSourceIds: Set<string>
+  sources: VodSourceConfig[]
+  speedResults: Record<string, VodSourceSpeedState>
+  applySources: (sources: VodSourceConfig[]) => void
+  batchSetDisabled: (disabled: boolean) => Promise<void>
+  clearAll: () => Promise<void>
+  deleteItem: (source: VodSourceConfig) => Promise<void>
+  exportItems: () => Promise<void>
+  importItems: () => Promise<void>
+  moveToEdge: (sourceId: string, edge: 'start' | 'end') => Promise<void>
+  refresh: () => Promise<void>
+  switchBackup: (source: VodSourceConfig, backupUrl: string) => Promise<void>
+  testAll: () => Promise<void>
+  testSingle: (sourceId: string) => Promise<void>
+  setDisabled: (source: VodSourceConfig, disabled: boolean) => Promise<void>
+  toggleAll: () => void
+  toggleSelection: (sourceId: string) => void
+}
+
+/** 加载点播源，并提供导入、导出、测速、禁用、删除和排序操作 */
+export function useVodSources(apiAvailable: boolean): VodSourcesState {
+  const [sources, setSources] = useState<VodSourceConfig[]>([])
+  const [selectedSourceIds, setSelectedSourceIds] = useState<Set<string>>(() => new Set())
+  const [isBatchUpdating, setIsBatchUpdating] = useState(false)
+  const [isClearing, setIsClearing] = useState(false)
+  const [isReordering, setIsReordering] = useState(false)
+  const [isTestingAll, setIsTestingAll] = useState(false)
+  const [speedResults, setSpeedResults] = useState<Record<string, VodSourceSpeedState>>({})
+
+  /** 用最新点播源列表更新页面状态、已选项和测速结果 */
+  const applySources = useCallback((nextSources: VodSourceConfig[]): void => {
+    const sourceIds = new Set(nextSources.map((source) => source.id))
+    setSources(nextSources)
+    setSelectedSourceIds((current) => new Set([...current].filter((id) => sourceIds.has(id))))
+    setSpeedResults((current) => Object.fromEntries(Object.entries(current).filter(([id]) => sourceIds.has(id))))
+  }, [])
+
+  /** 重新加载点播源列表 */
+  const refresh = useCallback(async (): Promise<void> => {
+    applySources(await listSources())
+  }, [applySources])
+
+  /** 加载点播源列表 */
+  useEffect(() => {
+    let active = true
+    void listSources().then((nextSources) => {
+      if (active) applySources(nextSources)
+    })
+    return () => {
+      active = false
+    }
+  }, [applySources])
+
+  /** 从文件导入点播源并刷新列表 */
+  const importItems = async (): Promise<void> => {
+    if (!apiAvailable) return
+    try {
+      const result = await importSourcesFromFile()
+      if (result.cancelled) return
+      toast.success('导入完成', {
+        description: `新增 ${result.created.length}，覆盖 ${result.overwritten.length}，跳过 ${result.skipped.length}`,
+      })
+      await refresh()
+    } catch (error) {
+      toast.error('导入失败', { description: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
+  /** 将全部点播源导出到文件 */
+  const exportItems = async (): Promise<void> => {
+    if (!apiAvailable) return
+    try {
+      const result = await exportSourcesToFile()
+      if (result.cancelled) return
+      toast.success('导出完成', { description: `已导出 ${result.count} 个点播源` })
+    } catch (error) {
+      toast.error('导出失败', { description: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
+  /** 删除全部点播源并清空页面状态 */
+  const clearAll = async (): Promise<void> => {
+    if (!apiAvailable || sources.length === 0) return
+    setIsClearing(true)
+    try {
+      await clearSources()
+      applySources([])
+      toast.success('已清空全部点播源')
+    } catch (error) {
+      toast.error('清空失败', { description: error instanceof Error ? error.message : String(error) })
+    } finally {
+      setIsClearing(false)
+    }
+  }
+
+  /** 删除指定数据项 */
+  const deleteItem = async (source: VodSourceConfig): Promise<void> => {
+    if (!apiAvailable) return
+    try {
+      await deleteSource(source.id)
+      toast.success('已删除点播源')
+      await refresh()
+    } catch (error) {
+      toast.error('删除失败', { description: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
+  /** 设置指定数据项的禁用状态 */
+  const setDisabled = async (source: VodSourceConfig, disabled: boolean): Promise<void> => {
+    if (!apiAvailable) return
+    const previousSources = sources
+    setSources((current) => current.map((item) => (item.id === source.id ? { ...item, disabled } : item)))
+    try {
+      await updateSource(source.id, {
+        name: source.name,
+        url: source.url,
+        headers: source.headers,
+        disabled,
+        backups: source.backups,
+      })
+    } catch (error) {
+      setSources(previousSources)
+      toast.error('状态更新失败', { description: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
+  const allSelected = sources.length > 0 && selectedSourceIds.size === sources.length
+  /** 全选或清空当前点播源选择 */
+  const toggleAll = (): void => {
+    setSelectedSourceIds(allSelected ? new Set() : new Set(sources.map((source) => source.id)))
+  }
+
+  /** 批量设置数据项的禁用状态 */
+  const batchSetDisabled = async (disabled: boolean): Promise<void> => {
+    const selectedSources = sources.filter((source) => selectedSourceIds.has(source.id))
+    if (!apiAvailable || selectedSources.length === 0) return
+    setIsBatchUpdating(true)
+    setSources((current) =>
+      current.map((source) => (selectedSourceIds.has(source.id) ? { ...source, disabled } : source)),
+    )
+    const results = await Promise.allSettled(
+      selectedSources.map((source) =>
+        updateSource(source.id, {
+          name: source.name,
+          url: source.url,
+          headers: source.headers,
+          disabled,
+          backups: source.backups,
+        }),
+      ),
+    )
+    const failedCount = results.filter((result) => result.status === 'rejected').length
+    await refresh()
+    setIsBatchUpdating(false)
+    if (failedCount > 0)
+      toast.error('部分状态更新失败', { description: `${failedCount} 个点播源未能更新，请稍后重试。` })
+    else toast.success(`已${disabled ? '关闭' : '开启'} ${selectedSources.length} 个点播源`)
+  }
+
+  /** 重新排列当前列表 */
+  const reorder = async (nextSources: VodSourceConfig[]): Promise<void> => {
+    if (!apiAvailable || isReordering) return
+    const previousSources = sources
+    setSources(nextSources)
+    setIsReordering(true)
+    try {
+      applySources(await reorderSources(nextSources.map((source) => source.id)))
+    } catch (error) {
+      setSources(previousSources)
+      toast.error('排序保存失败', { description: error instanceof Error ? error.message : String(error) })
+    } finally {
+      setIsReordering(false)
+    }
+  }
+
+  /** 将选中项移动到列表边缘 */
+  const moveToEdge = async (sourceId: string, edge: 'start' | 'end'): Promise<void> => {
+    const nextSources = moveItemToEdge(sources, sourceId, edge)
+    if (nextSources) await reorder(nextSources)
+  }
+
+  /** 切换备用源 */
+  const switchBackup = async (source: VodSourceConfig, backupUrl: string): Promise<void> => {
+    if (!apiAvailable) return
+    try {
+      const updated = await switchSourceBackup(source.id, backupUrl)
+      setSources((current) => current.map((item) => (item.id === updated.id ? updated : item)))
+      setSpeedResults((current) => {
+        const next = { ...current }
+        delete next[source.id]
+        return next
+      })
+      toast.success('已切换地址', { description: updated.url })
+    } catch (error) {
+      toast.error('切换地址失败', { description: error instanceof Error ? error.message : String(error) })
+      throw error
+    }
+  }
+
+  /** 测试单个点播源的连接速度 */
+  const testSingle = async (sourceId: string): Promise<void> => {
+    if (!apiAvailable) return
+    setSpeedResults((current) => ({ ...current, [sourceId]: { status: 'testing' } }))
+    try {
+      const result = await testSourceSpeed(sourceId)
+      setSpeedResults((current) => ({ ...current, [sourceId]: result }))
+    } catch (error) {
+      setSpeedResults((current) => ({
+        ...current,
+        [sourceId]: { status: 'error', errorMessage: error instanceof Error ? error.message : '测速失败' },
+      }))
+    }
+  }
+
+  /** 测试所有点播源的连接速度 */
+  const testAll = async (): Promise<void> => {
+    if (!apiAvailable || sources.length === 0 || isTestingAll) return
+    setIsTestingAll(true)
+    setSpeedResults(
+      Object.fromEntries(sources.map((source) => [source.id, { status: 'testing' } satisfies VodSourceSpeedState])),
+    )
+    await mapAsync(sources, (source) => testSingle(source.id), { concurrency: SPEED_TEST_CONCURRENCY })
+    setIsTestingAll(false)
+    toast.success('测速完成')
+  }
+
+  return {
+    allSelected,
+    enabledCount: sources.filter((source) => !source.disabled).length,
+    isBatchUpdating,
+    isClearing,
+    isReordering,
+    isTestingAll,
+    selectedSourceIds,
+    sources,
+    speedResults,
+    applySources,
+    batchSetDisabled,
+    clearAll,
+    deleteItem,
+    exportItems,
+    importItems,
+    moveToEdge,
+    refresh,
+    switchBackup,
+    testAll,
+    testSingle,
+    setDisabled,
+    toggleAll,
+    toggleSelection: (sourceId) => setSelectedSourceIds((current) => toggleId(current, sourceId)),
+  }
+}

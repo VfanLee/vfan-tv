@@ -4,6 +4,8 @@ import Artplayer, { type Option } from 'artplayer'
 import artplayerPluginAudioTrack from 'artplayer-plugin-audio-track'
 import Hls, { type ErrorData } from 'hls.js'
 import mpegts from 'mpegts.js'
+import dayjs from 'dayjs'
+import { clamp } from 'es-toolkit/math'
 import {
   PLAYER_AUTO_NEXT_STORAGE_KEY,
   PLAYER_LOOP_STORAGE_KEY,
@@ -75,7 +77,7 @@ class PlaybackDebugRecorder {
 
   push(type: string, message: string): void {
     this.entries.push({
-      at: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+      at: dayjs().format('HH:mm:ss'),
       type,
       message,
     })
@@ -175,6 +177,7 @@ export function BasicPlayer({
       ? resolvedAudioTrack.url
       : undefined
 
+  /** 解析外挂音轨的代理播放地址 */
   useEffect(() => {
     let active = true
     if (!inputAudioTrackUrl || isLocalPlaybackUrl(inputAudioTrackUrl)) {
@@ -206,6 +209,7 @@ export function BasicPlayer({
   const isMpegts = isMpegtsSource(src, sourceType)
   const canEnterMiniWindowMode = !miniWindowMode && Boolean(sourceType && mediaSessionId) && isApiAvailable()
 
+  /** 创建视频播放协调器，并在组件卸载时释放 */
   useEffect(() => {
     const coordinator = createMediaPlaybackCoordinator('video', () => {
       artRef.current?.pause()
@@ -220,6 +224,7 @@ export function BasicPlayer({
     }
   }, [])
 
+  /** 切换播放源时重置播放器设置面板状态 */
   useEffect(() => {
     setCustomNumberInput(undefined)
     setMediaTrackSelection(undefined)
@@ -229,6 +234,7 @@ export function BasicPlayer({
     setSettingsBottomOffset(64)
   }, [sourceType, src])
 
+  /** 同步播放器回调、初始时间和迷你窗口控制引用 */
   useEffect(() => {
     callbacksRef.current = {
       onEnded,
@@ -255,12 +261,14 @@ export function BasicPlayer({
     onSettingsVisibilityChange,
   ])
 
+  /** 同步播放器设置浮层的固定状态和可见性 */
   useEffect(() => {
     const visible = Boolean(displaySettings || customNumberInput || mediaTrackSelection)
     artRef.current?.template.$player.classList.toggle('vfan-player-overlay-pinned', visible)
     callbacksRef.current.onSettingsVisibilityChange?.(visible)
   }, [customNumberInput, displaySettings, mediaTrackSelection])
 
+  /** 监听迷你窗口退出事件并恢复播放进度 */
   useEffect(() => {
     if (miniWindowMode) return
 
@@ -286,6 +294,7 @@ export function BasicPlayer({
     })
   }, [isLive, miniWindowMode])
 
+  /** 根据播放地址和配置创建或销毁播放器实例 */
   useEffect(() => {
     const container = containerRef.current
     if (!container || !src) {
@@ -1399,7 +1408,7 @@ function buildDebugInfoText(params: DebugInfoParams): string {
   const video = art.video
   const sections: string[] = [
     '=== Vfan TV 调试信息 ===',
-    `时间: ${new Date().toISOString()}`,
+    `时间: ${dayjs().toISOString()}`,
     `应用版本: ${cachedAppVersion || '-'}`,
     `页面: ${window.location.hash || window.location.pathname}`,
     ...(title ? [`标题: ${title}`] : []),
@@ -2253,7 +2262,7 @@ function showCopyFeedback(art: Artplayer, message: string): void {
 }
 
 function getHealthMeterBackground(percent: number): string {
-  const clamped = Math.max(0, Math.min(100, percent))
+  const clamped = clamp(percent, 0, 100)
   const hue = (clamped / 100) * 120
 
   return `linear-gradient(90deg, hsl(${hue} 68% 42%), hsl(${hue} 78% 54%))`

@@ -11,7 +11,6 @@ import { closeSettingsWindow, configureSettingsWindowManager } from '../windows/
 import { APP_DISPLAY_NAME, APP_ID, USER_DATA_DIR_NAME } from '@shared/constants'
 import packageJson from '../../../package.json'
 
-// webpack 输出的资源路径相对于 main 产物目录，Electron 的图标 API 需要绝对路径。
 const icon = resolve(__dirname, iconAsset)
 
 let aboutWindow: BrowserWindow | null = null
@@ -42,12 +41,14 @@ function getApplicationContext(): ApplicationContext {
   return applicationContext
 }
 
+/** 配置应用名称、进程标题和 userData 路径 */
 function configureAppIdentityAndPaths(): void {
   app.setName(APP_DISPLAY_NAME)
   process.title = APP_DISPLAY_NAME
   app.setPath('userData', join(app.getPath('appData'), USER_DATA_DIR_NAME))
 }
 
+/** 创建单例“关于”窗口；重复调用时聚焦已有窗口 */
 function showAboutWindow(): void {
   if (aboutWindow) {
     aboutWindow.focus()
@@ -120,6 +121,7 @@ function showAboutWindow(): void {
   void aboutWindow.loadURL(`data:text/html;charset=UTF-8,${encodeURIComponent(html)}`)
 }
 
+/** 根据当前平台构建原生应用菜单 */
 function createApplicationMenu(): void {
   const isMac = process.platform === 'darwin'
   const appMenu: MenuItemConstructorOptions[] = [
@@ -193,13 +195,9 @@ function createApplicationMenu(): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
 app.whenReady().then(async () => {
   if (!hasSingleInstanceLock) return
 
-  // Set app user model id for windows
   configureAppIdentityAndPaths()
   app.dock?.setIcon(icon)
   electronApp.setAppUserModelId(APP_ID)
@@ -208,9 +206,7 @@ app.whenReady().then(async () => {
   configureSettingsWindowManager({ icon, getMainWindow: applicationContext.getMainWindow })
   registerIpcHandlers(applicationContext)
 
-  // Default open or close DevTools by F12 in development
-  // and ignore CommandOrControl + R in production.
-  // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
+  // 开发环境启用 F12，生产环境禁用刷新快捷键。
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
@@ -222,6 +218,7 @@ app.whenReady().then(async () => {
   })
 })
 
+/** 显示应用窗口，窗口不存在时创建主窗口 */
 function showOrCreateApplicationWindow(): void {
   if (!app.isReady() || !applicationContext) return
 
@@ -237,6 +234,7 @@ function showOrCreateApplicationWindow(): void {
   mainWindow.focus()
 }
 
+/** 创建主窗口并登记到应用上下文 */
 function createWindow(): void {
   const context = getApplicationContext()
   createMainWindow({
@@ -251,14 +249,9 @@ function createWindow(): void {
   })
 }
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
+// 非 macOS 平台关闭全部窗口后退出应用。
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
 })
-
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and require them here.

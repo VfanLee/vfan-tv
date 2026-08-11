@@ -1,6 +1,7 @@
 import { Component, useState } from 'react'
 import type { ErrorInfo, ReactNode } from 'react'
 import { Check, Copy, House, Sparkles } from 'lucide-react'
+import dayjs from 'dayjs'
 import { isRouteErrorResponse, useNavigate, useRouteError } from 'react-router'
 import { Button } from '@/ui/button'
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@/ui/empty'
@@ -21,7 +22,7 @@ export class AppErrorBoundary extends Component<AppErrorBoundaryProps, AppErrorB
   public state: AppErrorBoundaryState = initialState
 
   public static getDerivedStateFromError(error: Error): AppErrorBoundaryState {
-    return { error, occurredAt: new Date().toISOString() }
+    return { error, occurredAt: dayjs().toISOString() }
   }
 
   public componentDidCatch(error: Error, info: ErrorInfo): void {
@@ -138,7 +139,7 @@ function normalizeError(value: unknown): Error {
 
 function formatErrorDetails(error: Error, componentStack: string | undefined, occurredAt: string | undefined): string {
   const details = [
-    `发生时间：${occurredAt ?? new Date().toISOString()}`,
+    `发生时间：${occurredAt ?? dayjs().toISOString()}`,
     `页面地址：${window.location.href}`,
     `错误信息：${error.name}: ${error.message}`,
   ]

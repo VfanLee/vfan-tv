@@ -3,7 +3,7 @@ import type { IpcRendererEvent } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc'
 import type { AppApi, AppDataChangeDomain, MiniWindowPlaybackExit, SettingsSectionId, UpdateEvent } from '@shared/types'
 
-// 系统能力按白名单暴露，不向 renderer 透传 ipcRenderer 或任意 channel 调用权。
+/** 创建设置、网络、更新、窗口与系统 Shell 相关的 renderer API */
 export function createSystemApi(): Pick<AppApi, 'settings' | 'network' | 'updates' | 'window' | 'shell'> {
   return {
     settings: {

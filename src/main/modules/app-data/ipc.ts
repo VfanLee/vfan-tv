@@ -10,7 +10,7 @@ import type { ApplicationContext } from '../../app/composition-root'
 import { broadcastAppDataChange } from '../../ipc/broadcast'
 import { formatZodError, isZodError } from '../../ipc/utils'
 
-// 应用备份跨越多个领域；这里负责将数据库数据与 renderer 持有的搜索历史合并为单一文件。
+/** 注册应用数据导入、导出与清理处理器，并把数据库数据和 renderer 数据合并为统一备份 */
 export function registerAppDataIpc(context: ApplicationContext): void {
   ipcMain.handle(
     IPC_CHANNELS.settings.exportAppData,
@@ -77,7 +77,7 @@ export function registerAppDataIpc(context: ApplicationContext): void {
     const { settings } = context.services
     const currentNetworkSettings = settings.get().network
     const { source: sourceRepository, iptvSource: iptvSourceRepository, recentPlay, favorite } = context.repositories
-    // 先清空再按备份顺序恢复，确保导入结果不会与旧数据混合。
+    // 清空已选数据后按备份顺序恢复。
     resetAppDatabase(context.db)
     const subscriptions = backup.subscriptions
     settings.update({
@@ -119,7 +119,7 @@ function requireWindow(sender: WebContents): BrowserWindow {
 
 function parseAppDataBackup(fileContent: string): AppDataBackup {
   try {
-    // 运行时 schema 是外部备份文件的信任边界，不能只依赖 TypeScript 类型。
+    // 使用运行时 Schema 校验外部备份文件。
     return appDataBackupSchema.parse(JSON.parse(fileContent))
   } catch (error) {
     if (error instanceof SyntaxError) throw new Error('导入文件不是有效的 JSON')

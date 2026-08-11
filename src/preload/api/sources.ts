@@ -2,6 +2,7 @@ import { ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc'
 import type { AppApi } from '@shared/types'
 
+/** 创建点播源与 IPTV 源管理相关的 renderer API */
 export function createSourcesApi(): Pick<AppApi, 'sources' | 'iptvSources'> {
   return {
     sources: {

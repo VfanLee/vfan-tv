@@ -29,7 +29,7 @@ import { UpdateService } from '../modules/updates/update.service'
 import { configureRadioSessionHeaders, RadioService } from '../modules/radio/radio.service'
 import { broadcastUpdateEvent } from '../ipc/broadcast'
 
-// main 进程唯一的组合根：在此处集中装配依赖，领域模块不得自行创建全局实例。
+/** 汇总 main 进程的窗口引用、仓储、服务和工具 */
 export interface ApplicationContext {
   db: ReturnType<typeof createDatabase>
   getMainWindow: () => BrowserWindow | null
@@ -68,6 +68,7 @@ export interface ApplicationContext {
   }
 }
 
+/** 初始化数据库与网络上下文，并按依赖关系装配 main 进程的应用上下文 */
 export async function createApplicationContext(): Promise<ApplicationContext> {
   const db = createDatabase()
   const source = new VodSourceRepository(db)
@@ -87,7 +88,7 @@ export async function createApplicationContext(): Promise<ApplicationContext> {
     direct: new HttpClient(network, 'subscriptionDirect'),
     system: new HttpClient(network, 'subscriptionSystem'),
   }
-  // 搜索事件只属于主窗口；更新事件广播给所有应用窗口，业务服务不直接持有 BrowserWindow。
+  // 搜索事件发送到主窗口，更新事件广播到所有应用窗口。
   let mainWindow: BrowserWindow | null = null
   const getMainWindow = (): BrowserWindow | null => mainWindow
   const emitSearchEvent = (event: SearchEvent): void =>

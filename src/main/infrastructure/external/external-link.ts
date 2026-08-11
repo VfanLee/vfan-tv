@@ -1,6 +1,6 @@
 import { clipboard, shell } from 'electron'
 
-// 所有离开应用的导航都经过这里，避免 renderer 直接获得 shell 权限。
+// 集中处理应用外部导航与系统浏览器打开。
 export function isAllowedExternalUrl(url: string): boolean {
   try {
     const parsed = new URL(url)

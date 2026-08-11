@@ -14,6 +14,7 @@ export function useRecentPlays({ limit }: UseRecentPlaysOptions = {}): {
   const [recentPlays, setRecentPlays] = useState<RecentPlayItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
+  /** 加载最近播放列表并订阅应用数据变化 */
   useEffect(() => {
     let active = true
     const refresh = (): void => {

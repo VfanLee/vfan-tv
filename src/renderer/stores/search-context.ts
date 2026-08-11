@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
+import { keyBy } from 'es-toolkit/array'
 import { SEARCH_CONTEXT_STORAGE_KEY } from '@shared/constants'
 import type { VodSearchResult } from '@shared/types'
 
@@ -36,17 +37,7 @@ export const useSearchContextStore = create<SearchContextState>()(
 )
 
 function mergeCandidates(currentCandidates: VodSearchResult[], nextCandidates: VodSearchResult[]): VodSearchResult[] {
-  const map = new Map<string, VodSearchResult>()
-
-  for (const item of currentCandidates) {
-    map.set(getCandidateKey(item), item)
-  }
-
-  for (const item of nextCandidates) {
-    map.set(getCandidateKey(item), item)
-  }
-
-  return Array.from(map.values())
+  return Object.values(keyBy([...currentCandidates, ...nextCandidates], getCandidateKey))
 }
 
 function getCandidateKey(item: VodSearchResult): string {

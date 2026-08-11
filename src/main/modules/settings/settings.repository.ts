@@ -6,6 +6,7 @@ import { settingsTable } from '../../infrastructure/database/schema'
 
 const settingsKey = 'app'
 
+/** 使用共享 Schema 校验并持久化单例应用设置 */
 export class SettingsRepository {
   constructor(private readonly db: AppDatabase) {}
 

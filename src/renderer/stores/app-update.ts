@@ -77,11 +77,12 @@ export const useAppUpdateStore = create<AppUpdateState>((set, get) => ({
   },
 }))
 
-/** Subscribe to update events and optionally run a silent check when the window mounts. */
+/** 订阅应用更新事件，并在窗口加载时按配置静默检查更新 */
 export function useAppUpdateSync(checkOnMount = true): void {
   const check = useAppUpdateStore((state) => state.check)
   const setCurrentVersion = useAppUpdateStore((state) => state.setCurrentVersion)
 
+  /** 加载应用版本、订阅更新事件并执行启动检查 */
   useEffect(() => {
     if (!isApiAvailable()) return
 

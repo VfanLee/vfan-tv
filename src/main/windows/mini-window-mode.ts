@@ -1,4 +1,5 @@
 import { BrowserWindow, screen, type Rectangle } from 'electron'
+import { clamp } from 'es-toolkit/math'
 import { IPC_CHANNELS } from '@shared/ipc'
 import type {
   MiniWindowMoveInput,
@@ -49,6 +50,7 @@ interface MiniWindowModeState {
 
 const miniWindowModeStates = new WeakMap<BrowserWindow, MiniWindowModeState>()
 
+/** 进入画中画模式并保存主窗口状态 */
 export function enterMiniWindowMode(mainWindow: BrowserWindow, context: MiniWindowPlaybackContext): void {
   restoreMiniWindowMode(mainWindow)
 
@@ -99,6 +101,7 @@ export function enterMiniWindowMode(mainWindow: BrowserWindow, context: MiniWind
   void miniWindow.loadURL(miniWindowUrl.toString())
 }
 
+/** 获取当前画中画窗口的播放上下文 */
 export function getMiniWindowPlayback(
   mainWindow: BrowserWindow,
   senderId: number,
@@ -107,6 +110,7 @@ export function getMiniWindowPlayback(
   return state?.miniWindow.webContents.id === senderId ? state.context : undefined
 }
 
+/** 退出画中画模式并恢复主窗口 */
 export function exitMiniWindowMode(mainWindow: BrowserWindow, exit: MiniWindowPlaybackExit): void {
   const state = miniWindowModeStates.get(mainWindow)
   if (!state || state.context.sessionId !== exit.sessionId || !isMatchingMiniWindowExit(state.context, exit)) return
@@ -115,6 +119,7 @@ export function exitMiniWindowMode(mainWindow: BrowserWindow, exit: MiniWindowPl
   state.miniWindow.close()
 }
 
+/** 更新画中画窗口的播放状态 */
 export function updateMiniWindowPlayback(
   mainWindow: BrowserWindow,
   senderId: number,
@@ -131,7 +136,7 @@ export function updateMiniWindowPlayback(
   state.exit = exit
 }
 
-// 渲染层只提供拖动中的目标边界；最终尺寸与锚点始终在主进程校正，避免无边框窗口被任意 renderer 操作。
+/** 调整画中画窗口的大小和位置 */
 export function resizeMiniWindow(mainWindow: BrowserWindow, senderId: number, input: MiniWindowResizeInput): void {
   const state = miniWindowModeStates.get(mainWindow)
   if (state?.context.sessionId !== input.sessionId || state.miniWindow.webContents.id !== senderId) return
@@ -140,6 +145,7 @@ export function resizeMiniWindow(mainWindow: BrowserWindow, senderId: number, in
   state.miniWindow.setBounds(normalizeMiniWindowBounds(input, getMiniWindowConfig(state.context)))
 }
 
+/** 移动画中画窗口 */
 export function moveMiniWindow(mainWindow: BrowserWindow, senderId: number, input: MiniWindowMoveInput): void {
   const state = miniWindowModeStates.get(mainWindow)
   if (state?.context.sessionId !== input.sessionId || state.miniWindow.webContents.id !== senderId) return
@@ -148,6 +154,7 @@ export function moveMiniWindow(mainWindow: BrowserWindow, senderId: number, inpu
   state.miniWindow.setPosition(Math.round(input.position.x), Math.round(input.position.y))
 }
 
+/** 隐藏画中画窗口 */
 export function hideMiniWindow(mainWindow: BrowserWindow, senderId: number, sessionId: string): void {
   const state = miniWindowModeStates.get(mainWindow)
   if (state?.context.sessionId !== sessionId || state.miniWindow.webContents.id !== senderId) return
@@ -155,6 +162,7 @@ export function hideMiniWindow(mainWindow: BrowserWindow, senderId: number, sess
   state.miniWindow.hide()
 }
 
+/** 显示并聚焦当前画中画窗口 */
 export function showActiveMiniWindow(mainWindow: BrowserWindow): boolean {
   const state = miniWindowModeStates.get(mainWindow)
   if (!state || state.miniWindow.isDestroyed()) return false
@@ -164,6 +172,7 @@ export function showActiveMiniWindow(mainWindow: BrowserWindow): boolean {
   return true
 }
 
+/** 获取画中画窗口的置顶状态 */
 export function getMiniWindowAlwaysOnTop(mainWindow: BrowserWindow, senderId: number, sessionId: string): boolean {
   const state = miniWindowModeStates.get(mainWindow)
   if (state?.context.sessionId !== sessionId || state.miniWindow.webContents.id !== senderId) return false
@@ -171,6 +180,7 @@ export function getMiniWindowAlwaysOnTop(mainWindow: BrowserWindow, senderId: nu
   return state.miniWindow.isAlwaysOnTop()
 }
 
+/** 设置画中画窗口的置顶状态 */
 export function setMiniWindowAlwaysOnTop(
   mainWindow: BrowserWindow,
   senderId: number,
@@ -229,10 +239,6 @@ function createInitialMiniWindowExit(context: MiniWindowPlaybackContext): MiniWi
 function isMatchingMiniWindowExit(context: MiniWindowPlaybackContext, exit: MiniWindowPlaybackExit): boolean {
   if (context.variant === 'radio') return exit.variant === 'radio'
   return exit.variant === context.variant
-}
-
-function clamp(value: number, minimum: number, maximum: number): number {
-  return Math.min(Math.max(value, minimum), maximum)
 }
 
 function isValidMiniWindowBounds(bounds: MiniWindowBounds): boolean {

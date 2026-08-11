@@ -10,7 +10,7 @@ const LATEST_RELEASE_PATH = `${REPOSITORY_URL}/releases/latest`
 const REQUEST_HEADERS = { 'User-Agent': 'vfan-tv-update-checker' }
 const REQUEST_TIMEOUT_MS = 10_000
 
-// 独立于 electron-updater 的 Release 检查，保证 macOS/Linux 也能展示可下载的新版本。
+/** 描述 GitHub Release 的版本、说明、页面和安装包信息 */
 export interface LatestRelease {
   assets?: DownloadAsset[]
   name: string
@@ -46,6 +46,7 @@ function parseVersion(version: string): [number, number, number] {
   return [Number(match[1]), Number(match[2]), Number(match[3])]
 }
 
+/** 比较两个规范的三段式版本号，忽略可选的 `v` 前缀和预发布后缀 */
 export function isNewerVersion(candidate: string, current: string): boolean {
   const candidateParts = parseVersion(candidate)
   const currentParts = parseVersion(current)
@@ -86,6 +87,7 @@ function parseReleaseAssets(assets: unknown): DownloadAsset[] {
   })
 }
 
+/** 校验并归一化 GitHub Latest Release API 响应 */
 export function parseLatestReleasePayload(payload: GitHubReleasePayload): LatestRelease {
   const tag = normalizeReleaseText(payload.tag_name)
 
@@ -201,6 +203,7 @@ async function fetchLatestRelease(network: ContentNetworkService): Promise<Lates
   }
 }
 
+/** 返回当前发布命名约定下与平台、架构匹配的安装包文件名 */
 export function getReleaseAssetNames(version: string, platform: NodeJS.Platform, arch: string): string[] {
   if (platform === 'win32') {
     return [`vfan-tv-v${version}-${arch}-setup.exe`]
@@ -267,6 +270,7 @@ async function resolveDownloadAsset(
   return undefined
 }
 
+/** 检查最新 GitHub Release 并生成更新检查结果 */
 export async function checkLatestRelease(
   currentVersion: string,
   network: ContentNetworkService,

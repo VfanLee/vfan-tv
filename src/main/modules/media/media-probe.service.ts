@@ -5,7 +5,7 @@ import { resolveSourceRequestHeaders } from '../../infrastructure/http/source-re
 const PROBE_TIMEOUT_MS = 5_000
 const MAX_PLAYLIST_BYTES = 2 * 1024 * 1024
 
-// 使用轻量请求估算媒体可达性与响应延迟，不读取完整媒体内容。
+/** 探测媒体地址的可达性、响应延迟和 HLS 最高画质 */
 export async function probeMediaSource(
   input: MediaProbeInput,
   network: ContentNetworkService,

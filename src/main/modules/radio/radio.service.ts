@@ -1,5 +1,8 @@
 import type { RadioCategory, RadioChannel, RadioLiveProgram, RadioRegion, RadioSearchResult } from '@shared/types'
 import type { Session } from 'electron'
+import { compact, uniq } from 'es-toolkit/array'
+import { clamp } from 'es-toolkit/math'
+import { omitBy } from 'es-toolkit/object'
 import type { HttpClient } from '../../infrastructure/http/http-client'
 import type { ContentNetworkService } from '../../infrastructure/network/content-network.service'
 import type { MediaProxyServer } from '../media/media-proxy-server'
@@ -11,9 +14,7 @@ const QINGTING_AUDIO_REFERER = 'https://ls.qingting.fm/'
 
 type UnknownRecord = Record<string, unknown>
 
-/**
- * 蜻蜓的这些端点没有稳定的公开 SDK；服务层在这里收敛上游字段差异，避免 renderer 依赖其原始结构。
- */
+/** 获取并归一化蜻蜓广播分类、频道、节目单和播放地址 */
 export class RadioService {
   constructor(
     private readonly httpClient: HttpClient,
@@ -23,7 +24,7 @@ export class RadioService {
 
   async getCategories(): Promise<RadioCategory[]> {
     const response = await this.get<unknown>(`${QTFM_API_BASE_URL}/categories?type=channel`)
-    return asArray(getPayload(response)).map(toCategory).filter(isDefined)
+    return compact(asArray(getPayload(response)).map(toCategory))
   }
 
   async getCategoryChannels(categoryId: number, page = 1, pageSize = 20): Promise<RadioChannel[]> {
@@ -31,7 +32,7 @@ export class RadioService {
     url.searchParams.set('page', String(normalizePage(page)))
     url.searchParams.set('pagesize', String(normalizePageSize(pageSize)))
     const response = await this.get<unknown>(url.toString())
-    return asArray(getPayload(response)).map(toChannel).filter(isDefined)
+    return compact(asArray(getPayload(response)).map(toChannel))
   }
 
   async getChannelDetail(channelId: number): Promise<RadioChannel> {
@@ -54,7 +55,7 @@ export class RadioService {
     const payload = getPayload(await this.get<unknown>(url.toString()))
     const record = asRecord(payload)
     const data = asRecord(record?.data)
-    const items = asArray(data?.docs).map(toChannel).filter(isDefined)
+    const items = compact(asArray(data?.docs).map(toChannel))
     const total = asNumber(data?.numFound)
     return {
       items,
@@ -63,27 +64,25 @@ export class RadioService {
   }
 
   async getLivePrograms(channelIds: number[]): Promise<RadioLiveProgram[]> {
-    const ids = [...new Set(channelIds.map(normalizeId).filter(Boolean))]
+    const ids = uniq(channelIds.map(normalizeId).filter(Boolean))
     if (!ids.length) return []
 
     const url = new URL(`${QINGTING_API_BASE_URL}/v2/livechannelplaying`)
     url.searchParams.set('ids', ids.join(','))
     url.searchParams.set('current_time', String(Math.floor(Date.now() / 1000)))
-    return asArray(getPayload(await this.get<unknown>(url.toString())))
-      .map(toLiveProgram)
-      .filter(isDefined)
+    return compact(asArray(getPayload(await this.get<unknown>(url.toString()))).map(toLiveProgram))
   }
 
   async getRegions(): Promise<RadioRegion[]> {
     const response = await this.get<unknown>(`${QTFM_API_BASE_URL}/regions?all=true`)
-    return asArray(getPayload(response)).map(toRegion).filter(isDefined)
+    return compact(asArray(getPayload(response)).map(toRegion))
   }
 
   async getBillboard(categoryId: number, regionId: number): Promise<RadioChannel[]> {
     const response = await this.get<unknown>(
       `${QTFM_API_BASE_URL}/billboards/${normalizeId(categoryId)}/${normalizeId(regionId)}/channels`,
     )
-    return asArray(getPayload(response)).map(toChannel).filter(isDefined)
+    return compact(asArray(getPayload(response)).map(toChannel))
   }
 
   async getPlaybackUrl(channelId: number): Promise<string> {
@@ -98,7 +97,7 @@ export class RadioService {
   }
 }
 
-/** 蜻蜓音频使用固定直连 Session，并只向官方音频域名补充其要求的 Referer。 */
+/** 为蜻蜓音频 Session 配置请求 Referer */
 export function configureRadioSessionHeaders(session: Session): void {
   session.webRequest.onBeforeSendHeaders({ urls: ['https://ls.qingting.fm/*'] }, (details, callback) => {
     callback({
@@ -110,7 +109,7 @@ export function configureRadioSessionHeaders(session: Session): void {
 function setRequestHeader(headers: Record<string, string>, name: string, value: string): Record<string, string> {
   const normalizedName = name.toLowerCase()
   return {
-    ...Object.fromEntries(Object.entries(headers).filter(([key]) => key.toLowerCase() !== normalizedName)),
+    ...(omitBy(headers, (_value, key) => key.toLowerCase() === normalizedName) as Record<string, string>),
     [name]: value,
   }
 }
@@ -188,9 +187,5 @@ function normalizePage(value: number): number {
 }
 
 function normalizePageSize(value: number): number {
-  return Math.min(Math.max(Number.isInteger(value) ? value : 20, 1), 50)
-}
-
-function isDefined<T>(value: T | undefined): value is T {
-  return value !== undefined
+  return clamp(Number.isInteger(value) ? value : 20, 1, 50)
 }

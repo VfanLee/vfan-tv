@@ -32,6 +32,7 @@ export function MediaPoster({
   const imageKey = requestKey
   const visibleSrc = imageSrc && !(failedImage?.key === imageKey && failedImage.src === imageSrc) ? imageSrc : undefined
 
+  /** 解析并更新媒体海报地址 */
   useEffect(() => {
     let active = true
     if (!poster) {

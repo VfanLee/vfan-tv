@@ -13,7 +13,7 @@ const RELEASE_DOWNLOAD_BASE_URL = `${REPOSITORY_URL}/releases/latest/download/`
 
 type UpdateEventEmitter = (event: UpdateEvent) => void
 
-// 手动 Release 检查适用于所有平台；Windows 才额外尝试 electron-updater 的下载安装流程。
+/** 检查、下载和安装应用更新，并发送更新状态事件 */
 export class UpdateService {
   private lastResult?: UpdateCheckResult
   private suppressUpdaterEvents = false
@@ -74,7 +74,7 @@ export class UpdateService {
       throw new Error('当前平台不支持自动下载更新')
     }
 
-    // electron-updater 下载时沿用上一次检查解析出的地址，因此下载前必须用最终下载源重新检查一次。
+    // 下载前使用最终下载源重新检查更新。
     const requestId = randomUUID()
     const startedAt = Date.now()
     console.info(
@@ -121,7 +121,7 @@ export class UpdateService {
     updater.autoDownload = false
     updater.autoInstallOnAppQuit = false
     updater.disableWebInstaller = true
-    // Release 只提供当前版本的资产，旧版本 blockmap 必然 404，差量下载只会失败后回退整包。
+    // 禁用差量下载并使用完整安装包。
     updater.disableDifferentialDownload = true
     updater.on('checking-for-update', () => {
       if (this.suppressUpdaterEvents) return
@@ -194,7 +194,7 @@ export class UpdateService {
     return this.runWithoutUpdaterEvents(() => this.configureUpdater(version).checkForUpdates())
   }
 
-  // 仅用于补充元数据的内部检查不应改写 UI 状态，也不应重复报错。
+  // 内部检查期间暂停发送 updater 状态事件。
   private async runWithoutUpdaterEvents<T>(action: () => Promise<T>): Promise<T> {
     this.suppressUpdaterEvents = true
     try {

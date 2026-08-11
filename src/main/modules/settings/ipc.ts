@@ -6,7 +6,7 @@ import type { ApplicationContext } from '../../app/composition-root'
 import { broadcastAppDataChange } from '../../ipc/broadcast'
 import { removeDeprecatedDatabaseFiles, resetAppDatabase } from '../../infrastructure/database/client'
 
-// 设置 IPC 只协调原生会话清理；具体设置校验与持久化由 SettingsService 负责。
+/** 注册设置读写、恢复出厂和数据清理 IPC 处理器 */
 export function registerSettingsIpc(context: ApplicationContext): void {
   const { settings } = context.services
   ipcMain.handle(IPC_CHANNELS.settings.get, () => settings.get())

@@ -13,10 +13,12 @@ let managerOptions: SettingsWindowManagerOptions | undefined
 let settingsWindow: BrowserWindow | null = null
 let pendingSection: SettingsSectionId | undefined
 
+/** 配置设置窗口管理器 */
 export function configureSettingsWindowManager(options: SettingsWindowManagerOptions): void {
   managerOptions = options
 }
 
+/** 打开或聚焦单例设置窗口，并把目标设置分区同步到已存在的窗口 */
 export function showSettingsWindow(section?: SettingsSectionId): void {
   if (!managerOptions) throw new Error('Settings window manager is not configured')
 
@@ -65,12 +67,14 @@ export function showSettingsWindow(section?: SettingsSectionId): void {
   void window.loadURL(`${MAIN_WINDOW_WEBPACK_ENTRY}#/settings?section=${encodeURIComponent(initialSection)}`)
 }
 
+/** 关闭设置窗口 */
 export function closeSettingsWindow(): void {
   if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.close()
   settingsWindow = null
   pendingSection = undefined
 }
 
+/** 获取当前设置窗口 */
 export function getSettingsWindow(): BrowserWindow | null {
   return settingsWindow && !settingsWindow.isDestroyed() ? settingsWindow : null
 }

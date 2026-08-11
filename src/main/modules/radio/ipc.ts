@@ -2,6 +2,7 @@ import { ipcMain } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc'
 import type { ApplicationContext } from '../../app/composition-root'
 
+/** 注册广播分类、搜索、节目单与代理播放地址的 IPC 处理器 */
 export function registerRadioIpc(context: ApplicationContext): void {
   const { radio } = context.services
   ipcMain.handle(IPC_CHANNELS.radio.getCategories, () => radio.getCategories())

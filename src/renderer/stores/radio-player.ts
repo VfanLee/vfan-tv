@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { createJSONStorage, persist } from 'zustand/middleware'
+import { clamp } from 'es-toolkit/math'
 import { RADIO_PLAYER_STORAGE_KEY } from '@shared/constants'
 import type { RadioChannel, RadioMiniWindowPlaybackExit } from '@shared/types'
 
@@ -87,7 +88,7 @@ export const useRadioPlayerStore = create<RadioPlaybackState>()(
           errorMessage: '',
           isMuted: exit.isMuted,
           status: exit.isPlaying ? 'loading' : 'paused',
-          volume: Math.min(Math.max(exit.volume, 0), 1),
+          volume: clamp(exit.volume, 0, 1),
         })),
       setChannelProgram: (title) =>
         set((state) =>
@@ -103,7 +104,7 @@ export const useRadioPlayerStore = create<RadioPlaybackState>()(
       setError: (message) => set({ errorMessage: message, status: 'error' }),
       setMuted: (muted) => set({ isMuted: muted }),
       setStatus: (status) => set({ status, ...(status !== 'error' ? { errorMessage: '' } : {}) }),
-      setVolume: (volume) => set({ volume: Math.min(Math.max(volume, 0), 1) }),
+      setVolume: (volume) => set({ volume: clamp(volume, 0, 1) }),
       stop: () => {
         const { channel, commandId } = get()
         if (!channel) return

@@ -7,7 +7,7 @@ import type { AppApi } from '@shared/types'
 import type { ApplicationContext } from '../../app/composition-root'
 import { broadcastAppDataChange } from '../../ipc/broadcast'
 
-// IPTV 源的文件读写与播放列表读取均留在 main 进程执行。
+/** 注册 IPTV 源管理、文件导入导出、目录、节目单与播放 IPC 处理器 */
 export function registerIptvSourcesIpc(context: ApplicationContext): void {
   const { iptvSource, iptvCatalog, iptvEpg, iptvPlayback, mediaPlaybackTarget } = context.services
   ipcMain.handle(IPC_CHANNELS.iptvSources.list, () => iptvSource.list())

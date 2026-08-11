@@ -13,7 +13,7 @@ import {
   RadioPage,
   SearchPage,
   SettingsPage,
-} from '@renderer/features'
+} from '@renderer/pages'
 import { useLayoutPreferencesStore } from '@/stores'
 
 const router = createHashRouter([

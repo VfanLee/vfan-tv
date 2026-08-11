@@ -8,6 +8,7 @@ import type {
   VodSourceConfig,
 } from '@shared/types'
 import { randomUUID } from 'crypto'
+import { limitAsync } from 'es-toolkit/array'
 import type { ContentNetworkContext, ContentNetworkService } from '../../infrastructure/network/content-network.service'
 import { resolveSourceRequestHeaders } from '../../infrastructure/http/source-request-headers'
 import type { MediaProxyServer } from './media-proxy-server'
@@ -22,12 +23,19 @@ interface DetectionCacheEntry {
   result: MediaStreamDetectionResult
 }
 
+/** 解析候选播放地址、识别媒体类型并创建代理播放会话 */
 export class MediaPlaybackTargetService {
   private readonly detectionCache = new Map<string, DetectionCacheEntry>()
   private readonly detectionTasks = new Map<string, Promise<MediaStreamDetectionResult>>()
-  private readonly detectionWaiters: Array<() => void> = []
-  private activeDetections = 0
   private detectionCacheGeneration = 0
+  private readonly runDetection = limitAsync(
+    async (
+      url: string,
+      headers: Record<string, string>,
+      context: ContentNetworkContext,
+    ): Promise<MediaStreamDetectionResult> => detectMediaStreamType({ url, headers }, this.network, context),
+    MAX_CONCURRENT_DETECTIONS,
+  )
 
   constructor(
     private readonly mediaProxy: MediaProxyServer,
@@ -153,36 +161,6 @@ export class MediaPlaybackTargetService {
       })
     this.detectionTasks.set(key, task)
     return task
-  }
-
-  private async runDetection(
-    url: string,
-    headers: Record<string, string>,
-    context: ContentNetworkContext,
-  ): Promise<MediaStreamDetectionResult> {
-    await this.acquireDetectionSlot()
-    try {
-      return await detectMediaStreamType({ url, headers }, this.network, context)
-    } finally {
-      this.releaseDetectionSlot()
-    }
-  }
-
-  private async acquireDetectionSlot(): Promise<void> {
-    if (this.activeDetections < MAX_CONCURRENT_DETECTIONS) {
-      this.activeDetections += 1
-      return
-    }
-    await new Promise<void>((resolve) => this.detectionWaiters.push(resolve))
-  }
-
-  private releaseDetectionSlot(): void {
-    const next = this.detectionWaiters.shift()
-    if (next) {
-      next()
-      return
-    }
-    this.activeDetections = Math.max(0, this.activeDetections - 1)
   }
 }
 

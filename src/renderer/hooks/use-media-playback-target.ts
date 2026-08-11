@@ -36,6 +36,7 @@ export function useMediaPlaybackTarget(input: MediaPlaybackTargetInput | undefin
   const [state, setState] = useState<ResolutionState>({ key: '' })
   const ownedSessionIdRef = useRef<string | undefined>(undefined)
 
+  /** 释放旧媒体会话并解析新的播放候选地址 */
   useEffect(() => {
     const previousSessionId = ownedSessionIdRef.current
     ownedSessionIdRef.current = undefined
@@ -59,6 +60,7 @@ export function useMediaPlaybackTarget(input: MediaPlaybackTargetInput | undefin
     }
   }, [requestInput, requestKey])
 
+  /** 组件卸载时释放当前媒体播放会话 */
   useEffect(
     () => () => {
       const mediaSessionId = ownedSessionIdRef.current

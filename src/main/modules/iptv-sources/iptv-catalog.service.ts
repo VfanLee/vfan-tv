@@ -5,6 +5,7 @@ import type { IptvSourceRepository } from './iptv-source.repository'
 
 const PLAYLIST_FRESH_MS = 6 * 60 * 60 * 1_000
 
+/** 加载 IPTV 频道目录并管理目录缓存 */
 export class IptvCatalogService {
   private readonly refreshes = new Map<string, Promise<IptvPlaylist>>()
 

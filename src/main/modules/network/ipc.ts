@@ -5,6 +5,7 @@ import type { AppApi } from '@shared/types'
 import type { ApplicationContext } from '../../app/composition-root'
 import { broadcastAppDataChange } from '../../ipc/broadcast'
 
+/** 注册网络状态、连通性测试和网络设置 IPC 处理器 */
 export function registerNetworkIpc(context: ApplicationContext): void {
   const { network, settings } = context.services
   ipcMain.handle(IPC_CHANNELS.network.getStatus, () => network.getStatus())

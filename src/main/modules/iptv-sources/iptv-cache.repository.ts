@@ -7,6 +7,7 @@ import {
   iptvEpgProgramsTable,
 } from '../../infrastructure/database/schema'
 
+/** 持久化 IPTV 频道快照、EPG 节目数据与提供方有效期元数据 */
 export class IptvCacheRepository {
   constructor(private readonly db: AppDatabase) {}
 

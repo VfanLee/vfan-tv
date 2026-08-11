@@ -49,6 +49,7 @@ export const useLayoutPreferencesStore = create<LayoutPreferencesState>((set) =>
 }))
 
 export function useLayoutPreferencesSync(): void {
+  /** 监听本地存储变化并同步布局偏好 */
   useEffect(() => {
     const synchronize = (event: StorageEvent): void => {
       if (event.key !== null && event.key !== LAYOUT_PREFERENCES_STORAGE_KEY) return

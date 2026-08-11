@@ -9,6 +9,7 @@ function toIptvSourceConfig(row: IptvSourceRow): IptvSourceConfig {
   return row
 }
 
+/** 持久化 IPTV 源配置、排序及手动源与订阅源的来源标记 */
 export class IptvSourceRepository {
   constructor(private readonly db: AppDatabase) {}
 

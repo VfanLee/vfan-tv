@@ -27,6 +27,7 @@ export const useThemeStore = create<ThemeState>((set) => ({
 }))
 
 export function useThemeSync(): void {
+  /** 监听本地存储变化并同步主题模式 */
   useEffect(() => {
     const synchronize = (event: StorageEvent): void => {
       if (event.key !== null && event.key !== THEME_STORAGE_KEY) return

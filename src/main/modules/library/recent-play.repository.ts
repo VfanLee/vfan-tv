@@ -1,4 +1,5 @@
 import { and, desc, eq, ne } from 'drizzle-orm'
+import { uniqBy } from 'es-toolkit/array'
 import type { RecentPlayItem } from '@shared/types'
 import type { AppDatabase } from '../../infrastructure/database/client'
 import { recentPlaysTable } from '../../infrastructure/database/schema'
@@ -13,6 +14,7 @@ function toRecentPlayItem(row: RecentPlayRow): RecentPlayItem {
   }
 }
 
+/** 持久化播放进度，并在读取时按规范化标题合并历史重复条目 */
 export class RecentPlayRepository {
   constructor(private readonly db: AppDatabase) {}
 
@@ -68,17 +70,7 @@ export class RecentPlayRepository {
 }
 
 function dedupeByTitle(items: RecentPlayItem[]): RecentPlayItem[] {
-  const map = new Map<string, RecentPlayItem>()
-
-  for (const item of items) {
-    const key = normalizeTitle(item.title)
-
-    if (!map.has(key)) {
-      map.set(key, item)
-    }
-  }
-
-  return Array.from(map.values())
+  return uniqBy(items, (item) => normalizeTitle(item.title))
 }
 
 function normalizeTitle(title: string): string {

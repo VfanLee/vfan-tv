@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Download, ExternalLink, Rocket } from 'lucide-react'
 import { toast } from 'sonner'
+import { clamp } from 'es-toolkit/math'
 import { RELEASE_DOWNLOAD_ROUTES } from '@shared/constants'
 import type { ReleaseDownloadRouteId } from '@shared/types'
 import { cn } from '@/utils'
@@ -28,7 +29,7 @@ export function SidebarUpdateButton({ collapsed }: { collapsed: boolean }): Reac
 
   if (!result?.updateAvailable) return null
 
-  const percent = Math.min(100, Math.max(0, downloadProgress?.percent ?? (isDownloaded ? 100 : 0)))
+  const percent = clamp(downloadProgress?.percent ?? (isDownloaded ? 100 : 0), 0, 100)
   const canAutoUpdate = result.canAutoUpdate
   const title = !canAutoUpdate
     ? `下载新版本 v${result.latestVersion}`
@@ -120,7 +121,7 @@ function ProgressRing({ percent }: { percent: number }): React.JSX.Element {
   const stroke = 2
   const radius = (size - stroke) / 2
   const circumference = 2 * Math.PI * radius
-  const offset = circumference * (1 - Math.min(100, Math.max(0, percent)) / 100)
+  const offset = circumference * (1 - clamp(percent, 0, 100) / 100)
 
   return (
     <svg

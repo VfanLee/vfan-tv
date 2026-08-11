@@ -9,7 +9,7 @@ import type { ApplicationContext } from '../../app/composition-root'
 import { broadcastAppDataChange } from '../../ipc/broadcast'
 import { formatZodError, isZodError } from '../../ipc/utils'
 
-// 点播源 IPC：文件导入导出留在 main，以避免 renderer 获得任意文件系统权限。
+/** 注册点播源管理、文件导入导出和订阅同步 IPC 处理器 */
 export function registerSourcesIpc(context: ApplicationContext): void {
   const { source, iptvSource, settings } = context.services
   const { subscriptionHttpClients } = context.utilities
@@ -101,10 +101,10 @@ export function registerSourcesIpc(context: ApplicationContext): void {
         maxContentLength: 2 * 1024 * 1024,
       })
       try {
-        // 订阅内容在解码后仍需 schema 校验，远程输入不能直接写入本地数据库。
+        // 解码后使用 Schema 校验订阅内容。
         const decoded = new TextDecoder('utf-8', { fatal: true }).decode(bs58.decode(encoded.trim()))
         const payload = sourceSubscriptionSchema.parse(JSON.parse(decoded))
-        // VOD 源、IPTV 源与当前订阅必须作为一次完整切换提交，防止任一步失败后留下混合数据。
+        // 在同一事务中更新 VOD 源、IPTV 源和当前订阅。
         const result = context.db.$client.transaction(() => {
           const result = {
             vod: source.syncSubscription(payload.vod),

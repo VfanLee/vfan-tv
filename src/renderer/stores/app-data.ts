@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { uniqBy } from 'es-toolkit/array'
 import type { HomeData, HotRecommendationType, HotRecommendationsPage, RecommendationItem } from '@shared/types'
 import { categorySections } from '@renderer/constants'
 import { getHomeData, getHotRecommendationsPage } from '@renderer/platform/api'
@@ -114,23 +115,11 @@ function createHotCache(): Record<string, HotCategoryCache> {
 }
 
 function mergeHotPage(current: HotCategoryCache, page: HotRecommendationsPage): HotCategoryCache {
-  // 接口分页可能有重叠，合并前以分类和条目 ID 去重。
-  const seen = new Set(current.items.map((item) => `${item.category}-${item.id}`))
-  const items = [...current.items]
-
-  for (const item of page.items) {
-    const key = `${item.category}-${item.id}`
-    if (!seen.has(key)) {
-      seen.add(key)
-      items.push(item)
-    }
-  }
-
   return {
     ...current,
     hasMore: page.hasMore,
     initialized: true,
-    items,
+    items: uniqBy([...current.items, ...page.items], (item) => `${item.category}-${item.id}`),
     nextStart: page.nextStart,
   }
 }

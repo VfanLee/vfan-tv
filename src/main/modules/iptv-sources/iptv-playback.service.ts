@@ -5,6 +5,8 @@ import type { IptvSourceRepository } from './iptv-source.repository'
 import { resolveSourceRequestHeaders } from '../../infrastructure/http/source-request-headers'
 
 const BLOCKED_HEADERS = new Set(['host', 'content-length', 'connection', 'transfer-encoding', 'range'])
+
+/** 解析 IPTV 频道线路并创建播放目标 */
 export class IptvPlaybackService {
   constructor(
     private readonly sourceRepository: IptvSourceRepository,
@@ -36,6 +38,7 @@ export class IptvPlaybackService {
   }
 }
 
+/** 合并 IPTV 源与频道线路的请求头 */
 export function mergeRequestHeaders(
   source: IptvStreamRequestHeaders,
   channel?: IptvStreamRequestHeaders,

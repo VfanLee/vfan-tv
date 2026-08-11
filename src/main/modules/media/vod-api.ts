@@ -8,11 +8,12 @@ import type {
   VodSourceConfig,
 } from '@shared/types'
 
-// 兼容不同 CMS 返回形态：本模块只做协议归一化，不承担网络请求和业务筛选。
+/** 构造兼容 CMS 接口的关键词搜索 URL */
 export function buildVodSearchUrl(sourceUrl: string, keyword: string): string {
   return buildVodCatalogUrl(sourceUrl, { sourceId: '', keyword, page: 1 })
 }
 
+/** 构造带分页及可选分类、关键词条件的 CMS 列表 URL */
 export function buildVodCatalogUrl(sourceUrl: string, input: VodCatalogRequest): string {
   const url = new URL(sourceUrl)
   url.searchParams.set('ac', 'list')
@@ -22,6 +23,7 @@ export function buildVodCatalogUrl(sourceUrl: string, input: VodCatalogRequest):
   return url.toString()
 }
 
+/** 构造支持批量视频 ID 的 CMS 详情 URL */
 export function buildVodDetailUrl(sourceUrl: string, vodIds: string[]): string {
   const url = new URL(sourceUrl)
   url.searchParams.set('ac', 'detail')
@@ -29,6 +31,7 @@ export function buildVodDetailUrl(sourceUrl: string, vodIds: string[]): string {
   return url.toString()
 }
 
+/** 将不同 CMS 的列表响应归一化为应用点播条目，并附加来源信息 */
 export function normalizeVodApiResponse(
   response: VodApiResponse | unknown,
   source: VodSourceConfig,
@@ -43,6 +46,7 @@ export function normalizeVodApiResponse(
     .filter((item) => item.title.length > 0)
 }
 
+/** 将 CMS 分类、分页元数据和条目归一化为应用目录页 */
 export function normalizeVodCatalogPage(response: VodApiResponse | unknown, source: VodSourceConfig): VodCatalogPage {
   const record = isRecord(response) ? response : {}
   return {

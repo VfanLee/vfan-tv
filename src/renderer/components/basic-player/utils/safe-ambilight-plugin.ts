@@ -8,8 +8,8 @@ interface AmbilightOption {
 }
 
 /**
- * 跨域媒体源会污染 canvas，官方 ambilight 在 getImageData 时会抛 SecurityError。
- * 这里在采样失败时静默停用背光，避免打断播放与刷屏报错。
+ * 跨域媒体源会污染 canvas，官方 ambilight 在 getImageData 时会抛 SecurityError
+ * 这里在采样失败时静默停用背光，避免打断播放与刷屏报错
  */
 export function createSafeAmbilightPlugin(option: AmbilightOption = {}) {
   return (art: Artplayer) => {

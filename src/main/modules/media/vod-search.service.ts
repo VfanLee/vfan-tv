@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto'
+import { mapAsync, uniq } from 'es-toolkit/array'
 import type { SearchEvent } from '@shared/types'
 import { isHttpRequestError, type HttpClient } from '../../infrastructure/http/http-client'
 import type { SourceService } from '../sources/source.service'
@@ -8,7 +9,7 @@ import { buildVodDetailUrl, buildVodSearchUrl, normalizeVodApiResponse } from '.
 const SEARCH_CONCURRENCY = 6
 const SOURCE_TIMEOUT_MS = 15_000
 
-// 将多数据源搜索转换为增量 IPC 事件；结果不等待所有源完成才返回 renderer。
+/** 并发搜索所有已启用点播源，并把各源进度与结果增量发送给 renderer */
 export class VodSearchService {
   constructor(
     private readonly sourceService: SourceService,
@@ -41,30 +42,9 @@ export class VodSearchService {
     signal: AbortSignal,
     sources: ReturnType<SourceService['list']>,
   ): Promise<void> {
-    const pendingSources = [...sources]
-    // 多 worker 共享队列，限制并发避免大量源同时请求导致网络与 UI 事件拥塞。
-    const workers = Array.from({ length: Math.min(SEARCH_CONCURRENCY, pendingSources.length) }, async () => {
-      while (pendingSources.length > 0 && !signal.aborted) {
-        const source = pendingSources.shift()
-
-        if (source) {
-          await this.searchSource(searchId, keyword, signal, source)
-        }
-      }
+    await mapAsync(sources, (source) => this.searchSource(searchId, keyword, signal, source), {
+      concurrency: SEARCH_CONCURRENCY,
     })
-
-    await Promise.all(workers)
-
-    if (signal.aborted) {
-      for (const source of pendingSources) {
-        this.emit({
-          type: 'source-cancelled',
-          searchId,
-          sourceId: source.id,
-          sourceName: source.name,
-        })
-      }
-    }
   }
 
   private async searchSource(
@@ -99,7 +79,7 @@ export class VodSearchService {
       }
       const listResponse = await this.httpClient.get(buildVodSearchUrl(source.url, keyword), requestOptions)
       const listItems = normalizeVodApiResponse(listResponse, source)
-      const vodIds = [...new Set(listItems.map((item) => item.vodId).filter(Boolean))]
+      const vodIds = uniq(listItems.map((item) => item.vodId).filter(Boolean))
       const detailResponse =
         vodIds.length > 0 ? await this.httpClient.get(buildVodDetailUrl(source.url, vodIds), requestOptions) : undefined
       const items = detailResponse ? normalizeVodApiResponse(detailResponse, source) : []

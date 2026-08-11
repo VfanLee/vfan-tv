@@ -1,6 +1,10 @@
 import { createHash } from 'crypto'
 import { gunzipSync } from 'zlib'
 import { DOMParser } from '@xmldom/xmldom'
+import dayjs from 'dayjs'
+import customParseFormat from 'dayjs/plugin/customParseFormat'
+import { compact, limitAsync, mapAsync } from 'es-toolkit/array'
+import { range } from 'es-toolkit/math'
 import type {
   IptvChannel,
   IptvChannelPrograms,
@@ -20,6 +24,9 @@ const QUERY_CACHE_MS = 30 * 60 * 1_000
 const XMLTV_CACHE_MS = 2 * 60 * 60 * 1_000
 const MAX_EPG_SIZE = 100 * 1024 * 1024
 const EPG_CACHE_NAMESPACE = 'iptv-epg-v2'
+const DATE_KEY_FORMAT = 'YYYY-MM-DD'
+
+dayjs.extend(customParseFormat)
 
 interface EpgProvider {
   type: 'query' | 'xmltv'
@@ -27,9 +34,9 @@ interface EpgProvider {
   label: string
 }
 
+/** 加载并缓存查询式与 XMLTV 节目单 */
 export class IptvEpgService {
-  private activeQueryCount = 0
-  private readonly queryWaiters: Array<() => void> = []
+  private readonly runLimitedQuery = limitAsync(async <T>(request: () => Promise<T>): Promise<T> => request(), 4)
 
   constructor(
     private readonly httpClient: HttpClient,
@@ -49,7 +56,7 @@ export class IptvEpgService {
     if (!selected) return { items: emptyPrograms(channels), fallback: false }
 
     try {
-      const programs = await this.loadProvider(selected, channels, formatDate(new Date()))
+      const programs = await this.loadProvider(selected, channels, formatDate())
       const items = channels.map((channel) => selectCurrentAndNext(channel.id, programs.get(channel.id) ?? []))
       this.recordSuccess(selected.label)
       return { items, actualSource: selected.label, fallback: false }
@@ -64,7 +71,7 @@ export class IptvEpgService {
         }
       }
       try {
-        const programs = await this.loadProvider(fallbackProvider, channels, formatDate(new Date()))
+        const programs = await this.loadProvider(fallbackProvider, channels, formatDate())
         const items = channels.map((channel) => selectCurrentAndNext(channel.id, programs.get(channel.id) ?? []))
         this.recordSuccess(fallbackProvider.label)
         return {
@@ -154,7 +161,7 @@ export class IptvEpgService {
           throw new Error('响应不是有效的 XMLTV')
         }
       } else {
-        const url = buildQueryUrl(provider.url, 'CCTV1', formatDate(new Date()))
+        const url = buildQueryUrl(provider.url, 'CCTV1', formatDate())
         await this.httpClient.get<unknown>(url, {
           requestLabel: 'IPTV EPG',
           timeout: 8_000,
@@ -178,10 +185,10 @@ export class IptvEpgService {
     date: string,
   ): Promise<Map<string, IptvEpgProgram[]>> {
     if (provider.type === 'xmltv') return this.loadXmltv(provider, channels, date)
-    const entries = await mapLimit(
+    const entries = await mapAsync(
       channels,
-      4,
       async (channel) => [channel.id, await this.loadQueryChannel(provider, channel, date)] as const,
+      { concurrency: 4 },
     )
     return new Map(entries)
   }
@@ -218,7 +225,7 @@ export class IptvEpgService {
       for (const [channelKey, programs] of parsed.entries()) {
         const programsByDate = new Map<string, IptvEpgProgram[]>()
         for (const program of programs) {
-          const programDate = formatDate(new Date(program.startAt))
+          const programDate = formatDate(program.startAt)
           if (!retainedDates.has(programDate)) continue
           const values = programsByDate.get(programDate) ?? []
           values.push(program)
@@ -239,9 +246,10 @@ export class IptvEpgService {
 
     return new Map(
       channels.map((channel) => {
-        const keys = [channel.tvgId, channel.tvgName, channel.title]
-          .filter((value): value is string => Boolean(value))
-          .flatMap((value) => [value, normalizeChannelName(value)])
+        const keys = compact([channel.tvgId, channel.tvgName, channel.title]).flatMap((value) => [
+          value,
+          normalizeChannelName(value),
+        ])
         const programs = keys.map((key) => this.cacheRepository.getPrograms(cacheKey, key, date)).find(Boolean) ?? []
         return [channel.id, programs] as const
       }),
@@ -262,19 +270,6 @@ export class IptvEpgService {
     this.settingsService.update({
       iptvEpg: { ...settings.iptvEpg, lastSuccessAt: Date.now(), lastSuccessSource: source },
     })
-  }
-
-  private async runLimitedQuery<T>(request: () => Promise<T>): Promise<T> {
-    if (this.activeQueryCount >= 4) {
-      await new Promise<void>((resolve) => this.queryWaiters.push(resolve))
-    }
-    this.activeQueryCount += 1
-    try {
-      return await request()
-    } finally {
-      this.activeQueryCount -= 1
-      this.queryWaiters.shift()?.()
-    }
   }
 }
 
@@ -392,14 +387,17 @@ function parseFlexibleTime(value: unknown, date?: string): number | undefined {
   if (typeof value !== 'string' || !value.trim()) return undefined
   const timeOnly = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/.exec(value.trim())
   if (timeOnly && date) {
-    const parsed = new Date(`${date}T00:00:00`)
-    parsed.setHours(+timeOnly[1], +timeOnly[2], +(timeOnly[3] ?? 0), 0)
-    return parsed.getTime()
+    return dayjs(date, DATE_KEY_FORMAT, true)
+      .hour(+timeOnly[1])
+      .minute(+timeOnly[2])
+      .second(+(timeOnly[3] ?? 0))
+      .millisecond(0)
+      .valueOf()
   }
   const numeric = Number(value)
   if (Number.isFinite(numeric)) return numeric < 10_000_000_000 ? numeric * 1_000 : numeric
-  const parsed = Date.parse(value)
-  return Number.isFinite(parsed) ? parsed : undefined
+  const parsed = dayjs(value)
+  return parsed.isValid() ? parsed.valueOf() : undefined
 }
 
 function decodeMaybeGzip(data: Buffer, url: string): string {
@@ -433,38 +431,17 @@ function normalizeChannelName(value: string): string {
     .replace(/高清|超清|频道|hd|uhd|4k/gi, '')
 }
 
-function formatDate(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
+function formatDate(date?: Date | number): string {
+  return dayjs(date).format(DATE_KEY_FORMAT)
 }
 
 function getScheduleDates(): string[] {
-  const today = new Date()
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + index - 3)
-    return formatDate(date)
-  })
+  const today = dayjs().startOf('day')
+  return range(-3, 4).map((offset) => today.add(offset, 'day').format(DATE_KEY_FORMAT))
 }
 
 function isDateKey(value: string): boolean {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
-  const date = new Date(`${value}T00:00:00`)
-  return Number.isFinite(date.getTime()) && formatDate(date) === value
-}
-
-async function mapLimit<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>): Promise<R[]> {
-  const result = new Array<R>(items.length)
-  let cursor = 0
-  const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (cursor < items.length) {
-      const index = cursor++
-      result[index] = await worker(items[index])
-    }
-  })
-  await Promise.all(runners)
-  return result
+  return dayjs(value, DATE_KEY_FORMAT, true).isValid()
 }
 
 function toPublicError(error: unknown): string {

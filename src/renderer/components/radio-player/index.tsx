@@ -41,6 +41,7 @@ export function RadioPlaybackEngine(): React.JSX.Element {
     useRadioPlayerStore.getState().setChannelProgram(title)
   })
 
+  /** 组件卸载时暂停电台播放 */
   useEffect(
     () => () => {
       useRadioPlayerStore.getState().pauseForExternalMedia()
@@ -86,6 +87,7 @@ export function RadioStreamEngine({
   const commandRef = useRef(command)
   const callbacksRef = useRef({ onError, onStatusChange })
 
+  /** 同步当前频道、控制命令和事件回调引用 */
   useEffect(() => {
     channelRef.current = channel
     commandRef.current = command
@@ -102,6 +104,7 @@ export function RadioStreamEngine({
     callbacksRef.current.onError(message)
   }
 
+  /** 绑定电台音频事件和媒体播放协调器 */
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
@@ -133,6 +136,7 @@ export function RadioStreamEngine({
     }
   }, [])
 
+  /** 同步音频音量和静音状态 */
   useEffect(() => {
     const audio = audioRef.current
     if (!audio) return
@@ -140,6 +144,7 @@ export function RadioStreamEngine({
     audio.muted = isMuted
   }, [isMuted, volume])
 
+  /** 执行最新的电台播放控制命令 */
   useEffect(() => {
     if (!commandId) return
     const audio = audioRef.current
@@ -197,6 +202,7 @@ export function RadioStreamEngine({
     }
   }, [commandId])
 
+  /** 组件卸载时销毁电台音频播放实例 */
   useEffect(() => {
     const audio = audioRef.current
     return () => {
@@ -211,10 +217,12 @@ export function RadioStreamEngine({
 export function useRadioProgramRefresh(channelId: number | undefined, onProgram: (title: string) => void): void {
   const onProgramRef = useRef(onProgram)
 
+  /** 同步节目更新回调引用 */
   useEffect(() => {
     onProgramRef.current = onProgram
   }, [onProgram])
 
+  /** 加载当前直播节目并定时刷新 */
   useEffect(() => {
     if (!channelId) return
     let active = true
@@ -239,6 +247,7 @@ export function RadioPlayerPanel(): React.JSX.Element {
   const [channelDetails, setChannelDetails] = useState<RadioChannel>()
   const channelId = channel?.id
 
+  /** 加载当前电台频道详情 */
   useEffect(() => {
     if (!channelId) return
 
@@ -345,6 +354,7 @@ export function RadioBottomPlayer(): React.JSX.Element {
   const setVolume = useRadioPlayerStore((state) => state.setVolume)
   const toggle = useRadioPlayerStore((state) => state.toggle)
 
+  /** 监听电台迷你窗口退出事件并恢复播放状态 */
   useEffect(
     () =>
       onMiniWindowModeExit((exit) => {
@@ -558,6 +568,7 @@ export function RadioStationCover({
 }): React.JSX.Element {
   const [resolvedCover, setResolvedCover] = useState<{ key: string; url?: string }>()
   const coverUrl = resolvedCover && resolvedCover.key === channel.coverUrl ? resolvedCover.url : undefined
+  /** 解析并更新电台封面地址 */
   useEffect(() => {
     let active = true
     if (channel.coverUrl) {

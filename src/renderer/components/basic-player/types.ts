@@ -66,7 +66,7 @@ export interface BasicPlayerProps {
   hidePlaybackSettings?: boolean
   isTheaterMode?: boolean
   loop?: boolean
-  /** 小窗模式仅保留视频画面，窗口级退出入口由小窗页面提供。 */
+  /** 小窗模式仅保留视频画面，窗口级退出入口由小窗页面提供 */
   miniWindowMode?: boolean
   playerOverlay?: ReactNode
   playerOverlayPinned?: boolean

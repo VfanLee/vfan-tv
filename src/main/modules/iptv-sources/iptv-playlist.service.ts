@@ -1,4 +1,5 @@
 import playlistParser, { type PlaylistItem } from 'iptv-playlist-parser'
+import { uniq } from 'es-toolkit/array'
 import type {
   IptvChannel,
   IptvChannelStream,
@@ -31,7 +32,7 @@ interface ParsedPlaylistItem extends ParsedExtInf {
   url: string
 }
 
-// 将远程 M3U/M3U8 内容解析为统一频道模型，并保留源站要求的请求头供播放器使用。
+/** 加载远程 M3U 或文本播放列表，并归一化为保留源站请求头的频道模型 */
 export class IptvPlaylistService {
   constructor(private readonly httpClient: HttpClient) {}
 
@@ -60,6 +61,7 @@ export class IptvPlaylistService {
   }
 }
 
+/** 解析 M3U 或逗号分隔文本播放列表，合并同频道线路并生成稳定标识 */
 export function parseIptvPlaylist(content: string, sourceUrl: string): IptvPlaylist {
   const parsed = parsePlaylistItems(content)
   const items = parsed.items
@@ -83,6 +85,7 @@ export function parseIptvPlaylist(content: string, sourceUrl: string): IptvPlayl
   }
 }
 
+/** 将 M3U 播放列表转换为兼容的分组文本格式；文本输入保持不变 */
 export function m3uToTextPlaylist(content: string): string {
   if (!isM3uPlaylist(content)) {
     return content
@@ -97,7 +100,7 @@ function parsePlaylistItems(content: string): { items: ParsedPlaylistItem[]; sou
   const headerUrls = [playlist.header.attrs['x-tvg-url'], ...parseHeaderEpgUrls(playlist.header.raw)]
   return {
     items: playlist.items.flatMap(toParsedPlaylistItem),
-    sourceEpgUrls: [...new Set(headerUrls.flatMap(splitEpgUrls).filter(Boolean))],
+    sourceEpgUrls: uniq(headerUrls.flatMap(splitEpgUrls).filter(Boolean)),
   }
 }
 

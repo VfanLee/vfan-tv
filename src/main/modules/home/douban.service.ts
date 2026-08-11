@@ -6,6 +6,8 @@ import type {
 } from '@shared/types'
 import { randomUUID } from 'crypto'
 import { net, type Session } from 'electron'
+import { clamp } from 'es-toolkit/math'
+import { omitBy } from 'es-toolkit/object'
 import type { ContentNetworkContext, ContentNetworkService } from '../../infrastructure/network/content-network.service'
 
 const DOUBAN_MOVIE_REFERER = 'https://movie.douban.com/explore'
@@ -67,6 +69,7 @@ const HOT_REQUESTS: DoubanHotRequest[] = [
   },
 ]
 
+/** 获取并归一化豆瓣热门内容 */
 export class DoubanService {
   private recentHotRequest?: Promise<RecommendationItem[]>
   private readonly hotPageRequests = new Map<string, Promise<HotRecommendationsPage>>()
@@ -107,7 +110,7 @@ export class DoubanService {
 
   async getRecentHotPage(input: HotRecommendationsRequest): Promise<HotRecommendationsPage> {
     const start = Math.max(0, input.start)
-    const limit = Math.min(Math.max(input.limit, 1), 50)
+    const limit = clamp(input.limit, 1, 50)
     const request = getHotRequest(input.category, input.type)
     const cacheKey = `${input.category}:${input.type}:${start}:${limit}`
     const cachedRequest = this.hotPageRequests.get(cacheKey)
@@ -259,10 +262,7 @@ function getDoubanRequestError(error: unknown): DoubanRequestErrorDetails {
   return { message: '网络请求失败' }
 }
 
-/**
- * Electron Fetch 会在发起请求前拒绝跨站 Referer。豆瓣使用独立 Session，
- * 因此在 Chromium 完成请求校验后，仅对豆瓣自己的域名注入其要求的 Referer。
- */
+/** 为豆瓣 Session 配置请求 Referer */
 export function configureDoubanSessionHeaders(session: Session): void {
   session.webRequest.onBeforeSendHeaders(
     {
@@ -283,7 +283,7 @@ function getDoubanReferer(url: string): string {
       return DOUBAN_TV_REFERER
     }
   } catch {
-    // URL 已由请求层校验；无法识别时使用电影页作为豆瓣图片的默认来源页。
+    // 无法识别 URL 时使用豆瓣电影页作为默认 Referer。
   }
   return DOUBAN_MOVIE_REFERER
 }
@@ -291,7 +291,7 @@ function getDoubanReferer(url: string): string {
 function setRequestHeader(headers: Record<string, string>, name: string, value: string): Record<string, string> {
   const normalizedName = name.toLowerCase()
   return {
-    ...Object.fromEntries(Object.entries(headers).filter(([key]) => key.toLowerCase() !== normalizedName)),
+    ...(omitBy(headers, (_value, key) => key.toLowerCase() === normalizedName) as Record<string, string>),
     [name]: value,
   }
 }

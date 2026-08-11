@@ -1,4 +1,5 @@
 import type { VodCatalogPage, VodCatalogRequest, VodSearchResult, VodSourceConfig } from '@shared/types'
+import { chunk, keyBy } from 'es-toolkit/array'
 import type { HttpClient } from '../../infrastructure/http/http-client'
 import type { SourceService } from '../sources/source.service'
 import { buildVodCatalogUrl, buildVodDetailUrl, normalizeVodApiResponse, normalizeVodCatalogPage } from './vod-api'
@@ -6,6 +7,7 @@ import { buildVodCatalogUrl, buildVodDetailUrl, normalizeVodApiResponse, normali
 const CATALOG_TIMEOUT_MS = 15_000
 const MAX_DETAIL_IDS_PER_REQUEST = 50
 
+/** 加载单个点播源的分类与详情，并用批量详情请求补全缺失海报 */
 export class VodCatalogService {
   constructor(
     private readonly sourceService: SourceService,
@@ -59,11 +61,11 @@ export class VodCatalogService {
     )
     if (details.length === 0) return page
 
-    const detailsById = new Map(details.map((item) => [item.vodId, item]))
+    const detailsById = keyBy(details, (item) => item.vodId)
     return {
       ...page,
       items: page.items.map((item) => {
-        const detail = detailsById.get(item.vodId)
+        const detail = detailsById[item.vodId]
         return detail ? mergeCatalogItem(item, detail) : item
       }),
     }
@@ -80,12 +82,6 @@ export class VodCatalogService {
       timeout: CATALOG_TIMEOUT_MS,
     }
   }
-}
-
-function chunk<T>(items: T[], size: number): T[][] {
-  const groups: T[][] = []
-  for (let index = 0; index < items.length; index += size) groups.push(items.slice(index, index + size))
-  return groups
 }
 
 function mergeCatalogItem(summary: VodSearchResult, detail: VodSearchResult): VodSearchResult {

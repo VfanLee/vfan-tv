@@ -1,6 +1,7 @@
 import type { AppSettings } from '@shared/types'
 import type { SettingsRepository } from './settings.repository'
 
+/** 读取和更新应用设置 */
 export class SettingsService {
   constructor(private readonly repository: SettingsRepository) {}
 

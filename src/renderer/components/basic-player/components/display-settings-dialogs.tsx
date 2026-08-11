@@ -1,4 +1,5 @@
 import { useState, type JSX, type ReactNode } from 'react'
+import { clamp } from 'es-toolkit/math'
 import { cn } from '@/utils'
 import type { CustomSliderInput, DisplaySettingsState, MediaTrackSelection } from '../types'
 
@@ -194,7 +195,7 @@ export function CustomSliderDialog({
 }): JSX.Element {
   const [value, setValue] = useState(input.initialValue)
   const updateValue = (nextValue: number): void => {
-    const normalized = Math.min(input.max, Math.max(input.min, Number(nextValue.toFixed(2))))
+    const normalized = clamp(Number(nextValue.toFixed(2)), input.min, input.max)
     setValue(normalized)
     input.onChange(normalized)
   }

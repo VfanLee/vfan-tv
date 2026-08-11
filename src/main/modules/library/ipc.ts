@@ -3,6 +3,7 @@ import { IPC_CHANNELS } from '@shared/ipc'
 import type { AppApi } from '@shared/types'
 import type { ApplicationContext } from '../../app/composition-root'
 
+/** 注册最近播放与收藏的本地持久化 IPC 处理器 */
 export function registerLibraryIpc(context: ApplicationContext): void {
   const { recentPlay, favorite } = context.repositories
   ipcMain.handle(IPC_CHANNELS.recent.list, (_event, limit?: number) => recentPlay.list(limit))

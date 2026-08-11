@@ -18,7 +18,8 @@ import {
 const PLAYLIST_CONTENT_TYPES = ['application/vnd.apple.mpegurl', 'application/x-mpegurl', 'audio/mpegurl']
 const DOUBAN_IMAGE_REFERER = 'https://movie.douban.com/explore'
 const MAX_PROXY_IMAGE_BYTES = 20 * 1024 * 1024
-// 本地回环代理：补齐请求头并重写 HLS 子资源，避免 renderer 直接跨域请求第三方资源。
+
+/** 代理媒体与图片请求，管理播放会话并重写 HLS 子资源地址 */
 export class MediaProxyServer {
   private server?: Server
   private baseUrl?: string
@@ -138,7 +139,7 @@ export class MediaProxyServer {
       return Promise.resolve(this.baseUrl)
     }
 
-    // 并发请求共享同一次启动，避免同时监听多个随机端口。
+    // 并发请求复用同一次服务器启动。
     if (!this.startPromise) {
       this.startPromise = this.start()
     }
@@ -467,10 +468,7 @@ function getSafeTargetHost(targetUrl?: string): string {
   }
 }
 
-/**
- * 仅跟随重定向并返回最终地址，不下载媒体正文。
- * 避免为「解析地址」展示再开一条直播推流连接，导致正在播放的 FLV/TS 被 CDN 踢断。
- */
+/** 跟随媒体重定向并返回最终地址 */
 async function resolveMediaUrl(
   response: ServerResponse,
   targetUrl: string,
@@ -511,14 +509,14 @@ async function followRedirectsOnly(
       context,
     )
 
-    // 拿到响应头后立刻断开，绝不消费直播推流正文。
+    // 读取响应头后断开连接。
     await upstream.body?.cancel().catch(() => undefined)
 
     if (upstream.status >= 300 && upstream.status < 400) {
       const location = upstream.headers.get('location')
       if (!location) return upstream.url || currentUrl
       currentUrl = new URL(location, currentUrl).toString()
-      // 跳转目标已是媒体地址时直接返回，避免再请求一次推流。
+      // 重定向目标为媒体地址时直接返回。
       if (/\.(?:m3u8|flv|ts|m2ts)(?:$|[?#])/i.test(currentUrl)) {
         return currentUrl
       }
@@ -593,7 +591,7 @@ async function proxyMediaRequest(
 
   writeHeaders(
     response,
-    // 直播推流用 200 + 分块传输；透传 206/Content-Length 会让播放器以为媒体已结束。
+    // 直播 FLV/TS 响应使用 200 和分块传输。
     isLiveMedia ? 200 : status,
     createResponseHeaders(
       contentType || inferContentType(responseUrl),
@@ -608,9 +606,7 @@ async function proxyMediaRequest(
   try {
     await pipeline(Readable.fromWeb(upstream.body as Parameters<typeof Readable.fromWeb>[0]), response)
   } catch (error) {
-    // Players routinely close probes, old HLS segments and replaced live
-    // connections. Once the downstream is gone, cancellation is expected and
-    // must not surface as an uncaught stream error in the Electron main process.
+    // 下游连接关闭后取消对应的上游媒体请求。
     if (abortController.signal.aborted || response.destroyed) return
     throw error
   }
@@ -710,12 +706,12 @@ function getRequestHeaders(
   const headers: Record<string, string> = {
     ...sanitizedHeaders,
     'Accept': '*/*',
-    // 禁止压缩，避免 FLV/TS 二进制流被错误处理。
+    // 媒体代理请求不接收压缩响应。
     'Accept-Encoding': 'identity',
   }
 
   const range = request.headers.range
-  // 直播 FLV/TS 不应转发 Range，否则 CDN 可能只返回一小段就结束。
+  // 直播 FLV/TS 请求不转发 Range。
   if (range && !isLiveMediaUrl(targetUrl, '')) {
     headers.Range = range
   }

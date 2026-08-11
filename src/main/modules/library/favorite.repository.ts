@@ -22,6 +22,7 @@ function toFavoriteItem(row: FavoriteRow): FavoriteItem {
   }
 }
 
+/** 持久化收藏条目，并以“点播源 + 视频 ID”作为业务唯一键 */
 export class FavoriteRepository {
   constructor(private readonly db: AppDatabase) {}
 

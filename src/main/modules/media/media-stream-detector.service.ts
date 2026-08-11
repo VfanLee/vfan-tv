@@ -7,6 +7,7 @@ const MAX_PROBE_ATTEMPTS = 2
 const MAX_PROBE_BYTES = 64 * 1024
 const MPEG_TS_PACKET_SIZE = 188
 
+/** 根据媒体响应和 URL 识别流类型及不可播放响应 */
 export async function detectMediaStreamType(
   input: MediaStreamDetectionInput,
   network: ContentNetworkService,
@@ -149,6 +150,7 @@ function isClearlyNonMediaBody(body: Uint8Array): boolean {
   )
 }
 
+/** 根据 URL 文件扩展名推断媒体类型 */
 export function detectKnownMediaStreamTypeFromUrl(url: string): MediaStreamType | undefined {
   let pathname: string
   try {

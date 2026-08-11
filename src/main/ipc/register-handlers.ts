@@ -12,7 +12,7 @@ import { registerRadioIpc } from '../modules/radio/ipc'
 import { registerShellIpc } from './shell'
 import { registerWindowIpc } from './window'
 
-// 仅负责聚合领域 handler；具体 IPC 行为应留在所属领域模块的 ipc.ts 中。
+// 聚合注册各领域 IPC 处理器。
 export function registerIpcHandlers(context: ApplicationContext): void {
   registerSourcesIpc(context)
   registerIptvSourcesIpc(context)

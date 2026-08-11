@@ -2,6 +2,7 @@ import { ipcRenderer } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc'
 import type { AppApi } from '@shared/types'
 
+/** 创建首页、最近播放、收藏与广播内容相关的 renderer API */
 export function createLibraryApi(): Pick<AppApi, 'home' | 'recent' | 'favorites' | 'radio'> {
   return {
     home: {

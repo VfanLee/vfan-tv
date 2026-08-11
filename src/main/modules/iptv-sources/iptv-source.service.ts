@@ -1,4 +1,5 @@
 import { randomUUID } from 'crypto'
+import { keyBy } from 'es-toolkit/array'
 import { iptvSourceImportItemSchema, iptvSourceInputSchema } from '@shared/schemas'
 import type {
   IptvSourceConfig,
@@ -12,7 +13,6 @@ import type {
 import type { IptvSourceRepository } from './iptv-source.repository'
 import type { IptvCacheRepository } from './iptv-cache.repository'
 
-// IPTV 源与 VOD 源共用导入语义，但保持独立模型，避免将播放列表能力耦合到 VOD 源。
 function toImportItems(payload: unknown): {
   validItems: IptvSourceImportItem[]
   invalidItems: IptvSourceImportPreview['invalidItems']
@@ -38,6 +38,7 @@ function toImportItems(payload: unknown): {
   return { validItems, invalidItems }
 }
 
+/** 管理 IPTV 源的增删改、导入、排序和订阅同步 */
 export class IptvSourceService {
   constructor(
     private readonly repository: IptvSourceRepository,
@@ -208,7 +209,7 @@ export class IptvSourceService {
   }
 
   syncSubscription(items: IptvSourceImportItem[]): SourceSubscriptionSectionResult {
-    const uniqueItems = [...new Map(items.map((item) => [item.url, item])).values()]
+    const uniqueItems = Object.values(keyBy(items, (item) => item.url))
     const now = Date.now()
     const manualOwner = this.repository
       .list()

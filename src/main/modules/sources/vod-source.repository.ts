@@ -12,6 +12,7 @@ function toVodSourceConfig(row: VodSourceRow): VodSourceConfig {
   }
 }
 
+/** 持久化点播源配置、排序及手动源与订阅源的来源标记 */
 export class VodSourceRepository {
   constructor(private readonly db: AppDatabase) {}
 

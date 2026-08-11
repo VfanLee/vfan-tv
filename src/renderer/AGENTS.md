@@ -9,7 +9,7 @@
 ```text
 renderer
 ├── app          # renderer 启动、路由、Provider 与应用组装
-├── features     # 按路由与业务领域组织的页面、私有组件和 hooks
+├── pages        # 路由页面及其私有组件、hooks、类型与工具
 ├── platform     # preload API client、缓存与播放基础能力
 ├── components   # 跨领域公共组件
 ├── assets       # 静态资源
@@ -26,8 +26,6 @@ renderer
 ### 模块拆分通则
 
 - 避免将过多 UI、状态、副作用或业务逻辑堆积在单个文件中；当内容变复杂时，应按职责拆分为命名明确的私有模块。
-- 私有模块优先就近放在当前业务目录，例如 `components/`、`hooks/`、`types.ts`、`utils.ts`；入口文件只负责组装和协调。
-- 不为形式化拆分或潜在复用过早抽象；只有跨业务域实际复用且语义稳定时，才提升到 renderer 全局目录。
 
 ### components
 
@@ -44,11 +42,16 @@ renderer
 - 公共 hooks 必须使用英文小写命名；多单词使用 kebab-case，并以 `use-` 开头，例如 `use-foo.ts`、`use-foo-bar.ts`。
 - `hooks/index.ts` 统一导出公共 hooks（使用方必须从此处导入；新增/移动/删除需同步维护）。
 
-### features
+### pages
 
 - 路由页面必须使用英文小写命名；多单词使用 kebab-case，并以“目录 + `index.tsx`”形式创建，例如 `foo/index.tsx`、`foo-bar/index.tsx`。
-- `features/index.ts` 统一导出所有路由页面（使用方必须从此处导入；新增/移动/删除需同步维护）。
-- 页面专属组件、hooks、类型与工具必须就近放在所属 feature 内。
+- `pages/index.ts` 统一导出所有路由页面（使用方必须从此处导入；新增/移动/删除需同步维护）。
+- 页面入口以组装和协调为主；当页面包含多个独立 UI 区块、状态逻辑或业务职责时，适当拆分到页面目录内的 `components/`、`hooks/`、`types.ts`、`utils.ts` 等私有模块。
+- 简单页面无需为目录形式强制拆分；页面专属实现应就近放在所属 page 内，只有跨页面实际复用且语义稳定时才提升到 renderer 全局目录。
+- 每个页面组件、页面目录内的命名函数、命名回调、组件、hook 与工具函数都必须使用 `/** */` JSDoc 说明职责；匿名内联回调无需逐个添加注释。
+- 重要的模块级常量、配置、缓存状态，以及承担关键业务含义的派生变量必须使用 `/** */` JSDoc 说明用途。
+- 注释应直接说明执行动作、处理对象、返回结果或副作用，不解释采用当前写法的原因，也不只复述名称。
+- renderer 中的每个 `useEffect` 必须在调用前使用 `/** */` JSDoc 说明它执行的副作用；单行 JSDoc 末尾不加句号。
 
 ### platform
 

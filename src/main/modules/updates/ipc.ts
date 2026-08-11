@@ -3,6 +3,7 @@ import { IPC_CHANNELS } from '@shared/ipc'
 import type { ApplicationContext } from '../../app/composition-root'
 import { replayUpdateEvents } from '../../ipc/broadcast'
 
+/** 注册更新检查、下载、安装及当前状态快照回放处理器 */
 export function registerUpdatesIpc(context: ApplicationContext): void {
   const { updates } = context.services
   ipcMain.handle(IPC_CHANNELS.updates.getCurrentVersion, () => updates.getCurrentVersion())

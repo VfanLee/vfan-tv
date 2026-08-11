@@ -7,6 +7,7 @@ import type { ApplicationContext } from '../../app/composition-root'
 import { resolveSourceRequestHeaders } from '../../infrastructure/http/source-request-headers'
 import type { ContentNetworkRoute } from '../../infrastructure/network/content-network.service'
 
+/** 注册点播目录、搜索、媒体探测及代理会话生命周期处理器 */
 export function registerMediaIpc(context: ApplicationContext): void {
   const { vodCatalog, vodSearch, mediaProxy, mediaPlaybackTarget } = context.services
   const { probeMediaSource } = context.utilities

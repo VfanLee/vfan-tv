@@ -14,7 +14,6 @@ import type {
 import { isHttpRequestError, type HttpClient } from '../../infrastructure/http/http-client'
 import type { VodSourceRepository } from './vod-source.repository'
 
-// 点播源领域服务：将外部导入数据校验为可持久化的源配置，并维护排序与唯一性约束。
 function toImportItems(payload: unknown): {
   validItems: VodSourceImportItem[]
   invalidItems: VodSourceImportPreview['invalidItems']
@@ -40,6 +39,7 @@ function toImportItems(payload: unknown): {
   return { validItems, invalidItems }
 }
 
+/** 管理点播源的增删改、导入与订阅同步，并维护源地址唯一性和排序约束 */
 export class SourceService {
   constructor(
     private readonly repository: VodSourceRepository,
@@ -295,7 +295,7 @@ export class SourceService {
   }
 }
 
-/** 构造最小化的 CMS 列表请求，用于测量点播源 API 响应速度。 */
+/** 构造最小化的 CMS 列表请求，用于测量点播源 API 响应速度 */
 function buildVodSourceProbeUrl(sourceUrl: string): string {
   const url = new URL(sourceUrl)
   if (!['http:', 'https:'].includes(url.protocol)) throw new Error('仅支持 HTTP 或 HTTPS 地址')
@@ -304,7 +304,7 @@ function buildVodSourceProbeUrl(sourceUrl: string): string {
   return url.toString()
 }
 
-/** 将测速异常转换为适合在设置页展示的简短原因。 */
+/** 将测速异常转换为适合在设置页展示的简短原因 */
 function getSpeedTestErrorMessage(error: unknown): string {
   if (isHttpRequestError(error)) {
     if (error.code === 'ECONNABORTED') return '请求超时'

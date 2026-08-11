@@ -6,7 +6,7 @@ import { join } from 'path'
 import * as schema from './schema'
 import { DB_FILE_NAME } from '@shared/constants'
 
-// SQLite 的初始化与重建入口。表结构在运行时创建，因此重置必须复用同一份 SQL。
+// 初始化和重建 SQLite 数据库。
 export type AppDatabase = ReturnType<typeof drizzle<typeof schema>>
 const IPTV_SCHEMA_VERSION = 1
 
@@ -116,7 +116,7 @@ export function createDatabase(): AppDatabase {
   const databasePath = join(dbDir, DB_FILE_NAME)
 
   const sqlite = new Database(databasePath)
-  // WAL 允许读取与写入并行，降低播放记录等频繁小写入对 UI 的影响。
+  // 启用 WAL 日志模式。
   sqlite.pragma('journal_mode = WAL')
   const schemaVersion = sqlite.pragma('user_version', { simple: true }) as number
   if (schemaVersion < IPTV_SCHEMA_VERSION) {
@@ -139,7 +139,7 @@ export function createDatabase(): AppDatabase {
 }
 
 export function resetAppDatabase(db: AppDatabase): void {
-  // 此操作不可逆；调用方须先完成用户确认与必要的备份流程。
+  // 重建数据库并清空现有数据。
   const reset = db.$client.transaction(() => {
     const tables = db.$client
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
