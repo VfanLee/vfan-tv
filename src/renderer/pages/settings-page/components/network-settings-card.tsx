@@ -41,7 +41,12 @@ const ROUTES: Array<{
   {
     key: 'iptv',
     title: 'IPTV 直播网络',
-    description: 'IPTV 目录、节目单、台标、线路探测、直播墙预览、直播清单和媒体分片。',
+    description: 'IPTV 目录、台标、线路探测、直播墙预览、直播清单和媒体分片。',
+  },
+  {
+    key: 'epg',
+    title: 'EPG 节目单网络',
+    description: '节目单查询接口、XMLTV 和 XMLTV.GZ 数据源。',
   },
 ]
 
@@ -93,9 +98,9 @@ export function NetworkSettingsCard({ apiAvailable, network }: NetworkSettingsCa
   return (
     <>
       <SettingsSection
-        description="查看当前网络能力，并统一配置 IPTV 数据与播放使用的网络。"
+        description="查看当前网络能力，并分别配置 IPTV 与 EPG 使用的网络。"
         id="iptv-network"
-        title="IPTV 网络"
+        title="IPTV 与 EPG 网络"
       >
         <div className="divide-border divide-y">
           <NetworkStatusSection
@@ -106,7 +111,7 @@ export function NetworkSettingsCard({ apiAvailable, network }: NetworkSettingsCa
           />
           <section className="space-y-4 py-6">
             <SectionHeading
-              description="所有 IPTV 数据和播放请求共用同一个网络 Session；VOD（含播放）、豆瓣和蜻蜓固定直连。"
+              description="IPTV 与 EPG 使用相互隔离的网络 Session；VOD（含播放）、豆瓣和蜻蜓固定直连。"
               icon={Router}
               title="请求路由"
             />
@@ -129,7 +134,7 @@ export function NetworkSettingsCard({ apiAvailable, network }: NetworkSettingsCa
           <section className="space-y-4 py-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <SectionHeading
-                description="专供 IPTV 直播网络使用，支持 HTTP、HTTPS 和 SOCKS5，不支持认证。"
+                description="可供 IPTV 与 EPG 独立选用，支持 HTTP、HTTPS 和 SOCKS5，不支持认证。"
                 icon={Network}
                 title="代理配置"
               />

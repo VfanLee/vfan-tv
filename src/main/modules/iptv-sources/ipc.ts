@@ -3,7 +3,7 @@ import { randomUUID } from 'crypto'
 import { readFile, writeFile } from 'fs/promises'
 import { DEFAULT_IPTV_SOURCES_EXPORT_NAME } from '@shared/constants'
 import { IPC_CHANNELS } from '@shared/ipc'
-import type { AppApi } from '@shared/types'
+import type { AppApi, NetworkRouteKey } from '@shared/types'
 import type { ApplicationContext } from '../../app/composition-root'
 import { broadcastAppDataChange } from '../../ipc/broadcast'
 
@@ -86,16 +86,26 @@ export function registerIptvSourcesIpc(context: ApplicationContext): void {
   ipcMain.handle(
     IPC_CHANNELS.iptv.getPrograms,
     (_event, sourceId: string, channelIds: Parameters<AppApi['iptv']['getPrograms']>[1]) =>
-      logIptvRequest(context, '节目单', async () => {
-        const result = await iptvEpg.getPrograms(sourceId, channelIds)
-        return { result, summary: `频道数=${channelIds.length} | 结果数=${result.items.length}` }
-      }),
+      logIptvRequest(
+        context,
+        '节目单',
+        async () => {
+          const result = await iptvEpg.getPrograms(sourceId, channelIds)
+          return { result, summary: `频道数=${channelIds.length} | 结果数=${result.items.length}` }
+        },
+        'epg',
+      ),
   )
   ipcMain.handle(IPC_CHANNELS.iptv.getProgramSchedule, (_event, sourceId: string, channelId: string, date: string) =>
-    logIptvRequest(context, '单日节目单', async () => {
-      const result = await iptvEpg.getProgramSchedule(sourceId, channelId, date)
-      return { result, summary: `日期=${sanitizeLogValue(date)} | 节目数=${result.programs.length}` }
-    }),
+    logIptvRequest(
+      context,
+      '单日节目单',
+      async () => {
+        const result = await iptvEpg.getProgramSchedule(sourceId, channelId, date)
+        return { result, summary: `日期=${sanitizeLogValue(date)} | 节目数=${result.programs.length}` }
+      },
+      'epg',
+    ),
   )
   ipcMain.handle(
     IPC_CHANNELS.iptv.getPlaybackTarget,
@@ -111,6 +121,7 @@ export function registerIptvSourcesIpc(context: ApplicationContext): void {
             summary: `mediaSessionId=${result.mediaSessionId} | 类型=${result.streamType}`,
           }
         },
+        'iptv',
         requestId,
       )
     },
@@ -124,26 +135,28 @@ async function logIptvRequest<T>(
   context: ApplicationContext,
   action: string,
   task: () => Promise<{ result: T; summary?: string }>,
+  route: NetworkRouteKey = 'iptv',
   requestId = randomUUID(),
 ): Promise<T> {
   const startedAt = Date.now()
-  const network = context.services.network.getStatus().routes.iptv
+  const network = context.services.network.getStatus().routes[route]
   const networkLabel =
     network.mode === 'direct'
-      ? 'IPTV 直连'
+      ? `${route === 'epg' ? 'EPG' : 'IPTV'} 直连`
       : network.mode === 'system'
         ? '跟随系统'
         : `自定义代理(${sanitizeLogValue(network.activeProfileName ?? '未选择')})`
-  console.info(`[IPTV ${action}] 开始 | requestId=${requestId} | 网络=${networkLabel}`)
+  const scope = route === 'epg' ? 'EPG' : 'IPTV'
+  console.info(`[${scope} ${action}] 开始 | requestId=${requestId} | 网络=${networkLabel}`)
   try {
     const { result, summary } = await task()
     console.info(
-      `[IPTV ${action}] 成功 | requestId=${requestId} | 网络=${networkLabel}${summary ? ` | ${summary}` : ''} | 耗时=${Date.now() - startedAt}ms`,
+      `[${scope} ${action}] 成功 | requestId=${requestId} | 网络=${networkLabel}${summary ? ` | ${summary}` : ''} | 耗时=${Date.now() - startedAt}ms`,
     )
     return result
   } catch (error) {
     console.warn(
-      `[IPTV ${action}] 失败 | requestId=${requestId} | 网络=${networkLabel} | 原因=${sanitizeLogValue(error instanceof Error ? error.message : String(error))} | 耗时=${Date.now() - startedAt}ms`,
+      `[${scope} ${action}] 失败 | requestId=${requestId} | 网络=${networkLabel} | 原因=${sanitizeLogValue(error instanceof Error ? error.message : String(error))} | 耗时=${Date.now() - startedAt}ms`,
     )
     throw error
   }

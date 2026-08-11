@@ -157,36 +157,19 @@
 ]
 ```
 
-不需要自定义请求参数时，可以省略 `headers`，或写为：
-
-```json
-"headers": {}
-```
-
-### 📅 IPTV 节目单设置
-
-IPTV 节目单是应用级全局设置，存储在 `iptvEpg`：
-
-- `source`：跟随 IPTV 源在 M3U 中声明的 EPG 地址
-- `query`：使用自定义频道查询接口，可使用 `{name}` 和 `{date}` 占位符
-- `xmltv`：使用自定义 XMLTV/XML.GZ 地址
-
-自定义 EPG 请求失败时，应用会尝试回退到当前 IPTV 源内嵌的 EPG。
-
 ### 💾 应用备份格式
 
-应用数据备份使用 `schemaVersion: 3`。VOD/IPTV 的 `headers` 和 VOD 的字符串 `backups` 与上述格式一致。备份只接受当前 v3 结构，旧字段和旧版本会被拒绝。
+应用数据备份使用 `schemaVersion: 3`。
 
 ```json
 {
   "app": "vfan-tv",
   "schemaVersion": 3,
   "exportedAt": 1782518400000,
+  "recent": [],
+  "favorites": [],
+  "searchHistory": [],
   "subscriptions": [],
-  "iptvEpg": {
-    "mode": "source",
-    "lastTest": { "status": "idle" }
-  },
   "vod": [
     {
       "name": "示例点播源",
@@ -207,10 +190,7 @@ IPTV 节目单是应用级全局设置，存储在 `iptvEpg`：
       "origin": "manual",
       "sort": 0
     }
-  ],
-  "recent": [],
-  "favorites": [],
-  "searchHistory": []
+  ]
 }
 ```
 

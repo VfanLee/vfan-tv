@@ -82,6 +82,7 @@ export async function createApplicationContext(): Promise<ApplicationContext> {
   configureDoubanSessionHeaders(network.getContext('douban').session)
   configureRadioSessionHeaders(network.getContext('radio').session)
   const iptvHttpClient = new HttpClient(network, 'iptv')
+  const epgHttpClient = new HttpClient(network, 'epg')
   const vodHttpClient = new HttpClient(network, 'vod')
   const radioHttpClient = new HttpClient(network, 'radio')
   const subscriptionHttpClients: Record<SubscriptionNetworkMode, HttpClient> = {
@@ -113,7 +114,7 @@ export async function createApplicationContext(): Promise<ApplicationContext> {
       iptvSource: new IptvSourceService(iptvSource, iptvCache),
       iptvPlaylist,
       iptvCatalog,
-      iptvEpg: new IptvEpgService(iptvHttpClient, settings, iptvCatalog, iptvCache),
+      iptvEpg: new IptvEpgService(epgHttpClient, settings, iptvCatalog, iptvCache),
       iptvPlayback: new IptvPlaybackService(iptvSource, iptvCatalog, mediaPlaybackTarget),
       home: new HomeService(recentPlay, douban),
       douban,
