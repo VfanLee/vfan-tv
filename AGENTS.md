@@ -10,7 +10,7 @@
 
 - 语言：TypeScript
 - 桌面运行时：Electron
-- 构建与分发：Electron Forge（Webpack）、electron-updater
+- 构建与分发：Electron Forge（Vite）、electron-updater
 - 数据层：better-sqlite3、Drizzle ORM、Zod
 - 渲染层：React、React Router、Zustand、Tailwind CSS、shadcn/ui
 - 播放层：ArtPlayer、hls.js、mpegts.js
@@ -28,7 +28,7 @@
 │   ├── preload              # preload
 │   ├── renderer             # renderer
 │   └── shared               # 共享层
-├── config/webpack            # Webpack 配置
+├── config/vite.*.config.ts   # main、preload 与 renderer 的 Vite 配置
 ├── components.json          # shadcn 配置
 └── forge.config.ts           # Forge 配置
 ```

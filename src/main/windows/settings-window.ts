@@ -3,6 +3,7 @@ import type { SettingsSectionId } from '@shared/types'
 import { IPC_CHANNELS } from '@shared/ipc'
 import { APP_DISPLAY_NAME } from '@shared/constants'
 import { configureWindowNavigation } from './main-window'
+import { getPreloadPath, loadRendererRoute } from './renderer-entry'
 
 interface SettingsWindowManagerOptions {
   getMainWindow: () => BrowserWindow | null
@@ -45,7 +46,7 @@ export function showSettingsWindow(section?: SettingsSectionId): void {
     autoHideMenuBar: true,
     icon: managerOptions.icon,
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#171717' : '#ffffff',
-    webPreferences: { preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY, sandbox: false },
+    webPreferences: { preload: getPreloadPath(), sandbox: false },
   })
   settingsWindow = window
 
@@ -64,7 +65,7 @@ export function showSettingsWindow(section?: SettingsSectionId): void {
     if (settingsWindow === window) settingsWindow = null
     pendingSection = undefined
   })
-  void window.loadURL(`${MAIN_WINDOW_WEBPACK_ENTRY}#/settings?section=${encodeURIComponent(initialSection)}`)
+  void loadRendererRoute(window, `/settings?section=${encodeURIComponent(initialSection)}`)
 }
 
 /** 关闭设置窗口 */

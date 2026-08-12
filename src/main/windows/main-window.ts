@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron'
 import { APP_DISPLAY_NAME } from '@shared/constants'
 import { isAllowedExternalUrl, openExternalUrl } from '../infrastructure/external/external-link'
+import { getPreloadPath, loadRendererRoute } from './renderer-entry'
 
 interface CreateMainWindowOptions {
   icon: string
@@ -16,7 +17,7 @@ export function createMainWindow({ icon, onCreated }: CreateMainWindowOptions): 
     show: false,
     autoHideMenuBar: true,
     icon,
-    webPreferences: { preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY, sandbox: false },
+    webPreferences: { preload: getPreloadPath(), sandbox: false },
   })
   onCreated(mainWindow)
   mainWindow.on('ready-to-show', () => {
@@ -24,7 +25,7 @@ export function createMainWindow({ icon, onCreated }: CreateMainWindowOptions): 
     mainWindow.show()
   })
   configureWindowNavigation(mainWindow)
-  void mainWindow.loadURL(MAIN_WINDOW_WEBPACK_ENTRY)
+  void loadRendererRoute(mainWindow)
 }
 
 /** 限制窗口导航边界：应用内导航留在当前窗口，受信任外链交由系统浏览器处理 */

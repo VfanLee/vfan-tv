@@ -8,6 +8,7 @@ import type {
   MiniWindowResizeInput,
   MiniWindowBounds,
 } from '@shared/types'
+import { getPreloadPath, loadRendererRoute } from './renderer-entry'
 
 const MINI_WINDOW_MARGIN = 16
 
@@ -78,7 +79,7 @@ export function enterMiniWindowMode(mainWindow: BrowserWindow, context: MiniWind
     minimizable: false,
     fullscreenable: false,
     backgroundColor: context.variant === 'radio' ? '#00000000' : '#000000',
-    webPreferences: { preload: MAIN_WINDOW_PRELOAD_WEBPACK_ENTRY, sandbox: false },
+    webPreferences: { preload: getPreloadPath(), sandbox: false },
   })
   const state: MiniWindowModeState = {
     context,
@@ -96,9 +97,7 @@ export function enterMiniWindowMode(mainWindow: BrowserWindow, context: MiniWind
   })
   miniWindow.once('closed', () => restoreMiniWindowMode(mainWindow, state.exit))
 
-  const miniWindowUrl = new URL(MAIN_WINDOW_WEBPACK_ENTRY)
-  miniWindowUrl.hash = '/mini-window'
-  void miniWindow.loadURL(miniWindowUrl.toString())
+  void loadRendererRoute(miniWindow, '/mini-window')
 }
 
 /** 获取当前画中画窗口的播放上下文 */

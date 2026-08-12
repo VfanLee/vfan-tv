@@ -25,3 +25,5 @@ allowBuilds:
   fs-xattr: true
   macos-alias: true
 blockExoticSubdeps: false
+minimumReleaseAgeExclude:
+  - electron@43.4.0

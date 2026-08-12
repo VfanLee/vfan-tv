@@ -2,7 +2,6 @@ import { app, BrowserWindow, Menu, nativeImage } from 'electron'
 import type { MenuItemConstructorOptions } from 'electron'
 import { join, resolve } from 'path'
 import { electronApp } from '@electron-toolkit/utils'
-import iconAsset from '../../../resources/icon.png'
 import { registerIpcHandlers } from '../ipc/register-handlers'
 import { createApplicationContext, type ApplicationContext } from './composition-root'
 import { createMainWindow } from '../windows/main-window'
@@ -12,7 +11,7 @@ import { APP_DISPLAY_NAME, APP_ID, USER_DATA_DIR_NAME } from '@shared/constants'
 import packageJson from '../../../package.json'
 import { configureAppLogger, getAppLogInfo } from '../infrastructure/logging/app-logger'
 
-const icon = resolve(__dirname, iconAsset)
+const icon = app.isPackaged ? join(process.resourcesPath, 'icon.png') : resolve('resources/icon.png')
 
 let aboutWindow: BrowserWindow | null = null
 let applicationContext: ApplicationContext | null = null

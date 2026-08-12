@@ -1,22 +1,24 @@
-import { readFile, rename, writeFile } from 'node:fs/promises'
+import { cp, mkdir, rename } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
-import { createRequire } from 'node:module'
 import type { ForgeConfig, ForgeMakeResult } from '@electron-forge/shared-types'
+import { VitePlugin } from '@electron-forge/plugin-vite'
+import { FusesPlugin } from '@electron-forge/plugin-fuses'
+import { FuseV1Options, FuseVersion } from '@electron/fuses'
 import { getMacArtifactName, getWindowsUpdateChannel, resolveBuildArchitecture } from './config/build-targets'
+import packageJson from './package.json'
 
-const require = createRequire(import.meta.url)
-const packageJson = require('./package.json') as { version: string }
 const repository = { owner: 'vfanlee', name: 'vfan-tv' }
 const releaseDownloadUrl = 'https://github.com/vfanlee/vfan-tv/releases/latest/download/'
 const targetArchitecture = resolveBuildArchitecture(process.env.VFTV_TARGET_ARCH, { fallback: process.arch })
+const externalRuntimeDependencies = ['better-sqlite3', 'bindings', 'file-uri-to-path'] as const
 
 const config: ForgeConfig = {
   packagerConfig: {
     appBundleId: 'com.vfanlee.vfan-tv',
     appCategoryType: 'public.app-category.entertainment',
     asar: true,
-    afterCopy: [markPackagedAppAsCommonJs],
     executableName: 'Vfan TV',
+    extraResource: [resolve('resources/icon.png')],
     icon: resolve('build/icon'),
     name: 'Vfan TV',
   },
@@ -79,55 +81,59 @@ const config: ForgeConfig = {
     },
   ],
   plugins: [
-    {
-      name: '@electron-forge/plugin-webpack',
-      config: {
-        devContentSecurityPolicy:
-          "default-src 'self' data:; script-src 'self' 'unsafe-eval' 'unsafe-inline' data:; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: http://127.0.0.1:*; connect-src 'self' ws: wss: https: http://127.0.0.1:*; media-src 'self' https: http://127.0.0.1:* blob:; worker-src 'self' blob:",
-        mainConfig: './config/webpack/main.cjs',
-        renderer: {
-          config: './config/webpack/renderer.cjs',
-          entryPoints: [
-            {
-              html: './src/renderer/index.html',
-              js: './src/renderer/app/main.tsx',
-              name: 'main_window',
-              preload: {
-                js: './src/preload/index.ts',
-              },
-            },
-          ],
+    new VitePlugin({
+      build: [
+        {
+          entry: 'src/main/index.ts',
+          config: 'config/vite.main.config.ts',
+          target: 'main',
         },
-      },
-    },
+        {
+          entry: 'src/preload/index.ts',
+          config: 'config/vite.preload.config.ts',
+          target: 'preload',
+        },
+      ],
+      renderer: [
+        {
+          name: 'main_window',
+          config: 'config/vite.renderer.config.ts',
+        },
+      ],
+    }),
     {
       name: '@electron-forge/plugin-auto-unpack-natives',
       config: {},
     },
+    new FusesPlugin({
+      version: FuseVersion.V1,
+      [FuseV1Options.RunAsNode]: false,
+      [FuseV1Options.EnableCookieEncryption]: true,
+      [FuseV1Options.EnableNodeOptionsEnvironmentVariable]: false,
+      [FuseV1Options.EnableNodeCliInspectArguments]: false,
+      [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
+      [FuseV1Options.OnlyLoadAppFromAsar]: true,
+    }),
   ],
   hooks: {
+    packageAfterCopy: async (_forgeConfig, buildPath) => copyExternalRuntimeDependencies(buildPath),
     postMake: async (_forgeConfig, makeResults) => renameMacArtifacts(makeResults),
   },
 }
 
-function markPackagedAppAsCommonJs(
-  buildPath: string,
-  _electronVersion: string,
-  _platform: string,
-  _architecture: string,
-  callback: (error?: Error | null) => void,
-): void {
-  updatePackagedModuleType(buildPath).then(
-    () => callback(),
-    (error: unknown) => callback(error instanceof Error ? error : new Error(String(error))),
+/** 把 Vite external 的原生运行时依赖复制到主进程构建目录 */
+async function copyExternalRuntimeDependencies(buildPath: string): Promise<void> {
+  const destinationRoot = join(buildPath, '.vite/build/node_modules')
+  await mkdir(destinationRoot, { recursive: true })
+  await Promise.all(
+    externalRuntimeDependencies.map((dependency) =>
+      cp(resolve('node_modules', dependency), join(destinationRoot, dependency), {
+        recursive: true,
+        dereference: true,
+        force: true,
+      }),
+    ),
   )
-}
-
-async function updatePackagedModuleType(buildPath: string): Promise<void> {
-  const packageJsonPath = join(buildPath, 'package.json')
-  const packagedPackageJson = JSON.parse(await readFile(packageJsonPath, 'utf8')) as Record<string, unknown>
-  packagedPackageJson.type = 'commonjs'
-  await writeFile(packageJsonPath, `${JSON.stringify(packagedPackageJson, null, 2)}\n`)
 }
 
 async function renameMacArtifacts(makeResults: ForgeMakeResult[]): Promise<ForgeMakeResult[]> {

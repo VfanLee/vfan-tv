@@ -11,7 +11,8 @@ export default defineConfig(
       '**/node_modules',
       '**/dist',
       '**/out',
-      '**/.webpack',
+      '**/.vite',
+      'electron-template',
       'components.json',
       'src/renderer/styles/main.css',
       'src/renderer/ui/**',
@@ -19,7 +20,7 @@ export default defineConfig(
   },
   tseslint.configs.recommended,
   {
-    files: ['config/webpack/**/*.cjs', 'postcss.config.cjs'],
+    files: ['postcss.config.cjs'],
     rules: {
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/no-require-imports': 'off',

@@ -9,7 +9,7 @@
   ],
   "compilerOptions": {
     "composite": true,
-    "types": ["node"],
+    "types": ["node", "@electron-forge/plugin-vite/forge-vite-env"],
     "baseUrl": ".",
     "paths": {
       "@shared/*": ["src/shared/*"]

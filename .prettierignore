@@ -1,6 +1,6 @@
 out/
 dist/
-.webpack/
+.vite/
 pnpm-lock.yaml
 LICENSE.md
 
