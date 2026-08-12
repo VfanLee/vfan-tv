@@ -3,8 +3,11 @@ import type { IpcRendererEvent } from 'electron'
 import { IPC_CHANNELS } from '@shared/ipc'
 import type { AppApi, AppDataChangeDomain, MiniWindowPlaybackExit, SettingsSectionId, UpdateEvent } from '@shared/types'
 
-/** 创建设置、网络、更新、窗口与系统 Shell 相关的 renderer API */
-export function createSystemApi(): Pick<AppApi, 'settings' | 'network' | 'updates' | 'window' | 'shell'> {
+/** 创建设置、诊断、网络、更新、窗口与系统 Shell 相关的 renderer API */
+export function createSystemApi(): Pick<
+  AppApi,
+  'settings' | 'diagnostics' | 'network' | 'updates' | 'window' | 'shell'
+> {
   return {
     settings: {
       get: () => ipcRenderer.invoke(IPC_CHANNELS.settings.get),
@@ -13,6 +16,11 @@ export function createSystemApi(): Pick<AppApi, 'settings' | 'network' | 'update
       clearAppData: (selection) => ipcRenderer.invoke(IPC_CHANNELS.settings.clearAppData, selection),
       exportAppData: (clientData) => ipcRenderer.invoke(IPC_CHANNELS.settings.exportAppData, clientData),
       importAppData: () => ipcRenderer.invoke(IPC_CHANNELS.settings.importAppData),
+    },
+    diagnostics: {
+      getLogInfo: () => ipcRenderer.invoke(IPC_CHANNELS.diagnostics.getLogInfo),
+      revealLogFile: () => ipcRenderer.invoke(IPC_CHANNELS.diagnostics.revealLogFile),
+      clearLogs: () => ipcRenderer.invoke(IPC_CHANNELS.diagnostics.clearLogs),
     },
     network: {
       getStatus: () => ipcRenderer.invoke(IPC_CHANNELS.network.getStatus),

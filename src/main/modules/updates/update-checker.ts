@@ -1,6 +1,7 @@
 import { DOMParser } from '@xmldom/xmldom'
 import { randomUUID } from 'crypto'
 import type { UpdateCheckResult } from '@shared/types'
+import { formatHttpRequestForLog } from '../../infrastructure/logging/app-logger'
 import type { ContentNetworkService } from '../../infrastructure/network/content-network.service'
 
 const REPOSITORY_URL = 'https://github.com/vfanlee/vfan-tv'
@@ -303,17 +304,19 @@ async function fetchUpdate(network: ContentNetworkService, url: string, init: Re
   const startedAt = Date.now()
   const target = getSafeHost(url)
   const route = network.getRouteDescription('update')
-  console.info(`[更新请求] 开始 | requestId=${requestId} | 网络=${route} | 目标=${target}`)
+  console.info(
+    `[更新请求] 请求 | requestId=${requestId} | 网络=${route} | ${formatHttpRequestForLog(init.method, url, init.headers, init.body)}`,
+  )
   try {
     const response = await network.withUpdateContext((context) => network.fetch(url, init, context))
     const contentType = response.headers.get('content-type')?.split(';', 1)[0] || '未提供'
     const message = `requestId=${requestId} | 网络=${route} | 目标=${target} | 状态码=${response.status} | Content-Type=${contentType} | 耗时=${Date.now() - startedAt}ms`
-    if (response.ok || (response.status >= 300 && response.status < 400)) console.info(`[更新请求] 成功 | ${message}`)
-    else console.warn(`[更新请求] 失败 | ${message}`)
+    if (response.ok || (response.status >= 300 && response.status < 400)) console.info(`[更新请求] 响应 | ${message}`)
+    else console.warn(`[更新请求] 响应失败 | ${message}`)
     return response
   } catch (error) {
     console.warn(
-      `[更新请求] 失败 | requestId=${requestId} | 网络=${route} | 目标=${target} | 状态码=— | Content-Type=— | 原因=${getErrorMessage(
+      `[更新请求] 请求失败 | requestId=${requestId} | 网络=${route} | 目标=${target} | 状态码=— | Content-Type=— | 原因=${getErrorMessage(
         error,
       )
         .replace(/https?:\/\/[^\s)]+/gi, '[已脱敏地址]')

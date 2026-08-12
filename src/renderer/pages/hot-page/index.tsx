@@ -100,19 +100,13 @@ export function HotPage(): React.JSX.Element {
     <div className="text-foreground min-h-full bg-transparent px-5 py-7 sm:px-8 lg:px-10">
       <div className="mx-auto w-full max-w-[1800px]">
         <header className="mb-7">
-          <p className="text-primary text-xs font-bold tracking-[0.18em]">DOUBAN DISCOVERY</p>
-          <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <h1 className="text-3xl font-bold tracking-[-0.035em] sm:text-4xl">豆瓣热门</h1>
-              <p className="text-muted-foreground mt-2 text-sm">按内容类型与地区发现近期热门作品</p>
-            </div>
-          </div>
+          <h1 className="text-3xl font-bold tracking-[-0.035em] sm:text-4xl">热门推荐</h1>
         </header>
 
-        <section className="border-border bg-card/88 mb-8 rounded-[24px] border p-3 shadow-sm backdrop-blur sm:p-4">
+        <section className="mb-8 space-y-3">
           <SegmentedTabs
             ariaLabel="豆瓣内容类型"
-            className="max-w-full flex-wrap border-0 bg-transparent p-0 shadow-none"
+            className="max-w-full flex-wrap"
             items={categorySections.map((section) => ({
               value: section.key,
               label: section.title,
@@ -120,15 +114,13 @@ export function HotPage(): React.JSX.Element {
             value={activeSection.key}
             onValueChange={selectCategory}
           />
-          <div className="border-border mt-3 border-t pt-3">
-            <SegmentedTabs
-              ariaLabel={`${activeSection.title}筛选`}
-              className="max-w-full flex-wrap border-0 bg-transparent p-0 shadow-none"
-              items={activeSection.filters.map((filter) => ({ value: filter.value, label: filter.label }))}
-              value={activeType}
-              onValueChange={selectType}
-            />
-          </div>
+          <SegmentedTabs
+            ariaLabel={`${activeSection.title}筛选`}
+            className="max-w-full flex-wrap"
+            items={activeSection.filters.map((filter) => ({ value: filter.value, label: filter.label }))}
+            value={activeType}
+            onValueChange={selectType}
+          />
         </section>
 
         <section aria-labelledby="douban-results-heading">

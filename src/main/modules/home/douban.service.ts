@@ -9,6 +9,7 @@ import { net, type Session } from 'electron'
 import { clamp } from 'es-toolkit/math'
 import { omitBy } from 'es-toolkit/object'
 import type { ContentNetworkContext, ContentNetworkService } from '../../infrastructure/network/content-network.service'
+import { formatHttpRequestForLog } from '../../infrastructure/logging/app-logger'
 
 const DOUBAN_MOVIE_REFERER = 'https://movie.douban.com/explore'
 const DOUBAN_TV_REFERER = 'https://movie.douban.com/tv/'
@@ -154,18 +155,20 @@ export class DoubanService {
     const url = buildRecentHotUrl(request, type, start, limit)
     const requestId = randomUUID()
     const startedAt = Date.now()
-    console.info(`[豆瓣 API] 开始 | requestId=${requestId} | 网络=固定直连 | 目标=m.douban.com`)
+    console.info(
+      `[豆瓣 API] 请求 | requestId=${requestId} | 网络=固定直连 | ${formatHttpRequestForLog('GET', url, { Referer: request.referer })}`,
+    )
 
     try {
       const result = await this.network.withDoubanContext((context) => requestDoubanJson(url, request.referer, context))
       console.info(
-        `[豆瓣 API] 成功 | requestId=${requestId} | 网络=固定直连 | 目标=m.douban.com | 状态码=200 | Content-Type=application/json | 耗时=${Date.now() - startedAt}ms`,
+        `[豆瓣 API] 响应 | requestId=${requestId} | 网络=固定直连 | 目标=m.douban.com | 状态码=200 | Content-Type=application/json | 耗时=${Date.now() - startedAt}ms`,
       )
       return result
     } catch (error) {
       const details = getDoubanRequestError(error)
       console.warn(
-        `[豆瓣 API] 失败 | requestId=${requestId} | 网络=固定直连 | 目标=m.douban.com | 状态码=${details.status ?? '—'} | Content-Type=${details.contentType ?? '—'} | 原因=${details.message} | 耗时=${Date.now() - startedAt}ms`,
+        `[豆瓣 API] ${details.status ? '响应失败' : '请求失败'} | requestId=${requestId} | 网络=固定直连 | 目标=m.douban.com | 状态码=${details.status ?? '—'} | Content-Type=${details.contentType ?? '—'} | 原因=${details.message} | 耗时=${Date.now() - startedAt}ms`,
       )
       throw new Error(details.message)
     }

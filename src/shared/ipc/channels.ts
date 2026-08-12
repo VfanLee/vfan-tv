@@ -78,6 +78,11 @@ export const IPC_CHANNELS = {
     exportAppData: 'settings:export-app-data',
     importAppData: 'settings:import-app-data',
   },
+  diagnostics: {
+    getLogInfo: 'diagnostics:get-log-info',
+    revealLogFile: 'diagnostics:reveal-log-file',
+    clearLogs: 'diagnostics:clear-logs',
+  },
   network: {
     getStatus: 'network:get-status',
     save: 'network:save',

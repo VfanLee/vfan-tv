@@ -1,4 +1,5 @@
 export * from './client'
+export * from './diagnostics'
 export * from './favorites'
 export * from './home'
 export * from './iptv'

@@ -1,5 +1,6 @@
 import type { ApplicationContext } from '../app/composition-root'
 import { registerAppDataIpc } from '../modules/app-data/ipc'
+import { registerDiagnosticsIpc } from '../modules/diagnostics/ipc'
 import { registerHomeIpc } from '../modules/home/ipc'
 import { registerLibraryIpc } from '../modules/library/ipc'
 import { registerIptvSourcesIpc } from '../modules/iptv-sources/ipc'
@@ -23,6 +24,7 @@ export function registerIpcHandlers(context: ApplicationContext): void {
   registerSettingsIpc(context)
   registerNetworkIpc(context)
   registerAppDataIpc(context)
+  registerDiagnosticsIpc()
   registerUpdatesIpc(context)
   registerWindowIpc(context)
   registerShellIpc()

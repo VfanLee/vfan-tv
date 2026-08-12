@@ -1,4 +1,5 @@
 export * from './app-data'
+export * from './diagnostics'
 export * from './ipc'
 export * from './favorite'
 export * from './iptv'

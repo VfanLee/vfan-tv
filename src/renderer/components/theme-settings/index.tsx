@@ -6,8 +6,8 @@ import { Switch } from '@/ui'
 import { SettingsSection } from '../settings-card'
 
 const styleItems: Array<{ style: AppStyle; label: string; description: string; icon: LucideIcon }> = [
-  { style: 'catalog', label: '资源库', description: '从指定点播源浏览分类与影片', icon: Clapperboard },
-  { style: 'trending', label: '豆瓣热门', description: '使用豆瓣数据发现近期热门内容', icon: Flame },
+  { style: 'catalog', label: '点播推荐', description: '从指定点播源浏览分类与影片', icon: Clapperboard },
+  { style: 'trending', label: '热门推荐', description: '使用豆瓣数据发现近期热门内容', icon: Flame },
 ]
 
 const navigationItems: Array<{

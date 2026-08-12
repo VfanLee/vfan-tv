@@ -5,6 +5,7 @@ import { ConfirmDialog, LayoutPreferencesSettings, SettingsPageLayout } from '@r
 import { isApiAvailable, onSettingsSectionChange } from '@renderer/platform/api'
 import { AboutSettingsCard } from './components/about-settings-card'
 import { DataManagementCard, SubscriptionSettingsCard } from './components/settings-cards'
+import { DiagnosticsSettingsCard } from './components/diagnostics-settings-card'
 import { NetworkSettingsCard } from './components/network-settings-card'
 import { DataClearDialog } from './components/data-clear-dialog'
 import { DataSelectionDialog } from './components/data-selection-dialog'
@@ -286,6 +287,7 @@ export function SettingsPage(): React.JSX.Element {
                 onImport={() => setConfirmState({ type: 'importAppData' })}
                 onRestoreFactory={() => setConfirmState({ type: 'restoreFactorySettings' })}
               />
+              <DiagnosticsSettingsCard apiAvailable={apiAvailable} />
             </SettingsPageLayout>
           ) : null}
 

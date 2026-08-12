@@ -1,5 +1,6 @@
 import { Buffer } from 'buffer'
 import { randomUUID } from 'crypto'
+import { formatHttpRequestForLog, redactSensitiveLogText } from '../logging/app-logger'
 import type { ContentNetworkRoute, ContentNetworkService } from '../network/content-network.service'
 
 type HttpNetworkRoute = Exclude<ContentNetworkRoute, 'vodPlayback' | 'update'>
@@ -35,9 +36,12 @@ export class HttpClient {
     const requestId = randomUUID()
     const startedAt = Date.now()
     const requestLabel = sanitizeLogLabel(options.requestLabel ?? '普通内容')
-    const target = getSafeHost(url)
+    const target = getSafeRequestTarget(url)
     const network = this.network.getRouteDescription(this.route)
-    console.info(`[${requestLabel}] 开始 | requestId=${requestId} | 网络=${network} | 目标=${target}`)
+    const requestHeaders = normalizeHeaders(options.headers)
+    console.info(
+      `[${requestLabel}] 请求 | requestId=${requestId} | route=${this.route} | 网络=${network} | ${formatHttpRequestForLog('GET', url, requestHeaders)}`,
+    )
     const signal = combineSignals(options.signal, options.timeout)
     let response: Response
     try {
@@ -47,17 +51,17 @@ export class HttpClient {
           {
             method: 'GET',
             redirect: 'follow',
-            headers: normalizeHeaders(options.headers),
+            headers: requestHeaders,
             signal,
           },
           context,
           url,
         ),
       )
-    } catch {
+    } catch (error) {
       const reason = signal.aborted ? (options.signal?.aborted ? '请求已取消' : '请求超时') : '网络请求失败'
       console.warn(
-        `[${requestLabel}] 失败 | requestId=${requestId} | 网络=${network} | 目标=${target} | 状态码=— | Content-Type=— | 原因=${reason} | 耗时=${Date.now() - startedAt}ms`,
+        `[${requestLabel}] 请求失败 | requestId=${requestId} | method=GET | route=${this.route} | 网络=${network} | 目标=${target} | 状态码=— | Content-Type=— | 原因=${reason} | 错误=${getSafeErrorDetails(error)} | 耗时=${Date.now() - startedAt}ms`,
       )
       if (signal.aborted) {
         const cancelled = options.signal?.aborted
@@ -69,7 +73,7 @@ export class HttpClient {
     if (!response.ok) {
       await response.body?.cancel().catch(() => undefined)
       console.warn(
-        `[${requestLabel}] 失败 | requestId=${requestId} | 网络=${network} | 目标=${target} | 状态码=${response.status} | Content-Type=${sanitizeContentType(response.headers.get('content-type'))} | 原因=上游返回 HTTP ${response.status} | 耗时=${Date.now() - startedAt}ms`,
+        `[${requestLabel}] 响应失败 | requestId=${requestId} | method=GET | route=${this.route} | 网络=${network} | 目标=${target} | 最终地址=${getSafeRequestTarget(response.url || url)} | 状态码=${response.status} | Content-Type=${sanitizeContentType(response.headers.get('content-type'))} | 原因=上游返回 HTTP ${response.status} | 耗时=${Date.now() - startedAt}ms`,
       )
       throw new HttpRequestError(`HTTP ${response.status}`, 'ERR_BAD_RESPONSE', response.status)
     }
@@ -77,11 +81,11 @@ export class HttpClient {
     const data = Buffer.from(await response.arrayBuffer())
     if (options.maxContentLength !== undefined && data.byteLength > options.maxContentLength) {
       console.warn(
-        `[${requestLabel}] 失败 | requestId=${requestId} | 网络=${network} | 目标=${target} | 状态码=${response.status} | Content-Type=${sanitizeContentType(response.headers.get('content-type'))} | 原因=响应内容超过大小限制 | 耗时=${Date.now() - startedAt}ms`,
+        `[${requestLabel}] 响应失败 | requestId=${requestId} | method=GET | route=${this.route} | 网络=${network} | 目标=${target} | 最终地址=${getSafeRequestTarget(response.url || url)} | 状态码=${response.status} | Content-Type=${sanitizeContentType(response.headers.get('content-type'))} | 响应大小=${data.byteLength}B | 原因=响应内容超过大小限制 | 耗时=${Date.now() - startedAt}ms`,
       )
       throw new HttpRequestError('响应内容超过大小限制', 'ERR_CONTENT_LENGTH')
     }
-    logSuccess(requestLabel, requestId, network, target, response, startedAt)
+    logSuccess(requestLabel, requestId, this.route, network, target, response, data.byteLength, startedAt)
     if (options.responseType === 'arraybuffer') return data as T
     const text = data.toString('utf8')
     if (options.responseType === 'text') return text as T
@@ -89,7 +93,12 @@ export class HttpClient {
       try {
         return JSON.parse(text) as T
       } catch {
-        if (options.responseType === 'json') throw new HttpRequestError('响应不是有效的 JSON', 'ERR_BAD_RESPONSE')
+        if (options.responseType === 'json') {
+          console.warn(
+            `[${requestLabel}] 响应解析失败 | requestId=${requestId} | method=GET | route=${this.route} | 目标=${target} | 最终地址=${getSafeRequestTarget(response.url || url)} | 状态码=${response.status} | Content-Type=${sanitizeContentType(response.headers.get('content-type'))} | 响应大小=${data.byteLength}B | 原因=响应不是有效的 JSON`,
+          )
+          throw new HttpRequestError('响应不是有效的 JSON', 'ERR_BAD_RESPONSE')
+        }
       }
     }
     return text as T
@@ -99,26 +108,42 @@ export class HttpClient {
 function logSuccess(
   label: string,
   requestId: string,
+  route: HttpNetworkRoute,
   network: string,
   target: string,
   response: Response,
+  responseSize: number,
   startedAt: number,
 ): void {
   console.info(
-    `[${label}] 成功 | requestId=${requestId} | 网络=${network} | 目标=${target} | 状态码=${response.status} | Content-Type=${sanitizeContentType(response.headers.get('content-type'))} | 耗时=${Date.now() - startedAt}ms`,
+    `[${label}] 响应 | requestId=${requestId} | method=GET | route=${route} | 网络=${network} | 目标=${target} | 最终地址=${response.url ? getSafeRequestTarget(response.url) : target} | 状态码=${response.status} | Content-Type=${sanitizeContentType(response.headers.get('content-type'))} | 响应大小=${responseSize}B | 耗时=${Date.now() - startedAt}ms`,
   )
 }
 
-function getSafeHost(value: string): string {
+function getSafeRequestTarget(value: string): string {
   try {
-    return new URL(value).host
+    const url = new URL(value)
+    return redactSensitiveLogText(`${url.origin}${url.pathname}${url.search}`)
   } catch {
     return '无效地址'
   }
 }
 
+function getSafeErrorDetails(error: unknown): string {
+  if (!(error instanceof Error)) return sanitizeLogValue(String(error))
+  const errorWithCode = error as Error & { code?: unknown }
+  const code = typeof errorWithCode.code === 'string' ? errorWithCode.code : error.name
+  return sanitizeLogValue(`${code}: ${error.message || '未提供错误信息'}`)
+}
+
 function sanitizeContentType(value: string | null): string {
-  return value?.split(';', 1)[0].trim().slice(0, 80) || '未提供'
+  return (
+    value
+      ?.split(';', 1)[0]
+      .replace(/[\r\n|]+/g, ' ')
+      .trim()
+      .slice(0, 80) || '未提供'
+  )
 }
 
 function sanitizeLogLabel(value: string): string {
@@ -128,15 +153,26 @@ function sanitizeLogLabel(value: string): string {
   )
 }
 
+function sanitizeLogValue(value: string): string {
+  return (
+    redactSensitiveLogText(value)
+      .replace(/[\r\n|]+/g, ' ')
+      .trim()
+      .slice(0, 240) || '未提供'
+  )
+}
+
 export function isHttpRequestError(error: unknown): error is HttpRequestError {
   return error instanceof HttpRequestError
 }
 
-function normalizeHeaders(headers: HttpRequestOptions['headers']): HeadersInit | undefined {
+function normalizeHeaders(headers: HttpRequestOptions['headers']): Record<string, string> | undefined {
   if (!headers) return undefined
   return Object.fromEntries(
     Object.entries(headers).flatMap(([name, value]) =>
-      typeof value === 'string' || typeof value === 'number' ? [[name, String(value)]] : [],
+      typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+        ? [[name, String(value)]]
+        : [],
     ),
   )
 }

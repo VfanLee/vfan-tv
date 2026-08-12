@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Menu, nativeImage } from 'electron'
 import type { MenuItemConstructorOptions } from 'electron'
 import { join, resolve } from 'path'
-import { electronApp, optimizer } from '@electron-toolkit/utils'
+import { electronApp } from '@electron-toolkit/utils'
 import iconAsset from '../../../resources/icon.png'
 import { registerIpcHandlers } from '../ipc/register-handlers'
 import { createApplicationContext, type ApplicationContext } from './composition-root'
@@ -10,6 +10,7 @@ import { showActiveMiniWindow } from '../windows/mini-window-mode'
 import { closeSettingsWindow, configureSettingsWindowManager } from '../windows/settings-window'
 import { APP_DISPLAY_NAME, APP_ID, USER_DATA_DIR_NAME } from '@shared/constants'
 import packageJson from '../../../package.json'
+import { configureAppLogger, getAppLogInfo } from '../infrastructure/logging/app-logger'
 
 const icon = resolve(__dirname, iconAsset)
 
@@ -17,6 +18,11 @@ let aboutWindow: BrowserWindow | null = null
 let applicationContext: ApplicationContext | null = null
 
 configureAppIdentityAndPaths()
+configureAppLogger(app.getPath('userData'))
+registerProcessErrorLogging()
+console.info(
+  `[应用] 启动 | version=${getCurrentVersion()} | packaged=${app.isPackaged} | platform=${process.platform} | arch=${process.arch} | logs=${getAppLogInfo().filePath}`,
+)
 
 const hasSingleInstanceLock = app.requestSingleInstanceLock()
 
@@ -39,6 +45,16 @@ function getCurrentVersion(): string {
 function getApplicationContext(): ApplicationContext {
   if (!applicationContext) throw new Error('Application context is not initialized')
   return applicationContext
+}
+
+/** 记录未被业务代码处理的主进程异常 */
+function registerProcessErrorLogging(): void {
+  process.on('uncaughtExceptionMonitor', (error, origin) => {
+    console.error(`[主进程异常] 未捕获异常 | origin=${origin}`, error)
+  })
+  process.on('unhandledRejection', (reason) => {
+    console.error('[主进程异常] 未处理 Promise 拒绝', reason)
+  })
 }
 
 /** 配置应用名称、进程标题和 userData 路径 */
@@ -150,7 +166,6 @@ function createApplicationMenu(): void {
   const viewMenu: MenuItemConstructorOptions[] = [
     { role: 'reload', label: '重新加载' },
     { role: 'forceReload', label: '强制重新加载' },
-    { role: 'toggleDevTools', label: '开发者工具' },
     { type: 'separator' },
     { role: 'resetZoom', label: '实际大小' },
     { role: 'zoomIn', label: '放大' },
@@ -166,6 +181,8 @@ function createApplicationMenu(): void {
       : ([{ role: 'close', label: '关闭窗口' }] satisfies MenuItemConstructorOptions[])),
   ]
   const helpMenu: MenuItemConstructorOptions[] = [
+    { label: '切换开发者工具', click: toggleFocusedWindowDevTools },
+    { type: 'separator' },
     { label: `${APP_DISPLAY_NAME} v${getCurrentVersion()}`, enabled: false },
   ]
   const template: MenuItemConstructorOptions[] = [
@@ -206,9 +223,9 @@ app.whenReady().then(async () => {
   configureSettingsWindowManager({ icon, getMainWindow: applicationContext.getMainWindow })
   registerIpcHandlers(applicationContext)
 
-  // 开发环境启用 F12，生产环境禁用刷新快捷键。
+  // 所有环境只通过帮助菜单打开开发者工具，并保护刷新与缩放快捷键。
   app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
+    configureWindowShortcutGuards(window)
   })
 
   createWindow()
@@ -217,6 +234,28 @@ app.whenReady().then(async () => {
     showOrCreateApplicationWindow()
   })
 })
+
+/** 切换当前聚焦应用窗口的开发者工具 */
+function toggleFocusedWindowDevTools(): void {
+  const window = BrowserWindow.getFocusedWindow() ?? applicationContext?.getMainWindow()
+  if (!window || window.isDestroyed()) return
+  if (window.webContents.isDevToolsOpened()) window.webContents.closeDevTools()
+  else window.webContents.openDevTools({ mode: 'detach' })
+}
+
+/** 禁用开发者工具快捷键，并保留生产环境的误刷新和页面缩放保护 */
+function configureWindowShortcutGuards(window: BrowserWindow): void {
+  window.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return
+    const isDevToolsShortcut =
+      input.code === 'F12' || (input.code === 'KeyI' && ((input.alt && input.meta) || (input.control && input.shift)))
+    const isReloadShortcut = app.isPackaged && input.code === 'KeyR' && (input.control || input.meta)
+    const isZoomShortcut =
+      (input.code === 'Minus' && (input.control || input.meta)) ||
+      (input.code === 'Equal' && input.shift && (input.control || input.meta))
+    if (isDevToolsShortcut || isReloadShortcut || isZoomShortcut) event.preventDefault()
+  })
+}
 
 /** 显示应用窗口，窗口不存在时创建主窗口 */
 function showOrCreateApplicationWindow(): void {

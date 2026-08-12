@@ -10,6 +10,7 @@ import type {
   VodSourceSpeedResult,
 } from './source'
 import type { AppDataClearSelection, AppDataClientPayload, AppDataExportResult, AppDataImportResult } from './app-data'
+import type { AppLogInfo } from './diagnostics'
 import type {
   AppSettings,
   NetworkProxyTestInput,
@@ -189,6 +190,11 @@ export interface AppApi {
     clearAppData: (selection: AppDataClearSelection) => Promise<void>
     exportAppData: (clientData: AppDataClientPayload) => Promise<AppDataExportResult>
     importAppData: () => Promise<AppDataImportResult>
+  }
+  diagnostics: {
+    getLogInfo: () => Promise<AppLogInfo>
+    revealLogFile: () => Promise<void>
+    clearLogs: () => Promise<AppLogInfo>
   }
   network: {
     getStatus: () => Promise<NetworkStatus>
