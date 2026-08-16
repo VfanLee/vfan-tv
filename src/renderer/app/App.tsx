@@ -4,6 +4,7 @@ import { DisclaimerOverlay, ThemeProvider } from '../components'
 import { DISCLAIMER_SKIP_STORAGE_KEY } from '@shared/constants'
 import { AppRouter } from './routes/AppRouter'
 import { useAppUpdateSync, useLayoutPreferencesSync, useThemeStore, useThemeSync } from '@/stores'
+import { TooltipProvider } from '@/ui'
 
 function App(): React.JSX.Element {
   const mode = useThemeStore((state) => state.mode)
@@ -16,11 +17,13 @@ function App(): React.JSX.Element {
 
   return (
     <ThemeProvider>
-      <AppRouter />
-      {disclaimerDismissed || isSettingsWindow ? null : (
-        <DisclaimerOverlay onAcknowledge={() => setDisclaimerDismissed(true)} />
-      )}
-      <Toaster richColors theme={mode === 'system' ? 'system' : mode} />
+      <TooltipProvider>
+        <AppRouter />
+        {disclaimerDismissed || isSettingsWindow ? null : (
+          <DisclaimerOverlay onAcknowledge={() => setDisclaimerDismissed(true)} />
+        )}
+        <Toaster richColors theme={mode === 'system' ? 'system' : mode} />
+      </TooltipProvider>
     </ThemeProvider>
   )
 }

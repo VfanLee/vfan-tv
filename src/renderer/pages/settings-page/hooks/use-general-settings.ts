@@ -11,11 +11,10 @@ interface GeneralSettingsOptions {
 
 export interface GeneralSettingsState {
   isSyncingSubscription: boolean
-  syncingSubscriptionMode?: SubscriptionNetworkMode
   subscriptions: SubscriptionConfig[]
   activeSubscriptionId?: string
   resetSubscription: () => void
-  addSubscription: (url: string) => Promise<void>
+  addSubscription: (url: string, mode: SubscriptionNetworkMode) => Promise<void>
   deleteSubscription: (id: string) => Promise<void>
   selectSubscription: (id: string) => Promise<void>
   syncSubscription: (mode: SubscriptionNetworkMode) => Promise<void>
@@ -71,10 +70,10 @@ export function useGeneralSettings({
   }
 
   /** 添加订阅地址，立即同步并设为当前订阅 */
-  const addSubscription = async (rawUrl: string): Promise<void> => {
+  const addSubscription = async (rawUrl: string, mode: SubscriptionNetworkMode): Promise<void> => {
     const url = rawUrl.trim()
     if (!apiAvailable || !url) return
-    setSyncingSubscriptionMode('direct')
+    setSyncingSubscriptionMode(mode)
     try {
       const parsedUrl = new URL(url)
       if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('订阅地址仅支持 HTTP 或 HTTPS')
@@ -84,7 +83,7 @@ export function useGeneralSettings({
       await updateSettings({ subscriptions: next, activeSubscriptionId: item.id })
       let result: Awaited<ReturnType<typeof syncSourceSubscription>>
       try {
-        result = await syncSourceSubscription(item.id, 'direct')
+        result = await syncSourceSubscription(item.id, mode)
       } catch (error) {
         await updateSettings({ subscriptions, activeSubscriptionId })
         throw error
@@ -93,11 +92,11 @@ export function useGeneralSettings({
       setActiveSubscriptionId(item.id)
       await Promise.all([refreshVodSources(), refreshIptvSources()])
       toast.success('订阅源已添加', {
-        description: `网络=固定直连；已更新 VOD ${result.vod.created + result.vod.updated} 个，IPTV ${result.iptv.created + result.iptv.updated} 个。`,
+        description: `网络=${getSubscriptionNetworkDescription(mode)}；已更新 VOD ${result.vod.created + result.vod.updated} 个，IPTV ${result.iptv.created + result.iptv.updated} 个。`,
       })
     } catch (error) {
       toast.error('添加失败', {
-        description: `网络=固定直连；${error instanceof Error ? error.message : '订阅地址无效'}`,
+        description: `网络=${getSubscriptionNetworkDescription(mode)}；${error instanceof Error ? error.message : '订阅地址无效'}`,
       })
     } finally {
       setSyncingSubscriptionMode(undefined)
@@ -137,7 +136,6 @@ export function useGeneralSettings({
 
   return {
     isSyncingSubscription,
-    syncingSubscriptionMode,
     subscriptions,
     activeSubscriptionId,
     resetSubscription: () => {

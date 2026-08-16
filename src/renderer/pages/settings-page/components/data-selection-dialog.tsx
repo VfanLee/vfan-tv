@@ -1,15 +1,14 @@
 import { useState } from 'react'
 import type { AppDataSelection } from '@shared/types'
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/ui/alert-dialog'
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/ui/dialog'
 import { Button } from '@/ui/button'
 import { Checkbox } from '@/ui/checkbox'
 
@@ -52,12 +51,12 @@ export function DataSelectionDialog({
   }
 
   return (
-    <AlertDialog open onOpenChange={(open) => !open && !isPending && onCancel()}>
-      <AlertDialogContent className="max-w-md" size="default">
-        <AlertDialogHeader>
-          <AlertDialogTitle>选择导出数据</AlertDialogTitle>
-          <AlertDialogDescription>导入此备份时会全量覆盖业务数据；未导出的数据不会保留。</AlertDialogDescription>
-        </AlertDialogHeader>
+    <Dialog open onOpenChange={(open) => !open && !isPending && onCancel()}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>选择导出数据</DialogTitle>
+          <DialogDescription>导入此备份时会全量覆盖业务数据；未导出的数据不会保留。</DialogDescription>
+        </DialogHeader>
 
         <div className="space-y-1">
           <Button
@@ -88,11 +87,13 @@ export function DataSelectionDialog({
           </div>
         </div>
 
-        <AlertDialogFooter>
-          <AlertDialogCancel disabled={isPending} onClick={onCancel}>
-            取消
-          </AlertDialogCancel>
-          <AlertDialogAction
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button disabled={isPending} variant="outline">
+              取消
+            </Button>
+          </DialogClose>
+          <Button
             disabled={!hasSelection || isPending}
             onClick={(event) => {
               event.preventDefault()
@@ -100,10 +101,10 @@ export function DataSelectionDialog({
             }}
           >
             {isPending ? '处理中...' : '导出'}
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 

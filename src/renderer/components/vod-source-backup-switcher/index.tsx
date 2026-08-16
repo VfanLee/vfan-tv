@@ -11,6 +11,9 @@ import {
   PopoverTrigger,
   RadioGroup,
   RadioGroupItem,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
 } from '@/ui'
 
 export function VodSourceBackupSwitcher({
@@ -41,31 +44,36 @@ export function VodSourceBackupSwitcher({
   }
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent align={align} className="w-[min(30rem,calc(100vw-5rem))] gap-0 p-2">
-        <PopoverHeader className="px-2 py-2">
-          <PopoverTitle className="text-sm font-semibold">切换备用地址</PopoverTitle>
-          <PopoverDescription className="mt-0.5 text-xs">选择后立即设为当前地址。</PopoverDescription>
-        </PopoverHeader>
-        <RadioGroup
-          className="border-border border-y py-1"
-          disabled={Boolean(switchingUrl)}
-          value={source.url}
-          onValueChange={(url) => void switchTo(url)}
-        >
-          <AddressRadioItem current url={source.url} itemId={`${source.id}-current`} />
-          {source.backups.map((backup, index) => (
-            <AddressRadioItem
-              url={backup}
-              itemId={`${source.id}-backup-${index}`}
-              key={backup}
-              loading={switchingUrl === backup}
-            />
-          ))}
-        </RadioGroup>
-      </PopoverContent>
-    </Popover>
+    <Tooltip>
+      <Popover open={open} onOpenChange={setOpen}>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>{children}</PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent>切换备用地址</TooltipContent>
+        <PopoverContent align={align} className="w-[min(30rem,calc(100vw-5rem))] gap-0 p-2">
+          <PopoverHeader className="px-2 py-2">
+            <PopoverTitle className="text-sm font-semibold">切换备用地址</PopoverTitle>
+            <PopoverDescription className="mt-0.5 text-xs">选择后立即设为当前地址。</PopoverDescription>
+          </PopoverHeader>
+          <RadioGroup
+            className="border-border border-y py-1"
+            disabled={Boolean(switchingUrl)}
+            value={source.url}
+            onValueChange={(url) => void switchTo(url)}
+          >
+            <AddressRadioItem current url={source.url} itemId={`${source.id}-current`} />
+            {source.backups.map((backup, index) => (
+              <AddressRadioItem
+                url={backup}
+                itemId={`${source.id}-backup-${index}`}
+                key={backup}
+                loading={switchingUrl === backup}
+              />
+            ))}
+          </RadioGroup>
+        </PopoverContent>
+      </Popover>
+    </Tooltip>
   )
 }
 

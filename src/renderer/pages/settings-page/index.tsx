@@ -114,20 +114,19 @@ export function SettingsPage(): React.JSX.Element {
 
         <div className="min-w-0 pb-8">
           {activeSection === 'appearance' ? (
-            <SettingsPageLayout description="调整首页内容风格与主导航显示。" title="外观">
+            <SettingsPageLayout title="外观">
               <LayoutPreferencesSettings />
             </SettingsPageLayout>
           ) : null}
 
           {activeSection === 'subscriptions' ? (
-            <SettingsPageLayout description="添加、切换并通过指定网络更新远程订阅。" title="订阅源">
+            <SettingsPageLayout title="订阅源">
               <SubscriptionSettingsCard
                 apiAvailable={apiAvailable}
                 isSyncing={general.isSyncingSubscription}
-                syncingMode={general.syncingSubscriptionMode}
                 subscriptions={general.subscriptions}
                 activeSubscriptionId={general.activeSubscriptionId}
-                onAdd={(url) => void general.addSubscription(url)}
+                onAdd={(url, mode) => void general.addSubscription(url, mode)}
                 onDelete={(subscription) => setConfirmState({ type: 'deleteSubscription', subscription })}
                 onSelect={(subscriptionId) => setConfirmState({ type: 'selectSubscription', subscriptionId })}
                 onSync={(mode) => void general.syncSubscription(mode)}
@@ -136,12 +135,11 @@ export function SettingsPage(): React.JSX.Element {
           ) : null}
 
           {activeSection === 'vod-sources' ? (
-            <SettingsPageLayout description="管理点播接口、备用地址与可用性。" title="点播源">
+            <SettingsPageLayout title="点播源">
               <SourceTableCard
                 addText="添加点播源"
                 allSelected={vod.allSelected}
                 apiAvailable={apiAvailable}
-                description="管理应用的点播源。"
                 emptyIcon={Video}
                 emptyText="还没有点播源"
                 enabledCount={vod.enabledCount}
@@ -153,7 +151,7 @@ export function SettingsPage(): React.JSX.Element {
                 selectedSourceIds={vod.selectedSourceIds}
                 sources={vod.sources}
                 speedResults={vod.speedResults}
-                title="点播源列表"
+                tableLabel="点播源"
                 onAdd={() => setDialog({ mode: 'create' })}
                 onBatchSetDisabled={(disabled) => void vod.batchSetDisabled(disabled)}
                 onClear={() => setConfirmState({ type: 'clearSources' })}
@@ -173,7 +171,7 @@ export function SettingsPage(): React.JSX.Element {
           ) : null}
 
           {activeSection === 'iptv' ? (
-            <SettingsPageLayout description="配置和管理 IPTV 源、EPG 与网络设置。" title="IPTV">
+            <SettingsPageLayout title="IPTV">
               <div
                 aria-label="IPTV 设置模块"
                 className="border-border mb-8 flex h-11 items-end gap-2 border-b"
@@ -209,7 +207,6 @@ export function SettingsPage(): React.JSX.Element {
                   addText="添加 IPTV 源"
                   allSelected={iptv.allSelected}
                   apiAvailable={apiAvailable}
-                  description="管理频道列表和每个源的媒体请求配置。"
                   emptyIcon={MonitorPlay}
                   emptyText="还没有 IPTV 源"
                   enabledCount={iptv.enabledCount}
@@ -217,10 +214,9 @@ export function SettingsPage(): React.JSX.Element {
                   isBatchUpdating={iptv.isBatchUpdating}
                   isClearing={iptv.isClearing}
                   isReordering={iptv.isReordering}
-                  sectionId="iptv-sources"
                   selectedSourceIds={iptv.selectedSourceIds}
                   sources={iptv.sources}
-                  title="IPTV 源"
+                  tableLabel="IPTV 源"
                   onAdd={() => setIptvSourceDialog({ mode: 'create' })}
                   onBatchSetDisabled={(disabled) => void iptv.batchSetDisabled(disabled)}
                   onClear={() => setConfirmState({ type: 'clearIptvSources' })}
@@ -241,13 +237,11 @@ export function SettingsPage(): React.JSX.Element {
                 role="tabpanel"
               >
                 <IptvEpgSettingsCard
-                  key={`${iptvSettings.epg.mode}:${iptvSettings.epg.url ?? ''}:${iptvSettings.epg.lastTest.testedAt ?? 0}`}
+                  key={`${iptvSettings.epg.mode}:${iptvSettings.epg.url ?? ''}`}
                   apiAvailable={apiAvailable}
                   isSaving={iptvSettings.isSavingEpg}
-                  isTesting={iptvSettings.isTesting}
                   value={iptvSettings.epg}
                   onSave={(value) => void iptvSettings.saveEpg(value)}
-                  onTest={(value) => void iptvSettings.test(value)}
                 />
               </div>
               <div
@@ -275,7 +269,7 @@ export function SettingsPage(): React.JSX.Element {
           ) : null}
 
           {activeSection === 'data-management' ? (
-            <SettingsPageLayout description="备份、恢复或清理应用中的本地数据。" title="数据管理">
+            <SettingsPageLayout title="数据管理">
               <DataManagementCard
                 apiAvailable={apiAvailable}
                 isExporting={appData.isExporting}
@@ -292,7 +286,7 @@ export function SettingsPage(): React.JSX.Element {
           ) : null}
 
           {activeSection === 'about' ? (
-            <SettingsPageLayout description="查看应用版本、开源信息与项目入口。" title="关于">
+            <SettingsPageLayout title="关于">
               <AboutSettingsCard />
             </SettingsPageLayout>
           ) : null}

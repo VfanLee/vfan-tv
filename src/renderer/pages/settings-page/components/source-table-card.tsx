@@ -13,14 +13,16 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import type { IptvSourceConfig, VodSourceConfig } from '@shared/types'
-import { EmptyState, SettingsSection, VodSourceBackupSwitcher } from '@renderer/components'
+import { EmptyState, VodSourceBackupSwitcher } from '@renderer/components'
 import { Badge } from '@/ui/badge'
 import { Button } from '@/ui/button'
 import { Checkbox } from '@/ui/checkbox'
 import { Input } from '@/ui/input'
 import { Switch } from '@/ui/switch'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/ui/table'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip'
 import { cn } from '@/utils'
 import type { VodSourceSpeedState } from '../types'
 
@@ -40,7 +42,6 @@ interface SourceTableCardProps<T extends SourceConfig> {
   addText: string
   allSelected: boolean
   apiAvailable: boolean
-  description: string
   emptyIcon: LucideIcon
   emptyText: string
   enabledCount: number
@@ -50,10 +51,9 @@ interface SourceTableCardProps<T extends SourceConfig> {
   isReordering: boolean
   isTestingAll?: boolean
   selectedSourceIds: Set<string>
-  sectionId?: string
   sources: T[]
   speedResults?: Record<string, VodSourceSpeedState>
-  title: string
+  tableLabel: string
   onAdd: () => void
   onBatchSetDisabled: (disabled: boolean) => void
   onClear: () => void
@@ -75,7 +75,6 @@ export function SourceTableCard<T extends SourceConfig>({
   addText,
   allSelected,
   apiAvailable,
-  description,
   emptyIcon,
   emptyText,
   enabledCount,
@@ -85,10 +84,9 @@ export function SourceTableCard<T extends SourceConfig>({
   isReordering,
   isTestingAll = false,
   selectedSourceIds,
-  sectionId,
   sources,
   speedResults,
-  title,
+  tableLabel,
   onAdd,
   onBatchSetDisabled,
   onClear,
@@ -209,26 +207,18 @@ export function SourceTableCard<T extends SourceConfig>({
   }
 
   return (
-    <SettingsSection
-      description={description}
-      headerActions={
-        <div className="flex flex-wrap gap-2">
-          <Badge>{sources.length} 个源</Badge>
-          <Badge variant="secondary">{enabledCount} 个启用</Badge>
-        </div>
-      }
-      id={sectionId}
-      title={title}
-    >
+    <div className="min-w-0">
       <SourceToolbar
         addText={addText}
         apiAvailable={apiAvailable}
         clearText={isClearing ? '清空中' : '清空'}
+        enabledCount={enabledCount}
         hasItems={sources.length > 0}
         isBatchUpdating={isBatchUpdating}
         isTestingAll={isTestingAll}
         filterKeyword={filterKeyword}
         selectedCount={selectedSourceIds.size}
+        totalCount={sources.length}
         onAdd={onAdd}
         onBatchSetDisabled={onBatchSetDisabled}
         onClear={onClear}
@@ -247,7 +237,7 @@ export function SourceTableCard<T extends SourceConfig>({
             isDragging ? 'cursor-grabbing select-none' : 'cursor-grab',
           )}
           containerProps={{
-            'aria-label': `${title}，可按住并左右拖动`,
+            'aria-label': `${tableLabel}，可按住并左右拖动`,
             'role': 'region',
             'tabIndex': 0,
             'onLostPointerCapture': () => {
@@ -310,9 +300,7 @@ export function SourceTableCard<T extends SourceConfig>({
                     <NameCell name={source.name} />
                   </TableCell>
                   <TableCell className="max-w-0 px-3">
-                    <div className="text-muted-foreground truncate font-mono text-xs" title={source.url}>
-                      {source.url}
-                    </div>
+                    <SourceUrlCell name={source.name} url={source.url} />
                   </TableCell>
                   {isVodSource(source) && onSwitchBackup ? (
                     <TableCell className="px-2">
@@ -356,7 +344,32 @@ export function SourceTableCard<T extends SourceConfig>({
       ) : (
         <EmptyTableState icon={emptyIcon} text={emptyText} />
       )}
-    </SettingsSection>
+    </div>
+  )
+}
+
+/** 渲染可点击复制的源地址 */
+function SourceUrlCell({ name, url }: { name: string; url: string }): React.JSX.Element {
+  const copyUrl = async (): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(url)
+      toast.success('URL 已复制', { description: name })
+    } catch {
+      toast.error('复制失败，请重试')
+    }
+  }
+
+  return (
+    <ActionTooltip label={`点击复制：${url}`}>
+      <button
+        aria-label={`复制 ${name} 的 URL`}
+        className="text-muted-foreground hover:text-foreground focus-visible:ring-ring block w-full cursor-copy truncate rounded-sm text-left font-mono text-xs transition-colors outline-none focus-visible:ring-2"
+        type="button"
+        onClick={() => void copyUrl()}
+      >
+        {url}
+      </button>
+    </ActionTooltip>
   )
 }
 
@@ -372,7 +385,7 @@ function BackupCell({
     <div className="flex min-w-0 items-center">
       {source.backups.length > 0 ? (
         <VodSourceBackupSwitcher source={source} onSwitchBackup={onSwitchBackup}>
-          <Button className="shrink-0" size="xs" title="切换备用地址" type="button" variant="outline">
+          <Button className="shrink-0" size="xs" type="button" variant="outline">
             {source.backups.length} 个备用
             <ChevronDown data-icon="inline-end" />
           </Button>
@@ -393,11 +406,13 @@ function SourceToolbar({
   addText,
   apiAvailable,
   clearText,
+  enabledCount,
   hasItems,
   isBatchUpdating,
   isTestingAll,
   filterKeyword,
   selectedCount,
+  totalCount,
   onAdd,
   onBatchSetDisabled,
   onClear,
@@ -409,11 +424,13 @@ function SourceToolbar({
   addText: string
   apiAvailable: boolean
   clearText: string
+  enabledCount: number
   hasItems: boolean
   isBatchUpdating: boolean
   isTestingAll: boolean
   filterKeyword: string
   selectedCount: number
+  totalCount: number
   onAdd: () => void
   onBatchSetDisabled: (disabled: boolean) => void
   onClear: () => void
@@ -425,6 +442,8 @@ function SourceToolbar({
   return (
     <div className="mb-3">
       <div className="flex flex-wrap items-center gap-2">
+        <Badge>{totalCount} 个源</Badge>
+        <Badge variant="secondary">{enabledCount} 个启用</Badge>
         <Button
           disabled={!apiAvailable || selectedCount === 0 || isBatchUpdating}
           variant="outline"
@@ -448,16 +467,18 @@ function SourceToolbar({
             onChange={(event) => onFilterKeywordChange(event.target.value)}
           />
           {filterKeyword ? (
-            <Button
-              className="absolute top-1/2 right-1 size-8 -translate-y-1/2"
-              size="icon"
-              title="清空筛选"
-              type="button"
-              variant="ghost"
-              onClick={() => onFilterKeywordChange('')}
-            >
-              <X />
-            </Button>
+            <ActionTooltip label="清空筛选">
+              <Button
+                aria-label="清空筛选"
+                className="absolute top-1/2 right-1 size-8 -translate-y-1/2"
+                size="icon"
+                type="button"
+                variant="ghost"
+                onClick={() => onFilterKeywordChange('')}
+              >
+                <X />
+              </Button>
+            </ActionTooltip>
           ) : null}
         </div>
       </div>
@@ -532,16 +553,17 @@ function SourceTableHeader({
         {showBackups ? <TableHead className="bg-muted sticky top-0 z-30 px-2">备用地址</TableHead> : null}
         {showSpeed ? (
           <TableHead className="bg-muted sticky top-0 z-30 px-2">
-            <button
-              className="hover:text-foreground inline-flex items-center gap-1 rounded-sm outline-none focus-visible:ring-2"
-              title={getSpeedSortTitle(speedSortOrder)}
-              type="button"
-              onClick={onSpeedSort}
-            >
-              API 延迟
-              {speedSortOrder === 'asc' ? <ArrowUpToLine size={15} /> : null}
-              {speedSortOrder === 'desc' ? <ArrowDownToLine size={15} /> : null}
-            </button>
+            <ActionTooltip label={getSpeedSortTitle(speedSortOrder)}>
+              <button
+                className="hover:text-foreground inline-flex items-center gap-1 rounded-sm outline-none focus-visible:ring-2"
+                type="button"
+                onClick={onSpeedSort}
+              >
+                API 延迟
+                {speedSortOrder === 'asc' ? <ArrowUpToLine size={15} /> : null}
+                {speedSortOrder === 'desc' ? <ArrowDownToLine size={15} /> : null}
+              </button>
+            </ActionTooltip>
           </TableHead>
         ) : null}
         <TableHead
@@ -621,12 +643,22 @@ function SpeedCell({ result, onTest }: { result?: VodSourceSpeedState; onTest: (
 
   return (
     <div className="flex items-center gap-2">
-      <Badge className={cn('max-w-20 truncate', resultClassName)} title={title} variant="secondary">
-        {label}
-      </Badge>
-      <Button className="h-8 px-2" disabled={testing} title="测速" variant="ghost" onClick={onTest}>
-        {testing ? <RefreshCw className="animate-spin" /> : <Gauge />}
-      </Button>
+      <ActionTooltip label={title}>
+        <Badge className={cn('max-w-20 truncate', resultClassName)} variant="secondary">
+          {label}
+        </Badge>
+      </ActionTooltip>
+      <ActionTooltip label={testing ? '测速中' : '测速'}>
+        <Button
+          aria-label={testing ? '测速中' : '测速'}
+          className="h-8 px-2"
+          disabled={testing}
+          variant="ghost"
+          onClick={onTest}
+        >
+          {testing ? <RefreshCw className="animate-spin" /> : <Gauge />}
+        </Button>
+      </ActionTooltip>
     </div>
   )
 }
@@ -649,30 +681,38 @@ function ActionCell({
 }): React.JSX.Element {
   return (
     <div className="flex justify-end gap-1">
-      <Button
-        className="size-8 p-0"
-        disabled={disabled || isFirst}
-        title="置顶"
-        variant="ghost"
-        onClick={() => onMoveToEdge('start')}
-      >
-        <ArrowUpToLine />
-      </Button>
-      <Button
-        className="size-8 p-0"
-        disabled={disabled || isLast}
-        title="置底"
-        variant="ghost"
-        onClick={() => onMoveToEdge('end')}
-      >
-        <ArrowDownToLine />
-      </Button>
-      <Button className="size-8 p-0" title="编辑" variant="ghost" onClick={onEdit}>
-        <Pencil />
-      </Button>
-      <Button className="size-8 p-0" title="删除" variant="destructive" onClick={onDelete}>
-        <Trash2 />
-      </Button>
+      <ActionTooltip label="置顶">
+        <Button
+          aria-label="置顶"
+          className="size-8 p-0"
+          disabled={disabled || isFirst}
+          variant="ghost"
+          onClick={() => onMoveToEdge('start')}
+        >
+          <ArrowUpToLine />
+        </Button>
+      </ActionTooltip>
+      <ActionTooltip label="置底">
+        <Button
+          aria-label="置底"
+          className="size-8 p-0"
+          disabled={disabled || isLast}
+          variant="ghost"
+          onClick={() => onMoveToEdge('end')}
+        >
+          <ArrowDownToLine />
+        </Button>
+      </ActionTooltip>
+      <ActionTooltip label="编辑">
+        <Button aria-label="编辑" className="size-8 p-0" variant="ghost" onClick={onEdit}>
+          <Pencil />
+        </Button>
+      </ActionTooltip>
+      <ActionTooltip label="删除">
+        <Button aria-label="删除" className="size-8 p-0" variant="destructive" onClick={onDelete}>
+          <Trash2 />
+        </Button>
+      </ActionTooltip>
     </div>
   )
 }
@@ -691,4 +731,15 @@ function getSpeedSortTitle(order: SpeedSortOrder): string {
   if (order === 'default') return '按速度从快到慢排序'
   if (order === 'asc') return '按速度从慢到快排序'
   return '恢复默认排序'
+}
+
+/** 为紧凑操作补充统一提示 */
+function ActionTooltip({ children, label }: { children: React.JSX.Element; label?: string }): React.JSX.Element {
+  if (!label) return children
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  )
 }

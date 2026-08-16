@@ -1,4 +1,4 @@
-import { Check, Clapperboard, Flame, Link, Radio } from 'lucide-react'
+import { Clapperboard, Flame, Link, Radio } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/utils'
 import { useLayoutPreferencesStore, type AppStyle, type ConfigurableNavigationItem } from '@/stores'
@@ -27,8 +27,8 @@ export function LayoutPreferencesSettings(): React.JSX.Element {
   const setNavigationVisible = useLayoutPreferencesStore((state) => state.setNavigationVisible)
 
   return (
-    <div className="grid gap-9 [&>section+section]:border-t [&>section+section]:pt-9">
-      <SettingsSection description="选择首页内容与主导航结构。" title="应用风格">
+    <div className="grid gap-8 [&>section+section]:border-t [&>section+section]:pt-8">
+      <SettingsSection title="推荐内容">
         <div className="grid gap-3 sm:grid-cols-2">
           {styleItems.map((item) => {
             const active = appStyle === item.style
@@ -46,7 +46,7 @@ export function LayoutPreferencesSettings(): React.JSX.Element {
         </div>
       </SettingsSection>
 
-      <SettingsSection description="选择可选的顶部导航入口。" title="主导航显示">
+      <SettingsSection title="顶部导航">
         <div className="divide-border border-border divide-y border-y">
           {navigationItems.map((item) => (
             <label key={item.key} className="flex cursor-pointer items-center gap-4 py-4">
@@ -92,12 +92,11 @@ function PreferenceOptionButton({
       type="button"
       onClick={onClick}
     >
-      <span className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-0.5">
+      <span className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-0.5">
         <span className="bg-primary/10 text-primary row-span-2 flex size-10 items-center justify-center rounded-full">
           <Icon size={18} />
         </span>
         <span className="truncate font-semibold">{label}</span>
-        {active ? <Check className="col-start-3 row-start-1 shrink-0" size={18} strokeWidth={2} /> : null}
         <span className="text-muted-foreground col-start-2 row-start-2 truncate text-sm">{description}</span>
       </span>
     </button>

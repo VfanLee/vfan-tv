@@ -1,6 +1,7 @@
 import { Search, X } from 'lucide-react'
 import type { Ref } from 'react'
 import { cn } from '@/utils'
+import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip'
 
 export function SearchBox({
   ariaLabel,
@@ -48,14 +49,19 @@ export function SearchBox({
         onChange={(event) => onChange(event.target.value)}
       />
       {value && onClear ? (
-        <button
-          aria-label="清除搜索"
-          className="text-muted-foreground hover:bg-primary/5 hover:text-foreground focus-visible:ring-ring flex size-8 shrink-0 items-center justify-center rounded-lg outline-none focus-visible:ring-2"
-          type="button"
-          onClick={onClear}
-        >
-          <X size={16} />
-        </button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              aria-label="清除搜索"
+              className="text-muted-foreground hover:bg-primary/5 hover:text-foreground focus-visible:ring-ring flex size-8 shrink-0 items-center justify-center rounded-lg outline-none focus-visible:ring-2"
+              type="button"
+              onClick={onClear}
+            >
+              <X size={16} />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>清除搜索</TooltipContent>
+        </Tooltip>
       ) : null}
       <button
         className="text-primary hover:bg-primary/5 focus-visible:ring-ring shrink-0 rounded-lg px-2.5 py-2 text-sm font-semibold outline-none focus-visible:ring-2"

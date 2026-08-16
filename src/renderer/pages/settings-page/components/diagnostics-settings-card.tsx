@@ -11,18 +11,14 @@ export function DiagnosticsSettingsCard({ apiAvailable }: { apiAvailable: boolea
   const isUnavailable = !apiAvailable || diagnostics.isLoading || !diagnostics.info
 
   return (
-    <SettingsSection
-      className="mt-10"
-      description="主进程网络请求和运行异常会写入本地日志，便于定位服务端问题。"
-      title="诊断日志"
-    >
+    <SettingsSection className="mt-8 border-t pt-8" title="诊断日志">
       <div className="border-border divide-border divide-y border-y">
         <div className="flex flex-wrap items-start gap-4 py-5">
           <div className="bg-primary/10 text-primary flex size-10 shrink-0 items-center justify-center rounded-full">
             <FileText size={18} />
           </div>
           <div className="min-w-52 flex-1">
-            <h3 className="text-sm font-semibold">主进程日志</h3>
+            <p className="text-sm font-medium">主进程网络请求和运行异常会写入本地日志。</p>
             <p className="text-muted-foreground mt-1 text-sm leading-6">
               {diagnostics.isLoading
                 ? '正在读取日志状态…'

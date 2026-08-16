@@ -58,8 +58,18 @@ function SearchPageContent({ urlKeyword }: { urlKeyword: string }): React.JSX.El
   /** 清除搜索 */
   const clearSearch = (): void => {
     setKeyword('')
+    void search.cancelSearch()
     navigate('/search')
     window.requestAnimationFrame(() => inputRef.current?.focus())
+  }
+
+  /** 更新搜索词，输入被清空时同步结束当前搜索 */
+  const changeKeyword = (nextKeyword: string): void => {
+    if (!nextKeyword.trim()) {
+      clearSearch()
+      return
+    }
+    setKeyword(nextKeyword)
   }
 
   /** 打开聚合结果播放器 */
@@ -81,20 +91,16 @@ function SearchPageContent({ urlKeyword }: { urlKeyword: string }): React.JSX.El
 
   return (
     <div className="text-foreground min-h-full bg-transparent px-5 pb-10 sm:px-8 lg:px-10">
-      <div className="mx-auto w-full max-w-[1800px] pt-8">
-        <section className="border-border bg-card/90 rounded-[24px] border p-5 shadow-sm backdrop-blur sm:p-6">
-          <div className="mb-4">
-            <h1 className="text-2xl font-bold tracking-tight">全局搜索</h1>
-            <p className="text-muted-foreground mt-1 text-sm">同时搜索所有已启用的点播源</p>
-          </div>
+      <div className="mx-auto w-full max-w-[1800px]">
+        <section className="bg-background/92 sticky top-0 z-30 py-5 backdrop-blur-xl sm:py-6">
           <SearchBox
-            ariaLabel="全局搜索"
+            ariaLabel="搜索影片"
             autoFocus
             inputRef={inputRef}
             placeholder="输入影片名称"
             submitLabel="搜索"
             value={keyword}
-            onChange={setKeyword}
+            onChange={changeKeyword}
             onClear={clearSearch}
             onSubmit={submitSearch}
           />

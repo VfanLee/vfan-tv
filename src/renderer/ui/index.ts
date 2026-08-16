@@ -17,6 +17,18 @@ export {
 export { Badge, badgeVariants } from './badge'
 export { Button, buttonVariants } from './button'
 export { Checkbox } from './checkbox'
+export {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogOverlay,
+  DialogPortal,
+  DialogTitle,
+  DialogTrigger,
+} from './dialog'
 export { Card, CardAction, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './card'
 export { Input } from './input'
 export {
@@ -53,6 +65,7 @@ export {
 } from './select'
 export { Skeleton } from './skeleton'
 export { Switch } from './switch'
+export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './tooltip'
 export {
   Table,
   TableBody,

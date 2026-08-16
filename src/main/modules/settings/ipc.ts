@@ -43,7 +43,7 @@ export function registerSettingsIpc(context: ApplicationContext): void {
         settings.update({
           activeSubscriptionId: undefined,
           subscriptions: [],
-          iptvEpg: { mode: 'source', lastTest: { status: 'idle' } },
+          iptvEpg: { mode: 'source' },
         })
         source.clear()
         iptvSource.clear()

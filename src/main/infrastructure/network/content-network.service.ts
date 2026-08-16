@@ -154,7 +154,7 @@ export class ContentNetworkService {
     throw new Error('上游重定向次数过多')
   }
 
-  getStatus(): NetworkStatus {
+  async getStatus(): Promise<NetworkStatus> {
     const families = new Set<'ipv4' | 'ipv6'>()
     for (const values of Object.values(networkInterfaces())) {
       for (const item of values ?? []) {
@@ -166,10 +166,27 @@ export class ContentNetworkService {
     return {
       online: net.isOnline(),
       ipFamilies: [...families],
+      systemProxyStatus: await this.resolveSystemProxyStatus(),
       routes: {
         iptv: toRouteStatus(this.activeSettings.iptv, this.activeSettings),
         epg: toRouteStatus(this.activeSettings.epg, this.activeSettings),
       },
+    }
+  }
+
+  /** 检测操作系统代理当前是否为测试地址解析出代理路由 */
+  private async resolveSystemProxyStatus(): Promise<NetworkStatus['systemProxyStatus']> {
+    const context = this.activeContexts.get('subscriptionSystem')
+    if (!context) return 'unknown'
+    try {
+      const directives = (await context.session.resolveProxy(PROXY_TEST_URL))
+        .split(';')
+        .map((directive) => directive.trim())
+        .filter(Boolean)
+      if (directives.length === 0) return 'unknown'
+      return directives.some((directive) => !/^DIRECT(?:\s|$)/i.test(directive)) ? 'enabled' : 'disabled'
+    } catch {
+      return 'unknown'
     }
   }
 

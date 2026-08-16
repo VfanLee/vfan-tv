@@ -66,14 +66,6 @@ export const networkSettingsSchema = z
 export const iptvEpgSettingsSchema = z.object({
   mode: z.enum(['source', 'query', 'xmltv']).default('source'),
   url: z.string().trim().url('EPG 地址无效').optional(),
-  lastTest: z
-    .object({
-      status: z.enum(['idle', 'testing', 'success', 'error']).default('idle'),
-      testedAt: z.number().int().nonnegative().optional(),
-      elapsedMs: z.number().int().nonnegative().optional(),
-      errorMessage: z.string().optional(),
-    })
-    .default({ status: 'idle' }),
   lastSuccessAt: z.number().int().nonnegative().optional(),
   lastSuccessSource: z.string().optional(),
 })
@@ -93,7 +85,7 @@ export const appSettingsSchema = z.object({
     )
     .default([]),
   activeSubscriptionId: z.string().trim().min(1).optional(),
-  iptvEpg: iptvEpgSettingsSchema.default({ mode: 'source', lastTest: { status: 'idle' } }),
+  iptvEpg: iptvEpgSettingsSchema.default({ mode: 'source' }),
   network: networkSettingsSchema.default({
     profiles: [],
     iptv: { mode: 'direct' },

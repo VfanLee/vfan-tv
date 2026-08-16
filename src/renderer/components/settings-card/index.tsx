@@ -4,7 +4,6 @@ import { cn } from '@/utils'
 interface SettingsPageLayoutProps {
   children: ReactNode
   className?: string
-  description: string
   headerActions?: ReactNode
   title: string
 }
@@ -12,7 +11,7 @@ interface SettingsPageLayoutProps {
 interface SettingsSectionProps {
   children: ReactNode
   className?: string
-  description: string
+  description?: string
   headerActions?: ReactNode
   id?: string
   title: string
@@ -21,17 +20,13 @@ interface SettingsSectionProps {
 export function SettingsPageLayout({
   children,
   className,
-  description,
   headerActions,
   title,
 }: SettingsPageLayoutProps): React.JSX.Element {
   return (
     <div className={cn('mx-auto w-full max-w-[1240px]', className)}>
-      <header className="mb-7 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-foreground text-2xl font-semibold tracking-tight">{title}</h1>
-          <p className="text-muted-foreground mt-1.5 max-w-3xl text-sm leading-6">{description}</p>
-        </div>
+      <header className="mb-6 flex min-h-9 flex-wrap items-center justify-between gap-4">
+        <h1 className="text-foreground text-2xl font-semibold tracking-tight">{title}</h1>
         {headerActions}
       </header>
 
@@ -50,10 +45,10 @@ export function SettingsSection({
 }: SettingsSectionProps): React.JSX.Element {
   return (
     <section className={cn('min-w-0 scroll-mt-20', className)} id={id}>
-      <header className="mb-5 flex flex-wrap items-start justify-between gap-4">
+      <header className="mb-4 flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-foreground text-lg font-semibold tracking-tight">{title}</h2>
-          <p className="text-muted-foreground mt-1 text-sm leading-6">{description}</p>
+          <h2 className="text-foreground text-base font-semibold">{title}</h2>
+          {description ? <p className="text-muted-foreground mt-1 text-sm leading-6">{description}</p> : null}
         </div>
         {headerActions}
       </header>
@@ -63,5 +58,5 @@ export function SettingsSection({
   )
 }
 
-// 兼容尚未迁移的调用方；设置页新代码应使用 SettingsSection。
+// 兼容已有调用方；设置页新代码应使用 SettingsSection。
 export const SettingsCard = SettingsSection

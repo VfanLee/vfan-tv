@@ -20,8 +20,6 @@ import type {
 } from './settings'
 import type { FavoriteInput, FavoriteItem } from './favorite'
 import type {
-  IptvEpgSettings,
-  IptvEpgTestResult,
   IptvPlaybackTarget,
   IptvPlaylist,
   IptvProgramScheduleResult,
@@ -157,7 +155,6 @@ export interface AppApi {
     getPrograms: (sourceId: string, channelIds: string[]) => Promise<IptvProgramsResult>
     getProgramSchedule: (sourceId: string, channelId: string, date: string) => Promise<IptvProgramScheduleResult>
     getPlaybackTarget: (sourceId: string, channelId: string, streamId: string) => Promise<IptvPlaybackTarget>
-    testEpg: (settings?: IptvEpgSettings) => Promise<IptvEpgTestResult>
   }
   radio: {
     getCategories: () => Promise<RadioCategory[]>

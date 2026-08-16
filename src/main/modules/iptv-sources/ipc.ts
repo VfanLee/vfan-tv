@@ -126,9 +126,6 @@ export function registerIptvSourcesIpc(context: ApplicationContext): void {
       )
     },
   )
-  ipcMain.handle(IPC_CHANNELS.iptv.testEpg, (_event, settings?: Parameters<AppApi['iptv']['testEpg']>[0]) =>
-    iptvEpg.test(settings),
-  )
 }
 
 async function logIptvRequest<T>(
@@ -139,13 +136,7 @@ async function logIptvRequest<T>(
   requestId = randomUUID(),
 ): Promise<T> {
   const startedAt = Date.now()
-  const network = context.services.network.getStatus().routes[route]
-  const networkLabel =
-    network.mode === 'direct'
-      ? `${route === 'epg' ? 'EPG' : 'IPTV'} 直连`
-      : network.mode === 'system'
-        ? '跟随系统'
-        : `自定义代理(${sanitizeLogValue(network.activeProfileName ?? '未选择')})`
+  const networkLabel = context.services.network.getRouteDescription(route)
   const scope = route === 'epg' ? 'EPG' : 'IPTV'
   console.info(`[${scope} ${action}] 开始 | requestId=${requestId} | 网络=${networkLabel}`)
   try {

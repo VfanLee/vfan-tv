@@ -58,8 +58,13 @@ export function useVodSearch(initialKeyword: string): VodSearchState {
   const allItems = useMemo(() => sourceList.flatMap((source) => source.items), [sourceList])
   /** 按标准化标题聚合后的搜索结果 */
   const groupedResults = useMemo(() => groupSearchResults(allItems), [allItems])
+  /** 是否已经启动搜索或收到搜索事件 */
+  const hasSearched = Boolean(searchId) || sourceList.length > 0
   /** 当前搜索任务的来源与结果统计 */
-  const stats = useMemo(() => getSourceStats(sourceList, enabledSourceCount), [enabledSourceCount, sourceList])
+  const stats = useMemo(
+    () => getSourceStats(sourceList, hasSearched ? enabledSourceCount : 0),
+    [enabledSourceCount, hasSearched, sourceList],
+  )
   const hasAvailableSources = enabledSourceCount > 0
 
   /** 更新历史记录 */
@@ -173,7 +178,7 @@ export function useVodSearch(initialKeyword: string): VodSearchState {
     allItems,
     groupedResults,
     hasAvailableSources,
-    hasSearched: Boolean(searchId) || sourceList.length > 0 || allItems.length > 0,
+    hasSearched,
     histories,
     isSearching: sourceList.some((source) => source.status === 'searching'),
     isSourcesReady,

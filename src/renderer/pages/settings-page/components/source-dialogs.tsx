@@ -4,8 +4,10 @@ import { toast } from 'sonner'
 import { omit } from 'es-toolkit/object'
 import type { IptvSourceInput, SourceHeaders, VodSourceInput } from '@shared/types'
 import { Button } from '@/ui/button'
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/ui/dialog'
 import { Input } from '@/ui/input'
 import { Switch } from '@/ui/switch'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip'
 import { createIptvSource, createSource, isApiAvailable, updateIptvSource, updateSource } from '@renderer/platform/api'
 import type { IptvSourceDialogState, SourceDialogState } from '../types'
 
@@ -117,20 +119,25 @@ export function SourceDialog({
                 }))
               }
             />
-            <Button
-              aria-label={`删除备用地址 ${index + 1}`}
-              size="icon"
-              type="button"
-              variant="destructive"
-              onClick={() =>
-                setForm((current) => ({
-                  ...current,
-                  backups: (current.backups ?? []).filter((_item, itemIndex) => itemIndex !== index),
-                }))
-              }
-            >
-              <Trash2 />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  aria-label={`删除备用地址 ${index + 1}`}
+                  size="icon"
+                  type="button"
+                  variant="destructive"
+                  onClick={() =>
+                    setForm((current) => ({
+                      ...current,
+                      backups: (current.backups ?? []).filter((_item, itemIndex) => itemIndex !== index),
+                    }))
+                  }
+                >
+                  <Trash2 />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>删除备用地址</TooltipContent>
+            </Tooltip>
           </div>
         ))}
       </div>
@@ -287,15 +294,20 @@ function HeaderEditor({
             value={value ?? ''}
             onChange={(event) => onChange({ ...headers, [name]: event.target.value })}
           />
-          <Button
-            aria-label={`删除 Header ${index + 1}`}
-            size="icon"
-            type="button"
-            variant="ghost"
-            onClick={() => onChange(omit(headers, [name]))}
-          >
-            <Trash2 />
-          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                aria-label={`删除 Header ${index + 1}`}
+                size="icon"
+                type="button"
+                variant="ghost"
+                onClick={() => onChange(omit(headers, [name]))}
+              >
+                <Trash2 />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>删除 Header</TooltipContent>
+          </Tooltip>
         </div>
       ))}
     </div>
@@ -317,21 +329,30 @@ function DialogSurface({
   onSave: () => void
 }): React.JSX.Element {
   return (
-    <div className="bg-background/45 fixed inset-0 z-50 flex items-center justify-center px-4 backdrop-blur-sm">
-      <div className="border-border bg-card flex max-h-[88vh] w-full max-w-lg flex-col rounded-xl border p-5 shadow-sm">
-        <h2 className="text-foreground mb-5 text-lg font-semibold">{title}</h2>
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open && !isSaving) onClose()
+      }}
+    >
+      <DialogContent className="flex max-h-[88vh] flex-col">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
         <div className="min-h-0 flex-1 overflow-y-auto pr-1">
           <div className="flex flex-col gap-4">{children}</div>
         </div>
-        <div className="mt-6 flex justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>
-            取消
-          </Button>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button disabled={isSaving} variant="outline">
+              取消
+            </Button>
+          </DialogClose>
           <Button disabled={isSaving} onClick={onSave}>
             {isSaving ? '保存中...' : '保存'}
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -8,6 +8,9 @@ import type { VodCatalogCategory, VodSearchResult, VodSourceConfig } from '@shar
 import { EmptyState, MediaPoster, PosterCardSkeleton, VodSourceBackupSwitcher } from '@renderer/components'
 import { getVodDetail, openSettingsWindow } from '@renderer/platform/api'
 import {
+  Alert,
+  AlertAction,
+  AlertDescription,
   Button,
   Pagination,
   PaginationContent,
@@ -141,7 +144,7 @@ export function CatalogHomePage(): React.JSX.Element {
       <div className="relative mx-auto w-full max-w-[1800px] px-5 py-6 sm:px-8 lg:px-10 lg:py-9">
         <section className="border-border bg-card/90 overflow-hidden rounded-[28px] border shadow-sm backdrop-blur">
           <div className="grid gap-8 px-6 py-7 lg:grid-cols-[minmax(0,1fr)_minmax(360px,0.72fr)] lg:px-9 lg:py-9">
-            <div className="min-w-0">
+            <div className="flex min-w-0 items-center">
               <h1 className="truncate text-3xl font-bold tracking-[-0.035em] sm:text-4xl lg:text-5xl">
                 {selectedSource?.name ?? '正在接入片库'}
               </h1>
@@ -177,13 +180,7 @@ export function CatalogHomePage(): React.JSX.Element {
                 </Select>
                 {selectedSource && selectedSource.backups.length > 0 ? (
                   <VodSourceBackupSwitcher align="end" source={selectedSource} onSwitchBackup={switchBackup}>
-                    <Button
-                      aria-label="切换备用地址"
-                      size="icon-lg"
-                      title="切换备用地址"
-                      type="button"
-                      variant="outline"
-                    >
+                    <Button aria-label="切换备用地址" size="icon-lg" type="button" variant="outline">
                       <ServerCog data-icon="inline-start" />
                     </Button>
                   </VodSourceBackupSwitcher>
@@ -272,16 +269,15 @@ export function CatalogHomePage(): React.JSX.Element {
               </div>
 
               {catalog.errorMessage ? (
-                <div className="mt-10 flex flex-col items-center gap-2 text-center">
-                  <p className="text-destructive text-sm">{catalog.errorMessage}</p>
-                  <button
-                    className="border-destructive/25 bg-destructive/10 text-destructive focus-visible:ring-destructive rounded-xl border px-5 py-3 text-sm font-semibold outline-none focus-visible:ring-2"
-                    type="button"
-                    onClick={() => void catalog.retry()}
-                  >
-                    重新加载当前页
-                  </button>
-                </div>
+                <Alert className="mt-10 pr-40" variant="destructive">
+                  <AlertCircle />
+                  <AlertDescription>{catalog.errorMessage}</AlertDescription>
+                  <AlertAction>
+                    <Button size="sm" variant="outline" onClick={() => void catalog.retry()}>
+                      重新加载当前页
+                    </Button>
+                  </AlertAction>
+                </Alert>
               ) : catalog.pageCount > 1 ? (
                 <CatalogPagination
                   currentPage={catalog.page || requestedPage}

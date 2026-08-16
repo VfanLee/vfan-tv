@@ -92,17 +92,9 @@ export interface IptvPlaylist {
 
 export type IptvEpgMode = 'source' | 'query' | 'xmltv'
 
-export interface IptvEpgTestState {
-  status: 'idle' | 'testing' | 'success' | 'error'
-  testedAt?: number
-  elapsedMs?: number
-  errorMessage?: string
-}
-
 export interface IptvEpgSettings {
   mode: IptvEpgMode
   url?: string
-  lastTest: IptvEpgTestState
   lastSuccessAt?: number
   lastSuccessSource?: string
 }
@@ -139,7 +131,3 @@ export interface IptvProgramScheduleResult {
 }
 
 export type IptvPlaybackTarget = MediaPlaybackTarget
-
-export interface IptvEpgTestResult extends IptvEpgTestState {
-  actualSource?: string
-}

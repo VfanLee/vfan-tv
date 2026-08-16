@@ -10,7 +10,6 @@ import type {
   IptvChannelPrograms,
   IptvEpgProgram,
   IptvEpgSettings,
-  IptvEpgTestResult,
   IptvPlaylist,
   IptvProgramScheduleResult,
   IptvProgramsResult,
@@ -143,39 +142,6 @@ export class IptvEpgService {
           errorMessage: `${toPublicError(error)}；内嵌 EPG：${toPublicError(fallbackError)}`,
         }
       }
-    }
-  }
-
-  async test(input?: IptvEpgSettings): Promise<IptvEpgTestResult> {
-    const settings = input ?? this.settingsService.get().iptvEpg
-    const provider = resolveGlobalProvider(settings)
-    const testedAt = Date.now()
-    if (!provider) return { status: 'success', testedAt, elapsedMs: 0, actualSource: '跟随 IPTV 源' }
-    const startedAt = performance.now()
-    try {
-      if (provider.type === 'xmltv') {
-        const data = await this.fetchBuffer(provider.url)
-        const xml = decodeMaybeGzip(data, provider.url)
-        const document = new DOMParser().parseFromString(xml, 'application/xml')
-        if (!document.getElementsByTagName('tv').length && !document.getElementsByTagName('programme').length) {
-          throw new Error('响应不是有效的 XMLTV')
-        }
-      } else {
-        const url = buildQueryUrl(provider.url, 'CCTV1', formatDate())
-        await this.httpClient.get<unknown>(url, {
-          requestLabel: 'IPTV EPG',
-          timeout: 8_000,
-          maxContentLength: 2 * 1024 * 1024,
-        })
-      }
-      return {
-        status: 'success',
-        testedAt,
-        elapsedMs: Math.max(1, Math.round(performance.now() - startedAt)),
-        actualSource: provider.label,
-      }
-    } catch (error) {
-      return { status: 'error', testedAt, errorMessage: toPublicError(error), actualSource: provider.label }
     }
   }
 

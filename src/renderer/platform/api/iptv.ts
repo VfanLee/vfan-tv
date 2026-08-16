@@ -1,11 +1,4 @@
-import type {
-  IptvEpgSettings,
-  IptvEpgTestResult,
-  IptvPlaybackTarget,
-  IptvPlaylist,
-  IptvProgramScheduleResult,
-  IptvProgramsResult,
-} from '@shared/types'
+import type { IptvPlaybackTarget, IptvPlaylist, IptvProgramScheduleResult, IptvProgramsResult } from '@shared/types'
 import { requireRuntimeApi } from './client'
 
 export async function getIptvCatalog(sourceId: string, force = false): Promise<IptvPlaylist> {
@@ -30,8 +23,4 @@ export async function getIptvPlaybackTarget(
   streamId: string,
 ): Promise<IptvPlaybackTarget> {
   return requireRuntimeApi().iptv.getPlaybackTarget(sourceId, channelId, streamId)
-}
-
-export async function testIptvEpg(settings?: IptvEpgSettings): Promise<IptvEpgTestResult> {
-  return requireRuntimeApi().iptv.testEpg(settings)
 }

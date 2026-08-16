@@ -29,6 +29,7 @@ export interface NetworkRouteStatus extends NetworkRouteSettings {
 export interface NetworkStatus {
   online: boolean
   ipFamilies: Array<'ipv4' | 'ipv6'>
+  systemProxyStatus: 'enabled' | 'disabled' | 'unknown'
   routes: Record<NetworkRouteKey, NetworkRouteStatus>
 }
 

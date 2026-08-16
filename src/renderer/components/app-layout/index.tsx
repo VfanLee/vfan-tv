@@ -6,7 +6,7 @@ import { cn } from '@/utils'
 import logoMarkUrl from '@renderer/assets/logo-mark.svg'
 import applicationBackgroundUrl from '@renderer/assets/application-background.png'
 import applicationBackgroundDarkUrl from '@renderer/assets/application-background-dark.png'
-import { Popover, PopoverContent, PopoverTrigger } from '@/ui'
+import { Popover, PopoverContent, PopoverTrigger, Tooltip, TooltipContent, TooltipTrigger } from '@/ui'
 import { openSettingsWindow } from '@renderer/platform/api'
 import { RadioBottomPlayer } from '../radio-player'
 import { useAppUpdateStore, useLayoutPreferencesStore, useThemeStore, type ThemeMode } from '@/stores'
@@ -88,15 +88,19 @@ function AppHeader({
 
   return (
     <header className="border-border bg-background/92 relative z-40 grid h-[76px] shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center border-b px-4 backdrop-blur-xl sm:px-6 lg:px-10">
-      <NavLink
-        aria-label="返回推荐"
-        className="focus-visible:ring-ring flex min-w-0 items-center gap-2.5 rounded-xl outline-none focus-visible:ring-2"
-        title="返回推荐"
-        to="/"
-      >
-        <img alt="Vfan TV" className="size-11 shrink-0" draggable={false} src={logoMarkUrl} />
-        <span className="text-primary hidden text-lg font-bold tracking-wide md:block">Vfan TV</span>
-      </NavLink>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <NavLink
+            aria-label="返回推荐"
+            className="focus-visible:ring-ring flex min-w-0 items-center gap-2.5 rounded-xl outline-none focus-visible:ring-2"
+            to="/"
+          >
+            <img alt="Vfan TV" className="size-11 shrink-0" draggable={false} src={logoMarkUrl} />
+            <span className="text-primary hidden text-lg font-bold tracking-wide md:block">Vfan TV</span>
+          </NavLink>
+        </TooltipTrigger>
+        <TooltipContent>返回推荐</TooltipContent>
+      </Tooltip>
 
       <nav aria-label="主导航" className="flex min-w-0 items-center justify-center gap-1 sm:gap-2">
         {mainNavItems.map((item) => (
@@ -154,17 +158,21 @@ function HeaderIconLink({
   to: string
 }): React.JSX.Element {
   return (
-    <NavLink
-      aria-label={label}
-      className={cn(
-        'focus-visible:ring-ring flex size-10 items-center justify-center rounded-xl transition-colors outline-none focus-visible:ring-2',
-        active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
-      )}
-      title={label}
-      to={to}
-    >
-      <Icon size={18} />
-    </NavLink>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <NavLink
+          aria-label={label}
+          className={cn(
+            'focus-visible:ring-ring flex size-10 items-center justify-center rounded-xl transition-colors outline-none focus-visible:ring-2',
+            active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+          )}
+          to={to}
+        >
+          <Icon size={18} />
+        </NavLink>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -180,18 +188,22 @@ function HeaderIconButton({
   onClick: () => void
 }): React.JSX.Element {
   return (
-    <button
-      aria-label={label}
-      className={cn(
-        'focus-visible:ring-ring flex size-10 items-center justify-center rounded-xl transition-colors outline-none focus-visible:ring-2',
-        active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
-      )}
-      title={label}
-      type="button"
-      onClick={onClick}
-    >
-      <Icon size={18} />
-    </button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          aria-label={label}
+          className={cn(
+            'focus-visible:ring-ring flex size-10 items-center justify-center rounded-xl transition-colors outline-none focus-visible:ring-2',
+            active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+          )}
+          type="button"
+          onClick={onClick}
+        >
+          <Icon size={18} />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -202,38 +214,42 @@ function ThemeMenu(): React.JSX.Element {
   const ActiveIcon = activeOption.icon
 
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button
-          aria-label={`主题：${activeOption.label}`}
-          className="text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring flex size-10 items-center justify-center rounded-xl transition-colors outline-none focus-visible:ring-2"
-          title={`主题：${activeOption.label}`}
-          type="button"
-        >
-          <ActiveIcon size={18} />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-40 gap-1 p-1.5" sideOffset={8}>
-        {themeOptions.map((option) => {
-          const Icon = option.icon
-          const active = option.mode === mode
-          return (
+    <Tooltip>
+      <Popover>
+        <TooltipTrigger asChild>
+          <PopoverTrigger asChild>
             <button
-              key={option.mode}
-              className={cn(
-                'focus-visible:ring-ring flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors outline-none focus-visible:ring-2',
-                active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
-              )}
+              aria-label={`主题：${activeOption.label}`}
+              className="text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring flex size-10 items-center justify-center rounded-xl transition-colors outline-none focus-visible:ring-2"
               type="button"
-              onClick={() => setMode(option.mode)}
             >
-              <Icon size={17} />
-              <span>{option.label}</span>
-              {active ? <Check className="ml-auto" size={16} /> : null}
+              <ActiveIcon size={18} />
             </button>
-          )
-        })}
-      </PopoverContent>
-    </Popover>
+          </PopoverTrigger>
+        </TooltipTrigger>
+        <TooltipContent>主题：{activeOption.label}</TooltipContent>
+        <PopoverContent align="end" className="w-40 gap-1 p-1.5" sideOffset={8}>
+          {themeOptions.map((option) => {
+            const Icon = option.icon
+            const active = option.mode === mode
+            return (
+              <button
+                key={option.mode}
+                className={cn(
+                  'focus-visible:ring-ring flex h-10 w-full items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors outline-none focus-visible:ring-2',
+                  active ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-accent hover:text-foreground',
+                )}
+                type="button"
+                onClick={() => setMode(option.mode)}
+              >
+                <Icon size={17} />
+                <span>{option.label}</span>
+                {active ? <Check className="ml-auto" size={16} /> : null}
+              </button>
+            )
+          })}
+        </PopoverContent>
+      </Popover>
+    </Tooltip>
   )
 }

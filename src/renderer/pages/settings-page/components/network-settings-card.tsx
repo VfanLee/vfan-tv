@@ -9,12 +9,13 @@ import type {
   NetworkSettings,
   NetworkStatus,
 } from '@shared/types'
-import { SettingsSection } from '@renderer/components'
 import { Badge } from '@/ui/badge'
 import { Button } from '@/ui/button'
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/ui/dialog'
 import { Input } from '@/ui/input'
 import { RadioGroup, RadioGroupItem } from '@/ui/radio-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip'
 import { cn } from '@/utils'
 
 interface NetworkSettingsCardProps {
@@ -97,67 +98,62 @@ export function NetworkSettingsCard({ apiAvailable, network }: NetworkSettingsCa
 
   return (
     <>
-      <SettingsSection
-        description="查看当前网络能力，并分别配置 IPTV 与 EPG 使用的网络。"
-        id="iptv-network"
-        title="IPTV 与 EPG 网络"
-      >
-        <div className="divide-border divide-y">
-          <NetworkStatusSection
-            disabled={!apiAvailable}
-            settings={network.settings}
-            status={network.status}
-            onRefresh={network.onRefreshStatus}
+      <div className="divide-border divide-y">
+        <NetworkStatusSection
+          disabled={!apiAvailable}
+          settings={network.settings}
+          status={network.status}
+          onRefresh={network.onRefreshStatus}
+        />
+        <section className="space-y-4 py-6">
+          <SectionHeading
+            description="IPTV 与 EPG 使用相互隔离的网络 Session；VOD（含播放）、豆瓣和蜻蜓固定直连。"
+            icon={Router}
+            title="请求路由"
           />
-          <section className="space-y-4 py-6">
-            <SectionHeading
-              description="IPTV 与 EPG 使用相互隔离的网络 Session；VOD（含播放）、豆瓣和蜻蜓固定直连。"
-              icon={Router}
-              title="请求路由"
-            />
-            <div className="grid gap-4">
-              {ROUTES.map((route) => (
-                <NetworkRouteCard
-                  disabled={disabled}
-                  isTesting={network.testingRoute === route.key}
-                  key={route.key}
-                  profiles={network.settings.profiles}
-                  result={network.testResults[route.key]}
-                  route={route}
-                  settings={network.settings}
-                  onChange={(mode, activeProfileId) => updateRoute(route.key, mode, activeProfileId)}
-                  onTest={() => network.onTest(route.key)}
-                />
-              ))}
-            </div>
-          </section>
-          <section className="space-y-4 py-6">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <SectionHeading
-                description="可供 IPTV 与 EPG 独立选用，支持 HTTP、HTTPS 和 SOCKS5，不支持认证。"
-                icon={Network}
-                title="代理配置"
+          <div className="grid gap-4">
+            {ROUTES.map((route) => (
+              <NetworkRouteCard
+                disabled={disabled}
+                isTesting={network.testingRoute === route.key}
+                key={route.key}
+                profiles={network.settings.profiles}
+                result={network.testResults[route.key]}
+                route={route}
+                settings={network.settings}
+                systemProxyStatus={network.status?.systemProxyStatus ?? 'unknown'}
+                onChange={(mode, activeProfileId) => updateRoute(route.key, mode, activeProfileId)}
+                onTest={() => network.onTest(route.key)}
               />
-              <Button disabled={disabled} size="sm" variant="outline" onClick={() => setProfileDialog(null)}>
-                <Plus data-icon="inline-start" />
-                添加代理
-              </Button>
-            </div>
-            <ProxyProfileList
-              disabled={disabled}
-              profiles={network.settings.profiles}
-              settings={network.settings}
-              onDelete={(profileId) =>
-                network.onSave({
-                  ...network.settings,
-                  profiles: network.settings.profiles.filter((item) => item.id !== profileId),
-                })
-              }
-              onEdit={setProfileDialog}
+            ))}
+          </div>
+        </section>
+        <section className="space-y-4 py-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <SectionHeading
+              description="可供 IPTV 与 EPG 独立选用，支持 HTTP、HTTPS 和 SOCKS5，不支持认证。"
+              icon={Network}
+              title="代理配置"
             />
-          </section>
-        </div>
-      </SettingsSection>
+            <Button disabled={disabled} size="sm" variant="outline" onClick={() => setProfileDialog(null)}>
+              <Plus data-icon="inline-start" />
+              添加代理
+            </Button>
+          </div>
+          <ProxyProfileList
+            disabled={disabled}
+            profiles={network.settings.profiles}
+            settings={network.settings}
+            onDelete={(profileId) =>
+              network.onSave({
+                ...network.settings,
+                profiles: network.settings.profiles.filter((item) => item.id !== profileId),
+              })
+            }
+            onEdit={setProfileDialog}
+          />
+        </section>
+      </div>
       {profileDialog !== undefined ? (
         <NetworkProfileDialog
           isTesting={network.testingRoute === 'iptv'}
@@ -180,6 +176,7 @@ function NetworkRouteCard({
   result,
   route,
   settings,
+  systemProxyStatus,
   onChange,
   onTest,
 }: {
@@ -189,11 +186,29 @@ function NetworkRouteCard({
   result?: NetworkProxyTestResult
   route: (typeof ROUTES)[number]
   settings: NetworkSettings
+  systemProxyStatus: NetworkStatus['systemProxyStatus']
   onChange: (mode: NetworkRouteMode, activeProfileId?: string) => void
   onTest: () => void
 }): React.JSX.Element {
   const value = settings[route.key]
   const activeProfile = profiles.find((profile) => profile.id === value.activeProfileId)
+  const options: Array<{ mode: NetworkRouteMode; title: string; description: string }> = [
+    {
+      mode: 'direct',
+      title: '直连（不使用代理）',
+      description: '即使开启全局代理，该配置也不走代理',
+    },
+    {
+      mode: 'system',
+      title: '跟随全局设置',
+      description: getSystemProxyStatusDescription(systemProxyStatus),
+    },
+    {
+      mode: 'custom',
+      title: '自定义代理',
+      description: '使用下方选择的自定义代理配置',
+    },
+  ]
   return (
     <div className="grid gap-5 py-1 lg:grid-cols-[minmax(220px,0.75fr)_minmax(320px,1fr)] lg:items-start">
       <div className="pt-1">
@@ -202,27 +217,24 @@ function NetworkRouteCard({
       </div>
       <div className="grid gap-3">
         <RadioGroup
-          className="grid grid-cols-3 gap-2"
+          className="grid gap-2 lg:grid-cols-3"
           disabled={disabled}
           value={value.mode}
           onValueChange={(mode) => onChange(mode as NetworkRouteMode)}
         >
-          {(
-            [
-              ['direct', '直连'],
-              ['system', '跟随系统'],
-              ['custom', '自定义代理'],
-            ] as const
-          ).map(([mode, label]) => (
+          {options.map((option) => (
             <label
               className={cn(
-                'border-border flex min-h-10 cursor-pointer items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm',
-                value.mode === mode && 'border-primary bg-primary/5 text-primary ring-primary/15 ring-1',
+                'border-border flex min-h-20 cursor-pointer items-start gap-3 rounded-lg border p-3 text-left',
+                value.mode === option.mode && 'border-primary bg-primary/5 text-primary ring-primary/15 ring-1',
               )}
-              key={mode}
+              key={option.mode}
             >
-              <RadioGroupItem value={mode} />
-              {label}
+              <RadioGroupItem className="mt-0.5" value={option.mode} />
+              <span className="grid min-w-0 gap-1">
+                <span className="text-sm leading-5 font-medium">{option.title}</span>
+                <span className="text-muted-foreground text-xs leading-5">{option.description}</span>
+              </span>
             </label>
           ))}
         </RadioGroup>
@@ -303,24 +315,34 @@ function ProxyProfileList({
                 {profile.protocol.toUpperCase()} · {formatProfileAddress(profile)}
               </span>
             </span>
-            <Button
-              aria-label={`编辑 ${profile.name}`}
-              disabled={disabled}
-              size="icon"
-              variant="ghost"
-              onClick={() => onEdit(profile)}
-            >
-              <Pencil />
-            </Button>
-            <Button
-              aria-label={`删除 ${profile.name}`}
-              disabled={disabled || usedBy.length > 0}
-              size="icon"
-              variant="ghost"
-              onClick={() => onDelete(profile.id)}
-            >
-              <Trash2 />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  aria-label={`编辑 ${profile.name}`}
+                  disabled={disabled}
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => onEdit(profile)}
+                >
+                  <Pencil />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>编辑代理</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  aria-label={`删除 ${profile.name}`}
+                  disabled={disabled || usedBy.length > 0}
+                  size="icon"
+                  variant="ghost"
+                  onClick={() => onDelete(profile.id)}
+                >
+                  <Trash2 />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{usedBy.length > 0 ? '使用中的代理无法删除' : '删除代理'}</TooltipContent>
+            </Tooltip>
           </div>
         )
       })}
@@ -366,9 +388,14 @@ function NetworkStatusSection({
             value={getModeLabel(status?.routes[key] ?? settings[key])}
           />
         ))}
-        <Button aria-label="刷新网络状态" disabled={disabled} size="icon" variant="ghost" onClick={onRefresh}>
-          <RefreshCw />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button aria-label="刷新网络状态" disabled={disabled} size="icon" variant="ghost" onClick={onRefresh}>
+              <RefreshCw />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>刷新网络状态</TooltipContent>
+        </Tooltip>
       </div>
     </section>
   )
@@ -400,7 +427,7 @@ function SectionHeading({
         <Icon className="size-4" />
       </span>
       <div>
-        <h3 className="text-foreground text-sm font-semibold">{title}</h3>
+        <h2 className="text-foreground text-sm font-semibold">{title}</h2>
         <p className="text-muted-foreground mt-1 text-sm">{description}</p>
       </div>
     </div>
@@ -445,10 +472,12 @@ function NetworkProfileDialog({
   )
   const canSubmit = Boolean(form.name.trim() && form.host.trim() && form.port >= 1 && form.port <= 65_535)
   return (
-    <div className="bg-background/45 fixed inset-0 z-50 flex items-center justify-center px-4 backdrop-blur-sm">
-      <div className="border-border bg-card w-full max-w-lg rounded-xl border p-5 shadow-lg">
-        <h2 className="text-foreground text-lg font-semibold">{profile ? '编辑代理' : '添加代理'}</h2>
-        <div className="mt-5 grid gap-4">
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{profile ? '编辑代理' : '添加代理'}</DialogTitle>
+        </DialogHeader>
+        <div className="grid gap-4">
           <label>
             <span className="text-foreground text-sm font-medium">名称</span>
             <Input
@@ -501,10 +530,10 @@ function NetworkProfileDialog({
           <p className="text-muted-foreground text-xs leading-5">Host 不要填写协议、路径、用户名或密码。</p>
           <NetworkTestResult result={testResult} />
         </div>
-        <div className="mt-6 flex flex-wrap justify-end gap-2">
-          <Button variant="ghost" onClick={onClose}>
-            取消
-          </Button>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline">取消</Button>
+          </DialogClose>
           <Button disabled={!canSubmit || isTesting} variant="outline" onClick={() => onTest(normalizeProfile(form))}>
             {isTesting ? <RefreshCw className="animate-spin" /> : <Gauge />}
             {isTesting ? '测试中' : '测试'}
@@ -512,9 +541,9 @@ function NetworkProfileDialog({
           <Button disabled={!canSubmit} onClick={() => onSave(normalizeProfile(form))}>
             保存
           </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -531,9 +560,16 @@ function formatProfileAddress(profile: NetworkProxyProfile): string {
 
 /** 获取模式标签 */
 function getModeLabel(route: { mode: NetworkRouteMode; activeProfileName?: string }): string {
-  if (route.mode === 'system') return '跟随系统'
+  if (route.mode === 'system') return '跟随全局设置'
   if (route.mode === 'custom') return route.activeProfileName ? `自定义 · ${route.activeProfileName}` : '自定义代理'
   return '直连'
+}
+
+/** 获取操作系统代理状态说明 */
+function getSystemProxyStatusDescription(status: NetworkStatus['systemProxyStatus']): string {
+  if (status === 'enabled') return '全局代理当前已开启'
+  if (status === 'disabled') return '全局代理当前未开启'
+  return '全局代理状态暂不可用'
 }
 
 /** 格式化已解析的路由 */

@@ -1,4 +1,5 @@
 import { Clock3, X } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui'
 
 /** 渲染搜索历史记录 */
 export function SearchHistory({
@@ -40,21 +41,24 @@ export function SearchHistory({
               >
                 {history}
               </button>
-              <button
-                aria-label={`删除 ${history}`}
-                className="text-muted-foreground hover:bg-muted hover:text-destructive focus-visible:ring-ring flex size-8 items-center justify-center rounded-xl outline-none focus-visible:ring-2"
-                type="button"
-                onClick={() => onRemove(history)}
-              >
-                <X size={15} />
-              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    aria-label={`删除 ${history}`}
+                    className="text-muted-foreground hover:bg-muted hover:text-destructive focus-visible:ring-ring flex size-8 items-center justify-center rounded-xl outline-none focus-visible:ring-2"
+                    type="button"
+                    onClick={() => onRemove(history)}
+                  >
+                    <X size={15} />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>删除</TooltipContent>
+              </Tooltip>
             </span>
           ))}
         </div>
       ) : (
-        <p className="border-input text-muted-foreground rounded-xl border border-dashed px-4 py-6 text-center text-sm">
-          搜过的关键词会保存在这里。
-        </p>
+        <p className="text-muted-foreground py-2 text-sm">搜过的关键词会保存在这里。</p>
       )}
     </section>
   )

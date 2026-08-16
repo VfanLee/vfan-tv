@@ -1,7 +1,16 @@
 import { useState } from 'react'
 import { DISCLAIMER_SKIP_STORAGE_KEY } from '@shared/constants'
 import { quitApp } from '@renderer/platform/api'
-import { Button } from '@/ui/button'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/ui/alert-dialog'
 import { Checkbox } from '@/ui/checkbox'
 import logoMarkUrl from '@renderer/assets/logo-mark.svg'
 
@@ -29,29 +38,21 @@ export function DisclaimerOverlay({ onAcknowledge }: { onAcknowledge: () => void
   }
 
   return (
-    <div className="bg-background/80 fixed inset-0 z-50 flex items-center justify-center p-4 backdrop-blur-sm sm:p-6">
-      <div
-        aria-describedby="disclaimer-description"
-        aria-labelledby="disclaimer-title"
-        aria-modal="true"
-        className="border-border bg-card text-card-foreground flex max-h-[calc(100dvh-2rem)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border shadow-lg sm:max-h-[calc(100dvh-3rem)]"
-        role="dialog"
-      >
-        <div className="bg-card relative z-10 shrink-0 px-6 py-5 shadow-[0_1px_0_0_oklch(0_0_0/0.04),0_3px_8px_-4px_oklch(0_0_0/0.08)] sm:px-8 sm:py-6 dark:shadow-[0_1px_0_0_oklch(1_0_0/0.06),0_4px_10px_-6px_oklch(0_0_0/0.35)]">
+    <AlertDialog open>
+      <AlertDialogContent className="max-h-[calc(100dvh-2rem)] max-w-lg grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0 sm:max-h-[calc(100dvh-3rem)]">
+        <AlertDialogHeader className="block px-6 py-5 text-left sm:px-8 sm:py-6">
           <div className="flex items-start gap-4">
             <img alt="" className="size-16 shrink-0 sm:size-20" draggable={false} src={logoMarkUrl} />
             <div className="min-w-0 pt-0.5">
-              <h1 className="text-xl font-semibold tracking-tight sm:text-2xl" id="disclaimer-title">
-                免责声明
-              </h1>
-              <p className="text-muted-foreground mt-1.5 text-sm leading-6" id="disclaimer-description">
+              <AlertDialogTitle className="text-xl font-semibold tracking-tight sm:text-2xl">免责声明</AlertDialogTitle>
+              <AlertDialogDescription className="mt-1.5 text-left leading-6 text-pretty">
                 在使用本软件前，请仔细阅读并确认下列条款。点击「我已知晓」即视为您已知悉并接受。
-              </p>
+              </AlertDialogDescription>
             </div>
           </div>
-        </div>
+        </AlertDialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5 sm:px-8 sm:py-6">
+        <div className="border-border min-h-0 flex-1 overflow-y-auto border-y px-6 py-5 sm:px-8 sm:py-6">
           <ul className="text-muted-foreground flex flex-col gap-3 text-sm leading-6">
             {NOTICE_ITEMS.map((item) => (
               <li key={item} className="flex gap-2">
@@ -62,19 +63,17 @@ export function DisclaimerOverlay({ onAcknowledge }: { onAcknowledge: () => void
           </ul>
         </div>
 
-        <div className="bg-card relative z-10 shrink-0 px-6 py-5 shadow-[0_-1px_0_0_oklch(0_0_0/0.04),0_-3px_8px_-4px_oklch(0_0_0/0.08)] sm:px-8 sm:py-6 dark:shadow-[0_-1px_0_0_oklch(1_0_0/0.06),0_-4px_10px_-6px_oklch(0_0_0/0.35)]">
+        <div className="shrink-0 px-6 py-5 sm:px-8 sm:py-6">
           <label className="flex cursor-pointer items-center gap-2.5 text-sm">
             <Checkbox checked={skipNextTime} onCheckedChange={(checked) => setSkipNextTime(checked === true)} />
             <span>下次不再提示</span>
           </label>
-          <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-            <Button variant="outline" onClick={() => void quitApp()}>
-              拒绝
-            </Button>
-            <Button onClick={handleAcknowledge}>我已知晓</Button>
-          </div>
+          <AlertDialogFooter className="mx-0 mt-4 mb-0 border-0 bg-transparent p-0">
+            <AlertDialogCancel onClick={() => void quitApp()}>拒绝</AlertDialogCancel>
+            <AlertDialogAction onClick={handleAcknowledge}>我已知晓</AlertDialogAction>
+          </AlertDialogFooter>
         </div>
-      </div>
-    </div>
+      </AlertDialogContent>
+    </AlertDialog>
   )
 }
