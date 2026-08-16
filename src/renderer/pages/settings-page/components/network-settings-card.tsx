@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Gauge, Network, Pencil, Plus, RefreshCw, Router, Trash2, Wifi, WifiOff } from 'lucide-react'
+import { Gauge, Network, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import type {
   NetworkProxyProfile,
   NetworkProxyProtocol,
@@ -13,6 +13,7 @@ import { Badge } from '@/ui/badge'
 import { Button } from '@/ui/button'
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/ui/dialog'
 import { Input } from '@/ui/input'
+import { Label } from '@/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/ui/radio-group'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ui/tooltip'
@@ -99,19 +100,8 @@ export function NetworkSettingsCard({ apiAvailable, network }: NetworkSettingsCa
   return (
     <>
       <div className="divide-border divide-y">
-        <NetworkStatusSection
-          disabled={!apiAvailable}
-          settings={network.settings}
-          status={network.status}
-          onRefresh={network.onRefreshStatus}
-        />
-        <section className="space-y-4 py-6">
-          <SectionHeading
-            description="IPTV 与 EPG 使用相互隔离的网络 Session；VOD（含播放）、豆瓣和蜻蜓固定直连。"
-            icon={Router}
-            title="请求路由"
-          />
-          <div className="grid gap-4">
+        <section className="py-6">
+          <div className="divide-border max-w-4xl divide-y">
             {ROUTES.map((route) => (
               <NetworkRouteCard
                 disabled={disabled}
@@ -210,33 +200,33 @@ function NetworkRouteCard({
     },
   ]
   return (
-    <div className="grid gap-5 py-1 lg:grid-cols-[minmax(220px,0.75fr)_minmax(320px,1fr)] lg:items-start">
-      <div className="pt-1">
-        <div className="text-foreground text-sm font-semibold">{route.title}</div>
-        <div className="text-muted-foreground mt-1 text-xs leading-5">{route.description}</div>
+    <div className="flex flex-col gap-5 py-8 first:pt-0 last:pb-0">
+      <div className="flex flex-col gap-1">
+        <h3 className="text-foreground text-base font-semibold">{route.title}</h3>
+        <p className="text-muted-foreground text-sm leading-6">{route.description}</p>
       </div>
-      <div className="grid gap-3">
+      <div className="flex flex-col gap-4">
         <RadioGroup
-          className="grid gap-2 lg:grid-cols-3"
+          className="flex flex-col gap-5"
           disabled={disabled}
           value={value.mode}
           onValueChange={(mode) => onChange(mode as NetworkRouteMode)}
         >
-          {options.map((option) => (
-            <label
-              className={cn(
-                'border-border flex min-h-20 cursor-pointer items-start gap-3 rounded-lg border p-3 text-left',
-                value.mode === option.mode && 'border-primary bg-primary/5 text-primary ring-primary/15 ring-1',
-              )}
-              key={option.mode}
-            >
-              <RadioGroupItem className="mt-0.5" value={option.mode} />
-              <span className="grid min-w-0 gap-1">
-                <span className="text-sm leading-5 font-medium">{option.title}</span>
-                <span className="text-muted-foreground text-xs leading-5">{option.description}</span>
-              </span>
-            </label>
-          ))}
+          {options.map((option) => {
+            const optionId = `${route.key}-${option.mode}`
+            return (
+              <div className="flex items-start gap-3" key={option.mode}>
+                <RadioGroupItem className="mt-1" id={optionId} value={option.mode} />
+                <Label
+                  className="min-w-0 flex-1 cursor-pointer flex-col items-start gap-1 leading-normal"
+                  htmlFor={optionId}
+                >
+                  <span className="text-sm font-medium">{option.title}</span>
+                  <span className="text-muted-foreground text-sm leading-5 font-normal">{option.description}</span>
+                </Label>
+              </div>
+            )
+          })}
         </RadioGroup>
         {value.mode === 'custom' ? (
           <Select
@@ -263,7 +253,11 @@ function NetworkRouteCard({
             variant="outline"
             onClick={onTest}
           >
-            {isTesting ? <RefreshCw className="animate-spin" /> : <Gauge />}
+            {isTesting ? (
+              <RefreshCw className="animate-spin" data-icon="inline-start" />
+            ) : (
+              <Gauge data-icon="inline-start" />
+            )}
             {isTesting ? '测试中' : '测试网络'}
           </Button>
         </div>
@@ -350,67 +344,6 @@ function ProxyProfileList({
   )
 }
 
-/** 渲染网络状态区块 */
-function NetworkStatusSection({
-  disabled,
-  settings,
-  status,
-  onRefresh,
-}: {
-  disabled: boolean
-  settings: NetworkSettings
-  status?: NetworkStatus
-  onRefresh: () => void
-}): React.JSX.Element {
-  const familyLabel = status?.ipFamilies.length ? status.ipFamilies.map((item) => item.toUpperCase()).join(' / ') : '—'
-  return (
-    <section className="pb-6">
-      <div className="bg-muted/35 grid gap-4 rounded-lg px-4 py-3.5 lg:grid-cols-[1fr_repeat(4,auto)] lg:items-center">
-        <div className="flex min-w-0 items-center gap-3">
-          <span
-            className={cn(
-              'flex size-10 shrink-0 items-center justify-center rounded-xl',
-              status?.online ? 'bg-emerald-500/10 text-emerald-600' : 'bg-destructive/10 text-destructive',
-            )}
-          >
-            {status?.online ? <Wifi className="size-5" /> : <WifiOff className="size-5" />}
-          </span>
-          <div>
-            <div className="text-foreground text-sm font-semibold">{status?.online ? '网络已连接' : '网络不可用'}</div>
-            <div className="text-muted-foreground mt-0.5 text-xs">检测结果仅供参考，不展示本机地址。</div>
-          </div>
-        </div>
-        <StatusValue label="网络能力" value={familyLabel} />
-        {ROUTES.map(({ key, title }) => (
-          <StatusValue
-            key={key}
-            label={title.replace('网络', '')}
-            value={getModeLabel(status?.routes[key] ?? settings[key])}
-          />
-        ))}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button aria-label="刷新网络状态" disabled={disabled} size="icon" variant="ghost" onClick={onRefresh}>
-              <RefreshCw />
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>刷新网络状态</TooltipContent>
-        </Tooltip>
-      </div>
-    </section>
-  )
-}
-
-/** 渲染状态值 */
-function StatusValue({ label, value }: { label: string; value: string }): React.JSX.Element {
-  return (
-    <div className="min-w-24">
-      <div className="text-muted-foreground text-[11px]">{label}</div>
-      <div className="text-foreground mt-0.5 text-sm font-semibold">{value}</div>
-    </div>
-  )
-}
-
 /** 渲染区块标题 */
 function SectionHeading({
   description,
@@ -418,7 +351,7 @@ function SectionHeading({
   title,
 }: {
   description: string
-  icon: typeof Router
+  icon: typeof Network
   title: string
 }): React.JSX.Element {
   return (
@@ -556,13 +489,6 @@ function normalizeProfile(profile: NetworkProxyProfile): NetworkProxyProfile {
 function formatProfileAddress(profile: NetworkProxyProfile): string {
   const host = profile.host.includes(':') && !profile.host.startsWith('[') ? `[${profile.host}]` : profile.host
   return `${host}:${profile.port}`
-}
-
-/** 获取模式标签 */
-function getModeLabel(route: { mode: NetworkRouteMode; activeProfileName?: string }): string {
-  if (route.mode === 'system') return '跟随全局设置'
-  if (route.mode === 'custom') return route.activeProfileName ? `自定义 · ${route.activeProfileName}` : '自定义代理'
-  return '直连'
 }
 
 /** 获取操作系统代理状态说明 */
