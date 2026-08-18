@@ -186,8 +186,6 @@ jobs:
           - **macOS Intel**：下载 `*-x64.dmg`。
           - **Windows x64**：下载 `*-x64-setup.exe`。
           - **Windows ARM64**：下载 `*-arm64-setup.exe`。
-
-          > Windows 用户若从 v0.9.0 或更早版本升级，应用内自动升级不再可用，请按上面的架构手动下载安装包覆盖安装一次；之后的版本即可继续使用自动升级。
           EOF
 
       - name: Finalize Forge draft release
