@@ -91,7 +91,7 @@ const SETTINGS_SECTIONS = new Set<SettingsSectionId>([
 ])
 
 function parseSettingsSection(value: unknown): SettingsSectionId | undefined {
-  if (value === 'network' || value === 'iptv-sources' || value === 'iptv-epg' || value === 'iptv-network') return 'iptv'
+  if (value === 'network' || value === 'iptv-sources' || value === 'iptv-network') return 'iptv'
   return typeof value === 'string' && SETTINGS_SECTIONS.has(value as SettingsSectionId)
     ? (value as SettingsSectionId)
     : undefined

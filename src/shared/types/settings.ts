@@ -1,7 +1,7 @@
 export type ThemeMode = 'light' | 'dark' | 'system'
 export type NetworkRouteMode = 'direct' | 'system' | 'custom'
 export type NetworkProxyProtocol = 'http' | 'https' | 'socks5'
-export type NetworkRouteKey = 'iptv' | 'epg'
+export type NetworkRouteKey = 'iptv'
 
 export interface NetworkProxyProfile {
   id: string
@@ -19,7 +19,6 @@ export interface NetworkRouteSettings {
 export interface NetworkSettings {
   profiles: NetworkProxyProfile[]
   iptv: NetworkRouteSettings
-  epg: NetworkRouteSettings
 }
 
 export interface NetworkRouteStatus extends NetworkRouteSettings {
@@ -54,6 +53,5 @@ export interface AppSettings {
   theme: ThemeMode
   subscriptions: SubscriptionConfig[]
   activeSubscriptionId?: string
-  iptvEpg: import('./iptv').IptvEpgSettings
   network: NetworkSettings
 }

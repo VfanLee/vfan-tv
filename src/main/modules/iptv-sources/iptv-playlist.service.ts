@@ -1,5 +1,4 @@
 import playlistParser, { type PlaylistItem } from 'iptv-playlist-parser'
-import { uniq } from 'es-toolkit/array'
 import type {
   IptvChannel,
   IptvChannelStream,
@@ -22,9 +21,6 @@ interface ParsedExtInf {
   title: string
   group: string
   logo?: string
-  tvgId?: string
-  tvgName?: string
-  epgUrl?: string
   requestHeaders?: IptvStreamRequestHeaders
 }
 
@@ -63,8 +59,7 @@ export class IptvPlaylistService {
 
 /** 解析 M3U 或逗号分隔文本播放列表，合并同频道线路并生成稳定标识 */
 export function parseIptvPlaylist(content: string, sourceUrl: string): IptvPlaylist {
-  const parsed = parsePlaylistItems(content)
-  const items = parsed.items
+  const items = parsePlaylistItems(content)
   const channelMap = new Map<string, IptvChannel>()
 
   for (const item of items) {
@@ -80,7 +75,6 @@ export function parseIptvPlaylist(content: string, sourceUrl: string): IptvPlayl
   return {
     sourceUrl,
     fetchedAt: Date.now(),
-    sourceEpgUrls: parsed.sourceEpgUrls,
     channels,
   }
 }
@@ -94,14 +88,9 @@ export function m3uToTextPlaylist(content: string): string {
   return playlistItemsToText(parseM3uPlaylistItems(content))
 }
 
-function parsePlaylistItems(content: string): { items: ParsedPlaylistItem[]; sourceEpgUrls: string[] } {
-  if (!isM3uPlaylist(content)) return { items: parseTextPlaylistItems(content), sourceEpgUrls: [] }
-  const playlist = playlistParser.parse(content)
-  const headerUrls = [playlist.header.attrs['x-tvg-url'], ...parseHeaderEpgUrls(playlist.header.raw)]
-  return {
-    items: playlist.items.flatMap(toParsedPlaylistItem),
-    sourceEpgUrls: uniq(headerUrls.flatMap(splitEpgUrls).filter(Boolean)),
-  }
+function parsePlaylistItems(content: string): ParsedPlaylistItem[] {
+  if (!isM3uPlaylist(content)) return parseTextPlaylistItems(content)
+  return parseM3uPlaylistItems(content)
 }
 
 function parseM3uPlaylistItems(content: string): ParsedPlaylistItem[] {
@@ -118,9 +107,6 @@ function toParsedPlaylistItem(item: PlaylistItem): ParsedPlaylistItem[] {
       title: item.name.trim() || item.tvg.name.trim() || '未命名频道',
       group: item.group.title.trim() || DEFAULT_GROUP,
       logo: item.tvg.logo.trim() || undefined,
-      tvgId: item.tvg.id.trim() || undefined,
-      tvgName: item.tvg.name.trim() || undefined,
-      epgUrl: item.tvg.url.trim() || undefined,
       requestHeaders,
       url,
     },
@@ -165,16 +151,6 @@ function parseUrlHeaders(value: string): Record<string, string> {
       .map((part) => part.split('=', 2).map((item) => decodeURIComponent(item.trim())))
       .filter((entry): entry is [string, string] => entry.length === 2 && Boolean(entry[0] && entry[1])),
   )
-}
-
-function parseHeaderEpgUrls(raw: string): string[] {
-  const match = /(?:url-tvg|x-tvg-url)=["']([^"']+)["']/gi
-  return [...raw.matchAll(match)].map((item) => item[1] ?? '')
-}
-
-function splitEpgUrls(value: unknown): string[] {
-  if (typeof value !== 'string') return []
-  return value.split(/[;,]/).map((item) => item.trim())
 }
 
 function parseTextPlaylistItems(content: string): ParsedPlaylistItem[] {
@@ -306,9 +282,6 @@ function addStream(channelMap: Map<string, IptvChannel>, info: ParsedExtInf, url
     title: info.title,
     group: info.group,
     logo: info.logo,
-    tvgId: info.tvgId,
-    tvgName: info.tvgName,
-    epgUrl: info.epgUrl,
     streams: [stream],
   })
 }

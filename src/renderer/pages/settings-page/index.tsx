@@ -11,25 +11,22 @@ import { DataClearDialog } from './components/data-clear-dialog'
 import { DataSelectionDialog } from './components/data-selection-dialog'
 import { SettingsSidebar } from './components/settings-sidebar'
 import { IptvSourceDialog, SourceDialog } from './components/source-dialogs'
-import { IptvEpgSettingsCard } from './components/iptv-settings-card'
 import { SourceTableCard } from './components/source-table-card'
 import { useAppData } from './hooks/use-app-data'
 import { useGeneralSettings } from './hooks/use-general-settings'
 import { useIptvSources } from './hooks/use-iptv-sources'
 import { useNetworkSettings } from './hooks/use-network-settings'
-import { useIptvSettings } from './hooks/use-iptv-settings'
 import { useVodSources } from './hooks/use-vod-sources'
 import { resolveSettingsSection, type SettingsSectionId } from './settings-sections'
 import type { ConfirmState, IptvSourceDialogState, SourceDialogState } from './types'
 import { getConfirmDescription, getConfirmTitle } from './utils'
 import { cn } from '@/utils'
 
-type IptvPageSectionId = 'iptv-sources' | 'iptv-epg' | 'iptv-network'
+type IptvPageSectionId = 'iptv-sources' | 'iptv-network'
 
 /** 映射到 IPTV 设置页签的设置分区 */
 const iptvPageSections: Array<{ id: IptvPageSectionId; label: string }> = [
   { id: 'iptv-sources', label: '源' },
-  { id: 'iptv-epg', label: 'EPG' },
   { id: 'iptv-network', label: '网络' },
 ]
 
@@ -39,7 +36,6 @@ export function SettingsPage(): React.JSX.Element {
   const apiAvailable = isApiAvailable()
   const vod = useVodSources(apiAvailable)
   const iptv = useIptvSources(apiAvailable)
-  const iptvSettings = useIptvSettings(apiAvailable)
   const general = useGeneralSettings({
     apiAvailable,
     refreshIptvSources: iptv.refresh,
@@ -228,20 +224,6 @@ export function SettingsPage(): React.JSX.Element {
                   onSetDisabled={(source, disabled) => void iptv.setDisabled(source, disabled)}
                   onToggleAll={iptv.toggleAll}
                   onToggleSelection={iptv.toggleSelection}
-                />
-              </div>
-              <div
-                aria-labelledby="iptv-epg-tab"
-                hidden={activeIptvPageSection !== 'iptv-epg'}
-                id="iptv-epg-panel"
-                role="tabpanel"
-              >
-                <IptvEpgSettingsCard
-                  key={`${iptvSettings.epg.mode}:${iptvSettings.epg.url ?? ''}`}
-                  apiAvailable={apiAvailable}
-                  isSaving={iptvSettings.isSavingEpg}
-                  value={iptvSettings.epg}
-                  onSave={(value) => void iptvSettings.saveEpg(value)}
                 />
               </div>
               <div

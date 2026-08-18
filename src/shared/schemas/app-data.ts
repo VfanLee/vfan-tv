@@ -1,6 +1,5 @@
 import { z } from 'zod'
 import { sourceHeadersSchema } from './source'
-import { iptvEpgSettingsSchema } from './settings'
 
 const optionalStringSchema = z.string().optional()
 function validateVodSourceBackups(value: { url: string; backups: string[] }, context: z.RefinementCtx): void {
@@ -119,11 +118,10 @@ export const appDataFavoriteSchema = z
 const appDataBackupBaseSchema = z
   .object({
     app: z.literal('vfan-tv'),
-    schemaVersion: z.literal(3),
+    schemaVersion: z.literal(4),
     exportedAt: z.number().int().nonnegative(),
     subscriptions: z.array(z.object({ id: z.string().min(1), url: z.string().url() })),
     activeSubscriptionId: z.string().optional(),
-    iptvEpg: iptvEpgSettingsSchema.optional(),
     vod: z.array(appDataVodSourceSchema),
     iptv: z.array(appDataIptvSourceSchema),
     recent: z.array(appDataRecentPlaySchema),

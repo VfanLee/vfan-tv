@@ -228,7 +228,7 @@ export function IptvSourceDialog({
         />
       </label>
       <HeaderEditor
-        description="只用于频道预览和播放，不会发送给播放列表或 EPG 服务。"
+        description="用于播放列表、频道预览和播放请求。"
         headers={form.headers ?? {}}
         onChange={(headers) => setForm((current) => ({ ...current, headers }))}
       />

@@ -1,5 +1,5 @@
 import { AlertTriangle, Check, ChevronDown, Radio } from 'lucide-react'
-import type { IptvChannel, IptvChannelPrograms, IptvChannelStream } from '@shared/types'
+import type { IptvChannel, IptvChannelStream } from '@shared/types'
 import type { PlayerRuntimeInfo } from '@renderer/components'
 import { cn } from '@/utils'
 import { IptvChannelLogo } from './iptv-channel-logo'
@@ -9,7 +9,6 @@ interface PlaybackInfoOverlayProps {
   channel: IptvChannel
   currentStream?: IptvChannelStream
   runtimeInfo: PlayerRuntimeInfo
-  programs?: IptvChannelPrograms
   failedStreamIds: ReadonlySet<string>
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -22,7 +21,6 @@ export function PlaybackInfoOverlay({
   channel,
   currentStream,
   runtimeInfo,
-  programs,
   failedStreamIds,
   open,
   onOpenChange,
@@ -91,10 +89,6 @@ export function PlaybackInfoOverlay({
             </div>
           </div>
         </div>
-        <div className="mt-3 border-t border-white/10 pt-3 text-xs">
-          <ProgramRow label="正在播放" title={programs?.current?.title} />
-          <ProgramRow label="接下来" title={programs?.next?.title} muted />
-        </div>
       </button>
 
       {open ? (
@@ -146,24 +140,6 @@ function InfoValue({ label, value }: { label: string; value: string }): React.JS
     <span className="min-w-0 truncate">
       <span className="text-white/40">{label}</span> {value}
     </span>
-  )
-}
-
-/** 渲染节目行 */
-function ProgramRow({
-  label,
-  title,
-  muted = false,
-}: {
-  label: string
-  title?: string
-  muted?: boolean
-}): React.JSX.Element {
-  return (
-    <div className={cn('mt-1 flex min-w-0 gap-3 first:mt-0', muted && 'text-white/55')}>
-      <span className="w-14 shrink-0 text-white/40">{label}</span>
-      <span className="truncate">{title ?? '—'}</span>
-    </div>
   )
 }
 

@@ -45,11 +45,6 @@ const ROUTES: Array<{
     title: 'IPTV 直播网络',
     description: 'IPTV 目录、台标、线路探测、直播墙预览、直播清单和媒体分片。',
   },
-  {
-    key: 'epg',
-    title: 'EPG 节目单网络',
-    description: '节目单查询接口、XMLTV 和 XMLTV.GZ 数据源。',
-  },
 ]
 
 /** 渲染网络设置卡片 */
@@ -121,7 +116,7 @@ export function NetworkSettingsCard({ apiAvailable, network }: NetworkSettingsCa
         <section className="space-y-4 py-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <SectionHeading
-              description="可供 IPTV 与 EPG 独立选用，支持 HTTP、HTTPS 和 SOCKS5，不支持认证。"
+              description="供 IPTV 访问使用，支持 HTTP、HTTPS 和 SOCKS5，不支持认证。"
               icon={Network}
               title="代理配置"
             />

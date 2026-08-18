@@ -20,7 +20,7 @@ export const settingsSections = [
 
 /** 解析设置区块 */
 export function resolveSettingsSection(value: unknown): SettingsSectionId | undefined {
-  if (value === 'network' || value === 'iptv-sources' || value === 'iptv-epg' || value === 'iptv-network') return 'iptv'
+  if (value === 'network' || value === 'iptv-sources' || value === 'iptv-network') return 'iptv'
   return typeof value === 'string' && settingsSections.some((item) => item.id === value)
     ? (value as SettingsSectionId)
     : undefined

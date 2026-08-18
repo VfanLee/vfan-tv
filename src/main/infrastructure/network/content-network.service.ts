@@ -18,7 +18,6 @@ const PROXY_TEST_TIMEOUT_MS = 8_000
 const DEFAULT_NETWORK_SETTINGS: NetworkSettings = {
   profiles: [],
   iptv: { mode: 'direct' },
-  epg: { mode: 'direct' },
 }
 
 export type ContentNetworkRoute =
@@ -169,7 +168,6 @@ export class ContentNetworkService {
       systemProxyStatus: await this.resolveSystemProxyStatus(),
       routes: {
         iptv: toRouteStatus(this.activeSettings.iptv, this.activeSettings),
-        epg: toRouteStatus(this.activeSettings.epg, this.activeSettings),
       },
     }
   }
@@ -263,16 +261,7 @@ export class ContentNetworkService {
   }
 
   private async createRouteContexts(settings: NetworkSettings): Promise<ContentNetworkContext[]> {
-    const contexts: ContentNetworkContext[] = []
-    try {
-      for (const route of ['iptv', 'epg'] as const) {
-        contexts.push(await this.createContext(route, settings[route], settings))
-      }
-      return contexts
-    } catch (error) {
-      await Promise.all(contexts.map((context) => this.discard(context)))
-      throw error
-    }
+    return [await this.createContext('iptv', settings.iptv, settings)]
   }
 
   private async createInitialContexts(settings: NetworkSettings): Promise<ContentNetworkContext[]> {
@@ -404,7 +393,6 @@ function formatProxyHost(host: string): string {
 
 function getRouteLabel(route: ContentNetworkRoute): string {
   if (route === 'iptv') return 'IPTV 直播'
-  if (route === 'epg') return 'EPG 节目单'
   if (route === 'subscriptionDirect') return '订阅直连更新'
   if (route === 'subscriptionSystem') return '订阅系统代理更新'
   if (route === 'linkPlaybackDirect') return 'URL 解析播放直连'

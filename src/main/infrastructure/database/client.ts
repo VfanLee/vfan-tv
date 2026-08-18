@@ -8,7 +8,7 @@ import { DB_FILE_NAME } from '@shared/constants'
 
 // 初始化和重建 SQLite 数据库。
 export type AppDatabase = ReturnType<typeof drizzle<typeof schema>>
-const IPTV_SCHEMA_VERSION = 1
+const IPTV_SCHEMA_VERSION = 2
 
 const createSchemaSql = `
   CREATE TABLE IF NOT EXISTS settings (
@@ -48,25 +48,6 @@ const createSchemaSql = `
     playlist TEXT NOT NULL,
     fetched_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
-  );
-
-  CREATE TABLE IF NOT EXISTS iptv_epg_metadata (
-    cache_key TEXT PRIMARY KEY NOT NULL,
-    source_url TEXT NOT NULL,
-    provider_type TEXT NOT NULL,
-    fetched_at INTEGER NOT NULL,
-    expires_at INTEGER NOT NULL,
-    error_message TEXT
-  );
-
-  CREATE TABLE IF NOT EXISTS iptv_epg_programs (
-    cache_key TEXT NOT NULL,
-    channel_key TEXT NOT NULL,
-    date TEXT NOT NULL,
-    programs TEXT NOT NULL,
-    fetched_at INTEGER NOT NULL,
-    expires_at INTEGER NOT NULL,
-    UNIQUE(cache_key, channel_key, date)
   );
 
   CREATE TABLE IF NOT EXISTS recent_plays (
@@ -119,7 +100,7 @@ export function createDatabase(): AppDatabase {
   // 启用 WAL 日志模式。
   sqlite.pragma('journal_mode = WAL')
   const schemaVersion = sqlite.pragma('user_version', { simple: true }) as number
-  if (schemaVersion < IPTV_SCHEMA_VERSION) {
+  if (schemaVersion < 1) {
     const rebuildIptv = sqlite.transaction(() => {
       sqlite.exec(`
         DROP TABLE IF EXISTS iptv_sources;
@@ -132,7 +113,18 @@ export function createDatabase(): AppDatabase {
     })
     rebuildIptv()
   } else {
-    sqlite.exec(createSchemaSql)
+    const migrate = sqlite.transaction(() => {
+      sqlite.exec(createSchemaSql)
+      if (schemaVersion < IPTV_SCHEMA_VERSION) {
+        sqlite.exec(`
+          DROP TABLE IF EXISTS iptv_epg_metadata;
+          DROP TABLE IF EXISTS iptv_epg_programs;
+          DELETE FROM iptv_channel_snapshots;
+        `)
+        sqlite.pragma(`user_version = ${IPTV_SCHEMA_VERSION}`)
+      }
+    })
+    migrate()
   }
 
   return drizzle(sqlite, { schema })

@@ -2,28 +2,16 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { ArrowLeft, Loader2, Radio, RotateCcw } from 'lucide-react'
 import { useNavigate, useParams } from 'react-router'
 import { toast } from 'sonner'
-import dayjs from 'dayjs'
-import { compact } from 'es-toolkit/array'
-import type {
-  IptvChannelPrograms,
-  IptvEpgProgram,
-  IptvPlaybackTarget,
-  IptvPlaylist,
-  IptvProgramScheduleResult,
-} from '@shared/types'
+import type { IptvPlaybackTarget, IptvPlaylist } from '@shared/types'
 import { BasicPlayer, type PlayerRuntimeInfo } from '@renderer/components'
 import {
   getIptvCatalog,
   getIptvPlaybackTarget,
-  getIptvPrograms,
-  getIptvProgramSchedule,
   releaseMediaPlaybackSession,
   reportMediaPlaybackEvent,
 } from '@renderer/platform/api'
 import { Button } from '@/ui/button'
 import { PlaybackInfoOverlay } from './components/playback-info-overlay'
-import { IptvGuidePanel } from './components/iptv-guide-panel'
-import { ProgramScheduleOverlay } from './components/program-schedule-overlay'
 
 /** 渲染 IPTV 频道播放页面 */
 export function IptvPlayerPage(): React.JSX.Element {
@@ -40,21 +28,9 @@ export function IptvPlayerPage(): React.JSX.Element {
     streamId: string
     target: IptvPlaybackTarget
   }>()
-  const [programState, setProgramState] = useState<{
-    sourceId: string
-    channelId: string
-    value?: IptvChannelPrograms
-  }>()
-  const [scheduleState, setScheduleState] = useState<{
-    sourceId: string
-    channelId: string
-    value: IptvProgramScheduleResult
-  }>()
-  const [guideNow, setGuideNow] = useState(() => Date.now())
   const [runtimeInfo, setRuntimeInfo] = useState<PlayerRuntimeInfo>({})
   const [failedStreamIds, setFailedStreamIds] = useState<ReadonlySet<string>>(new Set())
   const [routeListOpen, setRouteListOpen] = useState(false)
-  const [scheduleOpen, setScheduleOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [retryKey, setRetryKey] = useState(0)
   const [pageError, setPageError] = useState<string>()
@@ -64,22 +40,6 @@ export function IptvPlayerPage(): React.JSX.Element {
   const target =
     playback && playback.channelId === channel?.id && playback.streamId === stream?.id ? playback.target : undefined
   const streamType = target?.streamType
-  const programs =
-    programState && programState.sourceId === sourceId && programState.channelId === channel?.id
-      ? programState.value
-      : undefined
-  const todaySchedule =
-    scheduleState && scheduleState.sourceId === sourceId && scheduleState.channelId === channel?.id
-      ? scheduleState.value
-      : undefined
-  /** 播放页展示的节目列表 */
-  const guidePrograms = todaySchedule?.programs ?? compactPrograms(programs)
-
-  /** 定时更新节目指南的当前时间 */
-  useEffect(() => {
-    const timer = window.setInterval(() => setGuideNow(Date.now()), 30_000)
-    return () => window.clearInterval(timer)
-  }, [])
 
   /** 处理播放器加载失败状态 */
   const handlePlaybackFailure = useCallback(
@@ -135,36 +95,6 @@ export function IptvPlayerPage(): React.JSX.Element {
       active = false
     }
   }, [channelId, retryKey, sourceId])
-
-  /** 加载当前频道正在播放的节目 */
-  useEffect(() => {
-    if (!channel) return
-    let active = true
-    void getIptvPrograms(sourceId, [channel.id])
-      .then((result) => {
-        if (active) setProgramState({ sourceId, channelId: channel.id, value: result.items[0] })
-      })
-      .catch(() => {
-        if (active) setProgramState({ sourceId, channelId: channel.id })
-      })
-    return () => {
-      active = false
-    }
-  }, [channel, sourceId])
-
-  /** 加载当前频道当天的完整节目单 */
-  useEffect(() => {
-    if (!channel) return
-    let active = true
-    void getIptvProgramSchedule(sourceId, channel.id, dayjs().format('YYYY-MM-DD'))
-      .then((result) => {
-        if (active) setScheduleState({ sourceId, channelId: channel.id, value: result })
-      })
-      .catch(() => undefined)
-    return () => {
-      active = false
-    }
-  }, [channel, sourceId])
 
   /** 解析当前频道线路的播放目标 */
   useEffect(() => {
@@ -263,22 +193,16 @@ export function IptvPlayerPage(): React.JSX.Element {
   }
 
   const overlay = channel ? (
-    <div className="vfan-iptv-fullscreen-only">
-      <PlaybackInfoOverlay
-        sourceId={sourceId}
-        channel={channel}
-        currentStream={stream}
-        runtimeInfo={runtimeInfo}
-        programs={programs}
-        failedStreamIds={failedStreamIds}
-        open={routeListOpen}
-        onOpenChange={(open) => {
-          setScheduleOpen(false)
-          setRouteListOpen(open)
-        }}
-        onSelectStream={selectStream}
-      />
-    </div>
+    <PlaybackInfoOverlay
+      sourceId={sourceId}
+      channel={channel}
+      currentStream={stream}
+      runtimeInfo={runtimeInfo}
+      failedStreamIds={failedStreamIds}
+      open={routeListOpen}
+      onOpenChange={setRouteListOpen}
+      onSelectStream={selectStream}
+    />
   ) : null
 
   return (
@@ -313,7 +237,6 @@ export function IptvPlayerPage(): React.JSX.Element {
           onSettingsVisibilityChange={(visible) => {
             if (!visible) return
             setRouteListOpen(false)
-            setScheduleOpen(false)
           }}
         />
 
@@ -338,34 +261,6 @@ export function IptvPlayerPage(): React.JSX.Element {
           </PlayerState>
         ) : null}
       </div>
-
-      {channel ? (
-        <>
-          <IptvGuidePanel
-            sourceId={sourceId}
-            channel={channel}
-            currentStream={stream}
-            runtimeInfo={runtimeInfo}
-            programs={guidePrograms}
-            failedStreamIds={failedStreamIds}
-            now={guideNow}
-            onOpenSchedule={() => {
-              setRouteListOpen(false)
-              setScheduleOpen(true)
-            }}
-            onSelectStream={selectStream}
-          />
-          <ProgramScheduleOverlay
-            key={`${sourceId}:${channel.id}:${todaySchedule?.date ?? 'pending'}`}
-            sourceId={sourceId}
-            channelId={channel.id}
-            channelTitle={channel.title}
-            initialResult={todaySchedule}
-            open={scheduleOpen}
-            onClose={() => setScheduleOpen(false)}
-          />
-        </>
-      ) : null}
     </div>
   )
 }
@@ -373,7 +268,7 @@ export function IptvPlayerPage(): React.JSX.Element {
 /** 渲染播放器状态 */
 function PlayerState({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
-    <div className="absolute inset-0 z-[220] flex flex-col items-center justify-center gap-4 bg-black text-white/65">
+    <div className="absolute inset-0 z-220 flex flex-col items-center justify-center gap-4 bg-black text-white/65">
       {children}
     </div>
   )
@@ -382,9 +277,4 @@ function PlayerState({ children }: { children: React.ReactNode }): React.JSX.Ele
 /** 将未知错误转换为可展示的错误消息 */
 function toErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
-}
-
-/** 压缩节目列表并移除无效条目 */
-function compactPrograms(programs?: IptvChannelPrograms): IptvEpgProgram[] {
-  return compact([programs?.current, programs?.next])
 }

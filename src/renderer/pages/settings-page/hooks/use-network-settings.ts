@@ -13,7 +13,10 @@ import {
 const DEFAULT_NETWORK_SETTINGS: NetworkSettings = {
   profiles: [],
   iptv: { mode: 'direct' },
-  epg: { mode: 'direct' },
+}
+
+const ROUTE_LABELS: Record<NetworkRouteKey, string> = {
+  iptv: 'IPTV 直播网络',
 }
 
 export interface NetworkSettingsState {
@@ -123,5 +126,5 @@ export function useNetworkSettings(apiAvailable: boolean): NetworkSettingsState 
 
 /** 获取路由标签 */
 function getRouteLabel(route: NetworkRouteKey): string {
-  return route === 'iptv' ? 'IPTV 直播网络' : 'EPG 节目单网络'
+  return ROUTE_LABELS[route]
 }

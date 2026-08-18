@@ -23,11 +23,10 @@ export function registerAppDataIpc(context: ApplicationContext): void {
       const appSettings = settings.get()
       const backup: AppDataBackup = {
         app: 'vfan-tv',
-        schemaVersion: 3,
+        schemaVersion: 4,
         exportedAt: Date.now(),
         subscriptions: selection.sources ? appSettings.subscriptions : [],
         activeSubscriptionId: selection.sources ? appSettings.activeSubscriptionId : undefined,
-        iptvEpg: selection.sources ? appSettings.iptvEpg : undefined,
         vod: (selection.sources ? source.list() : []).map(
           ({ name, url, headers, disabled, backups, origin, sort }) => ({
             name,
@@ -82,7 +81,6 @@ export function registerAppDataIpc(context: ApplicationContext): void {
     const subscriptions = backup.subscriptions
     settings.update({
       subscriptions,
-      iptvEpg: backup.iptvEpg,
       network: currentNetworkSettings,
       activeSubscriptionId: subscriptions.some((item) => item.id === backup.activeSubscriptionId)
         ? backup.activeSubscriptionId

@@ -46,8 +46,6 @@ export const IPC_CHANNELS = {
   },
   iptv: {
     getCatalog: 'iptv:get-catalog',
-    getPrograms: 'iptv:get-programs',
-    getProgramSchedule: 'iptv:get-program-schedule',
     getPlaybackTarget: 'iptv:get-playback-target',
   },
   radio: {

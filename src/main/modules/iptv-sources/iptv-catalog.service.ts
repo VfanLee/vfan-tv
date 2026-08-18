@@ -23,13 +23,13 @@ export class IptvCatalogService {
     if (!force && cached) {
       const stale = Date.now() - cached.fetchedAt >= PLAYLIST_FRESH_MS
       if (stale) void this.refresh(source).catch(() => undefined)
-      return { ...cached, sourceId, sourceEpgUrls: cached.sourceEpgUrls ?? [], cached: true, stale }
+      return { ...cached, sourceId, cached: true, stale }
     }
 
     try {
       return await this.refresh(source)
     } catch (error) {
-      if (cached) return { ...cached, sourceId, sourceEpgUrls: cached.sourceEpgUrls ?? [], cached: true, stale: true }
+      if (cached) return { ...cached, sourceId, cached: true, stale: true }
       throw error
     }
   }
@@ -47,7 +47,6 @@ export class IptvCatalogService {
         const next = {
           ...playlist,
           sourceId: source.id,
-          sourceEpgUrls: playlist.sourceEpgUrls ?? [],
           cached: false,
           stale: false,
         }

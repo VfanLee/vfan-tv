@@ -74,9 +74,6 @@ export interface IptvChannel {
   title: string
   group: string
   logo?: string
-  tvgId?: string
-  tvgName?: string
-  epgUrl?: string
   streams: IptvChannelStream[]
 }
 
@@ -86,48 +83,7 @@ export interface IptvPlaylist {
   fetchedAt: number
   cached?: boolean
   stale?: boolean
-  sourceEpgUrls: string[]
   channels: IptvChannel[]
-}
-
-export type IptvEpgMode = 'source' | 'query' | 'xmltv'
-
-export interface IptvEpgSettings {
-  mode: IptvEpgMode
-  url?: string
-  lastSuccessAt?: number
-  lastSuccessSource?: string
-}
-
-export interface IptvEpgProgram {
-  id: string
-  channelId: string
-  title: string
-  startAt: number
-  endAt: number
-  description?: string
-}
-
-export interface IptvChannelPrograms {
-  channelId: string
-  current?: IptvEpgProgram
-  next?: IptvEpgProgram
-}
-
-export interface IptvProgramsResult {
-  items: IptvChannelPrograms[]
-  actualSource?: string
-  fallback: boolean
-  errorMessage?: string
-}
-
-export interface IptvProgramScheduleResult {
-  channelId: string
-  date: string
-  programs: IptvEpgProgram[]
-  actualSource?: string
-  fallback: boolean
-  errorMessage?: string
 }
 
 export type IptvPlaybackTarget = MediaPlaybackTarget

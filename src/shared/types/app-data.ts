@@ -1,5 +1,5 @@
 import type { FavoriteItem } from './favorite'
-import type { IptvEpgSettings, IptvSourceOrigin } from './iptv'
+import type { IptvSourceOrigin } from './iptv'
 import type { RecentPlayItem } from './recent'
 import type { SourceHeaders, VodSourceOrigin } from './source'
 import type { SubscriptionConfig } from './settings'
@@ -25,11 +25,10 @@ export interface AppDataIptvSource {
 
 export interface AppDataBackup {
   app: 'vfan-tv'
-  schemaVersion: 3
+  schemaVersion: 4
   exportedAt: number
   subscriptions: SubscriptionConfig[]
   activeSubscriptionId?: string
-  iptvEpg?: IptvEpgSettings
   vod: AppDataVodSource[]
   iptv: AppDataIptvSource[]
   recent: RecentPlayItem[]

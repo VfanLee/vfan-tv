@@ -1367,13 +1367,6 @@ function injectPlayerChromeStyles(art: Artplayer, miniWindowMode = false): void 
     .art-video-player .vfan-player-top-overlay:focus-within > * {
       pointer-events: auto;
     }
-    .art-video-player .vfan-iptv-fullscreen-only {
-      display: none;
-    }
-    .art-video-player.art-fullscreen .vfan-iptv-fullscreen-only,
-    .art-video-player.art-fullscreen-web .vfan-iptv-fullscreen-only {
-      display: block;
-    }
     .art-video-player.vfan-mini-window-player .art-top,
     .art-video-player.vfan-mini-window-player .art-bottom,
     .art-video-player.vfan-mini-window-player .art-center,

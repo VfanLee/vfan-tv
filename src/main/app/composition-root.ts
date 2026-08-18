@@ -11,7 +11,6 @@ import { RecentPlayRepository } from '../modules/library/recent-play.repository'
 import { IptvPlaylistService } from '../modules/iptv-sources/iptv-playlist.service'
 import { IptvCacheRepository } from '../modules/iptv-sources/iptv-cache.repository'
 import { IptvCatalogService } from '../modules/iptv-sources/iptv-catalog.service'
-import { IptvEpgService } from '../modules/iptv-sources/iptv-epg.service'
 import { IptvPlaybackService } from '../modules/iptv-sources/iptv-playback.service'
 import { IptvSourceRepository } from '../modules/iptv-sources/iptv-source.repository'
 import { IptvSourceService } from '../modules/iptv-sources/iptv-source.service'
@@ -46,7 +45,6 @@ export interface ApplicationContext {
     iptvSource: IptvSourceService
     iptvPlaylist: IptvPlaylistService
     iptvCatalog: IptvCatalogService
-    iptvEpg: IptvEpgService
     iptvPlayback: IptvPlaybackService
     home: HomeService
     douban: DoubanService
@@ -82,7 +80,6 @@ export async function createApplicationContext(): Promise<ApplicationContext> {
   configureDoubanSessionHeaders(network.getContext('douban').session)
   configureRadioSessionHeaders(network.getContext('radio').session)
   const iptvHttpClient = new HttpClient(network, 'iptv')
-  const epgHttpClient = new HttpClient(network, 'epg')
   const vodHttpClient = new HttpClient(network, 'vod')
   const radioHttpClient = new HttpClient(network, 'radio')
   const subscriptionHttpClients: Record<SubscriptionNetworkMode, HttpClient> = {
@@ -114,7 +111,6 @@ export async function createApplicationContext(): Promise<ApplicationContext> {
       iptvSource: new IptvSourceService(iptvSource, iptvCache),
       iptvPlaylist,
       iptvCatalog,
-      iptvEpg: new IptvEpgService(epgHttpClient, settings, iptvCatalog, iptvCache),
       iptvPlayback: new IptvPlaybackService(iptvSource, iptvCatalog, mediaPlaybackTarget),
       home: new HomeService(recentPlay, douban),
       douban,

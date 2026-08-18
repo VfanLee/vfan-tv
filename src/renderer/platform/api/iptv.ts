@@ -1,20 +1,8 @@
-import type { IptvPlaybackTarget, IptvPlaylist, IptvProgramScheduleResult, IptvProgramsResult } from '@shared/types'
+import type { IptvPlaybackTarget, IptvPlaylist } from '@shared/types'
 import { requireRuntimeApi } from './client'
 
 export async function getIptvCatalog(sourceId: string, force = false): Promise<IptvPlaylist> {
   return requireRuntimeApi().iptv.getCatalog(sourceId, force)
-}
-
-export async function getIptvPrograms(sourceId: string, channelIds: string[]): Promise<IptvProgramsResult> {
-  return requireRuntimeApi().iptv.getPrograms(sourceId, channelIds)
-}
-
-export async function getIptvProgramSchedule(
-  sourceId: string,
-  channelId: string,
-  date: string,
-): Promise<IptvProgramScheduleResult> {
-  return requireRuntimeApi().iptv.getProgramSchedule(sourceId, channelId, date)
 }
 
 export async function getIptvPlaybackTarget(

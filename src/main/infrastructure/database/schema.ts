@@ -1,5 +1,5 @@
 import { integer, sqliteTable, text, uniqueIndex } from 'drizzle-orm/sqlite-core'
-import type { IptvEpgProgram, IptvPlaylist, SourceHeaders } from '@shared/types'
+import type { IptvPlaylist, SourceHeaders } from '@shared/types'
 
 export const settingsTable = sqliteTable('settings', {
   key: text('key').primaryKey(),
@@ -33,28 +33,6 @@ export const iptvChannelSnapshotsTable = sqliteTable('iptv_channel_snapshots', {
   fetchedAt: integer('fetched_at').notNull(),
   updatedAt: integer('updated_at').notNull(),
 })
-
-export const iptvEpgMetadataTable = sqliteTable('iptv_epg_metadata', {
-  cacheKey: text('cache_key').primaryKey(),
-  sourceUrl: text('source_url').notNull(),
-  providerType: text('provider_type').notNull(),
-  fetchedAt: integer('fetched_at').notNull(),
-  expiresAt: integer('expires_at').notNull(),
-  errorMessage: text('error_message'),
-})
-
-export const iptvEpgProgramsTable = sqliteTable(
-  'iptv_epg_programs',
-  {
-    cacheKey: text('cache_key').notNull(),
-    channelKey: text('channel_key').notNull(),
-    date: text('date').notNull(),
-    programs: text('programs', { mode: 'json' }).$type<IptvEpgProgram[]>().notNull(),
-    fetchedAt: integer('fetched_at').notNull(),
-    expiresAt: integer('expires_at').notNull(),
-  },
-  (table) => [uniqueIndex('iptv_epg_programs_unique').on(table.cacheKey, table.channelKey, table.date)],
-)
 
 export const iptvSourcesTable = sqliteTable(
   'iptv_sources',

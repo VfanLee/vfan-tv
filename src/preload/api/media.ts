@@ -16,9 +16,6 @@ export function createMediaApi(): Pick<AppApi, 'vod' | 'iptv' | 'media'> {
     },
     iptv: {
       getCatalog: (sourceId, force) => ipcRenderer.invoke(IPC_CHANNELS.iptv.getCatalog, sourceId, force),
-      getPrograms: (sourceId, channelIds) => ipcRenderer.invoke(IPC_CHANNELS.iptv.getPrograms, sourceId, channelIds),
-      getProgramSchedule: (sourceId, channelId, date) =>
-        ipcRenderer.invoke(IPC_CHANNELS.iptv.getProgramSchedule, sourceId, channelId, date),
       getPlaybackTarget: (sourceId, channelId, streamId) =>
         ipcRenderer.invoke(IPC_CHANNELS.iptv.getPlaybackTarget, sourceId, channelId, streamId),
     },

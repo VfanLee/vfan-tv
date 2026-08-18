@@ -5,15 +5,9 @@ import { DropdownMenu } from 'radix-ui'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { IPTV_SELECTED_SOURCE_STORAGE_KEY, IPTV_WALL_STATE_STORAGE_KEY } from '@shared/constants'
-import type { IptvChannelPrograms, IptvPlaylist, IptvSourceConfig } from '@shared/types'
+import type { IptvPlaylist, IptvSourceConfig } from '@shared/types'
 import { EmptyState } from '@renderer/components'
-import {
-  getIptvCatalog,
-  getIptvPrograms,
-  listIptvSources,
-  onAppDataChange,
-  openSettingsWindow,
-} from '@renderer/platform/api'
+import { getIptvCatalog, listIptvSources, onAppDataChange, openSettingsWindow } from '@renderer/platform/api'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/ui/select'
@@ -33,8 +27,6 @@ export function IptvPage(): React.JSX.Element {
   const [keyword, setKeyword] = useState(() => readWallState().keyword)
   const deferredKeyword = useDeferredValue(keyword.trim().toLowerCase())
   const [group, setGroup] = useState(() => readWallState().group)
-  const [programs, setPrograms] = useState<Record<string, IptvChannelPrograms>>({})
-  const [epgStatus, setEpgStatus] = useState<string>()
   const [previewRetryEpoch, setPreviewRetryEpoch] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
@@ -57,7 +49,7 @@ export function IptvPage(): React.JSX.Element {
   const columns =
     containerWidth >= 1500 ? 5 : containerWidth >= 1160 ? 4 : containerWidth >= 820 ? 3 : containerWidth >= 520 ? 2 : 1
   const cardWidth = (containerWidth - (columns - 1) * 16) / columns
-  const rowHeight = Math.max(252, Math.round((cardWidth * 9) / 16) + 116)
+  const rowHeight = Math.max(204, Math.round((cardWidth * 9) / 16) + 68)
   const rowCount = Math.ceil(filteredChannels.length / columns)
   // TanStack Virtual 返回可变的虚拟滚动控制器。
   /** 频道墙长列表使用的虚拟滚动控制器 */
@@ -69,12 +61,6 @@ export function IptvPage(): React.JSX.Element {
     overscan: 2,
   })
   const virtualRows = virtualizer.getVirtualItems()
-  /** 当前虚拟滚动窗口中可见的频道 ID */
-  const visibleChannelIds = virtualRows
-    .flatMap((row) =>
-      filteredChannels.slice(row.index * columns, row.index * columns + columns).map((channel) => channel.id),
-    )
-    .join(',')
 
   /** 加载可用 IPTV 源并订阅源数据变化 */
   useEffect(() => {
@@ -87,7 +73,6 @@ export function IptvPage(): React.JSX.Element {
           const available = items.filter((item) => !item.disabled)
           setSources(available)
           setSourceId((current) => (available.some((item) => item.id === current) ? current : (available[0]?.id ?? '')))
-          setPrograms({})
           if (invalidateCatalog) setSourceConfigRevision((revision) => revision + 1)
         })
         .catch((error: unknown) => {
@@ -151,26 +136,6 @@ export function IptvPage(): React.JSX.Element {
     if (group !== ALL_GROUPS && playlist && !groups.includes(group)) setGroup(ALL_GROUPS)
   }, [group, groups, playlist])
 
-  /** 加载当前可见频道的节目数据 */
-  useEffect(() => {
-    if (!sourceId || !visibleChannelIds) return
-    let active = true
-    const ids = visibleChannelIds.split(',')
-    void getIptvPrograms(sourceId, ids).then((result) => {
-      if (!active) return
-      setPrograms((current) => ({
-        ...current,
-        ...Object.fromEntries(result.items.map((item) => [item.channelId, item])),
-      }))
-      setEpgStatus(
-        result.errorMessage ? `${result.actualSource ?? 'EPG'}：${result.errorMessage}` : result.actualSource,
-      )
-    })
-    return () => {
-      active = false
-    }
-  }, [sourceId, visibleChannelIds])
-
   /** 保存频道墙筛选条件和滚动位置 */
   useEffect(() => {
     /** 保存频道墙的源、分组、关键词和滚动位置 */
@@ -191,7 +156,6 @@ export function IptvPage(): React.JSX.Element {
     try {
       const catalog = await getIptvCatalog(sourceId, true)
       setPlaylist(catalog)
-      setPrograms({})
       toast.success('频道列表已刷新', { description: `${catalog.channels.length} 个频道` })
     } catch (error) {
       toast.error('刷新失败', { description: toErrorMessage(error) })
@@ -204,7 +168,6 @@ export function IptvPage(): React.JSX.Element {
   const selectSource = (nextSourceId: string): void => {
     setSourceId(nextSourceId)
     setPlaylist(undefined)
-    setPrograms({})
     setGroup(ALL_GROUPS)
     restoredScrollRef.current = true
     scrollRef.current?.scrollTo({ top: 0 })
@@ -301,9 +264,6 @@ export function IptvPage(): React.JSX.Element {
       </header>
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
-        {epgStatus ? (
-          <div className="text-muted-foreground px-5 pt-3 text-[11px] sm:px-8">节目单：{epgStatus}</div>
-        ) : null}
         {filteredChannels.length && source ? (
           <div className="relative mx-5 my-4 sm:mx-8" style={{ height: virtualizer.getTotalSize() }}>
             {virtualRows.map((row) => (
@@ -321,7 +281,6 @@ export function IptvPage(): React.JSX.Element {
                     key={channel.id}
                     channel={channel}
                     previewRetryEpoch={previewRetryEpoch}
-                    programs={programs[channel.id]}
                     source={source}
                     onOpen={() => navigate(`/iptv/${source.id}/${channel.id}`)}
                   />

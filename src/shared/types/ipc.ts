@@ -22,8 +22,6 @@ import type { FavoriteInput, FavoriteItem } from './favorite'
 import type {
   IptvPlaybackTarget,
   IptvPlaylist,
-  IptvProgramScheduleResult,
-  IptvProgramsResult,
   IptvSourceConfig,
   IptvSourceExportResult,
   IptvSourceFileResult,
@@ -152,8 +150,6 @@ export interface AppApi {
   }
   iptv: {
     getCatalog: (sourceId: string, force?: boolean) => Promise<IptvPlaylist>
-    getPrograms: (sourceId: string, channelIds: string[]) => Promise<IptvProgramsResult>
-    getProgramSchedule: (sourceId: string, channelId: string, date: string) => Promise<IptvProgramScheduleResult>
     getPlaybackTarget: (sourceId: string, channelId: string, streamId: string) => Promise<IptvPlaybackTarget>
   }
   radio: {

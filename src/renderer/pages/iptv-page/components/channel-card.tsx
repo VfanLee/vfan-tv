@@ -1,22 +1,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { Play } from 'lucide-react'
-import { clamp } from 'es-toolkit/math'
-import type { IptvChannel, IptvChannelPrograms, IptvSourceConfig } from '@shared/types'
+import type { IptvChannel, IptvSourceConfig } from '@shared/types'
 import { getIptvPlaybackTarget, releaseMediaPlaybackSession } from '@renderer/platform/api'
-import { cn } from '@/utils'
 import { getLivePreview } from '../preview-cache'
 import { IptvChannelLogo } from './iptv-channel-logo'
 
 /** 渲染频道卡片 */
 export function ChannelCard({
   channel,
-  programs,
   previewRetryEpoch,
   source,
   onOpen,
 }: {
   channel: IptvChannel
-  programs?: IptvChannelPrograms
   previewRetryEpoch: number
   source: IptvSourceConfig
   onOpen: () => void
@@ -58,8 +54,6 @@ export function ChannelCard({
     return () => controller.abort()
   }, [channel.id, channel.streams, previewRetryEpoch, requestKey, source.id])
 
-  const progress = getProgramProgress(programs?.current)
-
   return (
     <button
       aria-label={`播放 ${channel.title}`}
@@ -75,7 +69,7 @@ export function ChannelCard({
             src={preview}
           />
         ) : (
-          <div className="from-muted to-accent/60 flex size-full items-center justify-center bg-gradient-to-br">
+          <div className="from-muted to-accent/60 flex size-full items-center justify-center bg-linear-to-br">
             <IptvChannelLogo
               className="h-16 w-28 bg-transparent"
               iconClassName="size-8"
@@ -92,44 +86,15 @@ export function ChannelCard({
           <Play className="ml-0.5 size-4 fill-current" />
         </span>
       </div>
-      <div className="space-y-2.5 p-3">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <IptvChannelLogo
-            className="size-7 rounded-md"
-            imageClassName="p-0.5"
-            sourceId={source.id}
-            src={channel.logo}
-          />
-          <h3 className="text-foreground truncate text-sm font-semibold">{channel.title}</h3>
-          {channel.streams.length > 1 ? (
-            <span className="bg-muted text-muted-foreground ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px]">
-              {channel.streams.length} 线
-            </span>
-          ) : null}
-        </div>
-        <div className="min-h-10 space-y-1">
-          <p
-            className={cn(
-              'truncate text-xs font-medium',
-              programs?.current ? 'text-foreground' : 'text-muted-foreground',
-            )}
-          >
-            {programs?.current?.title ?? '暂无节目单'}
-          </p>
-          <div className="bg-muted h-1 overflow-hidden rounded-full">
-            <div className="bg-primary h-full rounded-full transition-[width]" style={{ width: `${progress}%` }} />
-          </div>
-          <p className="text-muted-foreground truncate text-[11px]">
-            {programs?.next ? `接下来 · ${programs.next.title}` : '接下来 · 暂无信息'}
-          </p>
-        </div>
+      <div className="flex min-w-0 items-center gap-2.5 p-3">
+        <IptvChannelLogo className="size-7 rounded-md" imageClassName="p-0.5" sourceId={source.id} src={channel.logo} />
+        <h3 className="text-foreground truncate text-sm font-semibold">{channel.title}</h3>
+        {channel.streams.length > 1 ? (
+          <span className="bg-muted text-muted-foreground ml-auto shrink-0 rounded px-1.5 py-0.5 text-[10px]">
+            {channel.streams.length} 线
+          </span>
+        ) : null}
       </div>
     </button>
   )
-}
-
-/** 获取节目进度 */
-function getProgramProgress(program?: IptvChannelPrograms['current']): number {
-  if (!program) return 0
-  return clamp(((Date.now() - program.startAt) / (program.endAt - program.startAt)) * 100, 0, 100)
 }

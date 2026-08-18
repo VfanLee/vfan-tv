@@ -38,7 +38,7 @@
 - 🔍 **全源搜索**：一次搜索多个点播源
 - 🎬 **点播观看**：资源库分类浏览，或按热门内容发现
 - 🔀 **换源备用**：播放时可换源，支持备用地址切换
-- 📡 **IPTV**：浏览频道墙、节目单并播放 IPTV 频道
+- 📡 **IPTV**：浏览频道墙并播放 IPTV 频道
 - 📻 **电台**：收听网络电台
 - 🔗 **直链播放**：粘贴视频链接即可播放
 - ⭐ **收藏**：收藏喜欢的影视内容
@@ -137,7 +137,7 @@
 - `disabled`: 是否禁用。可选，默认为 `false`；不传即启用
 - `headers`: 请求 Header 字符串键值对象。可选，默认为 `{}`；支持 `User-Agent`、`Referer` 和自定义 Header
 
-`headers` 用于下载 IPTV 播放列表、加载台标、频道预览、正式播放和媒体分片。频道地址内嵌的 Header 优先于 IPTV 源 `headers`；EPG 与 IPTV Header 完全独立。
+`headers` 用于下载 IPTV 播放列表、加载台标、频道预览、正式播放和媒体分片。频道地址内嵌的 Header 优先于 IPTV 源 `headers`。
 
 `Host`、`Content-Length`、`Connection`、`Transfer-Encoding`、`Range` 等传输层 Header 不受支持；Header 名称不区分大小写，不能重复。未配置 `User-Agent` 时，应用不会主动向媒体上游设置该请求头。
 

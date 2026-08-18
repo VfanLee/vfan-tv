@@ -11,11 +11,7 @@ export function registerSettingsIpc(context: ApplicationContext): void {
   const { settings } = context.services
   ipcMain.handle(IPC_CHANNELS.settings.get, () => settings.get())
   ipcMain.handle(IPC_CHANNELS.settings.update, (_event, input: Parameters<AppApi['settings']['update']>[0]) => {
-    const previous = settings.get().iptvEpg
     const updated = settings.update(input)
-    if (input.iptvEpg && (previous.mode !== updated.iptvEpg.mode || previous.url !== updated.iptvEpg.url)) {
-      context.repositories.iptvCache.clearEpg()
-    }
     broadcastAppDataChange('settings')
     return updated
   })
@@ -43,7 +39,6 @@ export function registerSettingsIpc(context: ApplicationContext): void {
         settings.update({
           activeSubscriptionId: undefined,
           subscriptions: [],
-          iptvEpg: { mode: 'source' },
         })
         source.clear()
         iptvSource.clear()

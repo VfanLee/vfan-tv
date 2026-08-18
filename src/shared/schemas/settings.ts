@@ -28,7 +28,6 @@ export const networkSettingsSchema = z
   .object({
     profiles: z.array(networkProxyProfileSchema).default([]),
     iptv: networkRouteSettingsSchema.default({ mode: 'direct' }),
-    epg: networkRouteSettingsSchema.default({ mode: 'direct' }),
   })
   .superRefine((value, context) => {
     const ids = new Set<string>()
@@ -48,27 +47,18 @@ export const networkSettingsSchema = z
       }
       names.add(normalizedName)
     }
-    for (const route of ['iptv', 'epg'] as const) {
-      const routeSettings = value[route]
-      if (
-        routeSettings.mode === 'custom' &&
-        !value.profiles.some((profile) => profile.id === routeSettings.activeProfileId)
-      ) {
-        context.addIssue({
-          code: z.ZodIssueCode.custom,
-          path: [route, 'activeProfileId'],
-          message: '请选择有效的代理配置',
-        })
-      }
+    const routeSettings = value.iptv
+    if (
+      routeSettings.mode === 'custom' &&
+      !value.profiles.some((profile) => profile.id === routeSettings.activeProfileId)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['iptv', 'activeProfileId'],
+        message: '请选择有效的代理配置',
+      })
     }
   })
-
-export const iptvEpgSettingsSchema = z.object({
-  mode: z.enum(['source', 'query', 'xmltv']).default('source'),
-  url: z.string().trim().url('EPG 地址无效').optional(),
-  lastSuccessAt: z.number().int().nonnegative().optional(),
-  lastSuccessSource: z.string().optional(),
-})
 
 export const appSettingsSchema = z.object({
   theme: z.enum(['light', 'dark', 'system']).default('system'),
@@ -85,10 +75,8 @@ export const appSettingsSchema = z.object({
     )
     .default([]),
   activeSubscriptionId: z.string().trim().min(1).optional(),
-  iptvEpg: iptvEpgSettingsSchema.default({ mode: 'source' }),
   network: networkSettingsSchema.default({
     profiles: [],
     iptv: { mode: 'direct' },
-    epg: { mode: 'direct' },
   }),
 })
