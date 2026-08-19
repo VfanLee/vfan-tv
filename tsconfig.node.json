@@ -1,8 +1,11 @@
 {
-  "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
+  "extends": [
+    "@electron-toolkit/tsconfig/tsconfig.node.json",
+  ],
   "include": [
     "config/**/*.ts",
     "forge.config.ts",
+    "drizzle.config.ts",
     "src/main/**/*",
     "src/preload/**/*",
     "src/shared/**/*"
