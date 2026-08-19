@@ -5,6 +5,7 @@
   "include": [
     "config/**/*.ts",
     "forge.config.ts",
+    "forge.env.d.ts",
     "drizzle.config.ts",
     "src/main/**/*",
     "src/preload/**/*",
@@ -12,7 +13,7 @@
   ],
   "compilerOptions": {
     "composite": true,
-    "types": ["node", "@electron-forge/plugin-vite/forge-vite-env"],
+    "types": ["node"],
     "baseUrl": ".",
     "paths": {
       "@shared/*": ["src/shared/*"]
