@@ -27,29 +27,25 @@ export function ChannelCard({
     const stream = channel.streams[0]
     if (!stream || successfulPreviewKeyRef.current === requestKey) return
     const controller = new AbortController()
-    let mediaSessionId: string | undefined
-    void getIptvPlaybackTarget(source.id, channel.id, stream.id)
-      .then((target) => {
-        mediaSessionId = target.mediaSessionId
-        return getLivePreview(
-          requestKey,
-          {
-            src: target.src,
-            type: target.streamType,
-          },
-          controller.signal,
-        )
-      })
+    void getLivePreview(
+      requestKey,
+      async () => {
+        const target = await getIptvPlaybackTarget(source.id, channel.id, stream.id)
+        return {
+          src: target.src,
+          type: target.streamType,
+          release: () => releaseMediaPlaybackSession(target.mediaSessionId),
+        }
+      },
+      controller.signal,
+    )
       .then((image) => {
         successfulPreviewKeyRef.current = requestKey
         setPreviewState({ key: requestKey, image })
       })
       .catch((error: unknown) => {
-        if (!(error instanceof DOMException && error.name === 'AbortError'))
-          setPreviewState({ key: requestKey, failed: true })
-      })
-      .finally(() => {
-        if (mediaSessionId) void releaseMediaPlaybackSession(mediaSessionId)
+        if (controller.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')) return
+        setPreviewState({ key: requestKey, failed: true })
       })
     return () => controller.abort()
   }, [channel.id, channel.streams, previewRetryEpoch, requestKey, source.id])

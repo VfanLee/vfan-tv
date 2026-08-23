@@ -29,7 +29,7 @@ export class IptvCatalogService {
     try {
       return await this.refresh(source)
     } catch (error) {
-      if (cached) return { ...cached, sourceId, cached: true, stale: true }
+      if (!force && cached) return { ...cached, sourceId, cached: true, stale: true }
       throw error
     }
   }

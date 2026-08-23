@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import Hls from 'hls.js'
+import type { ErrorTypes } from 'hls.js'
 import {
   AudioLines,
   LoaderCircle,
@@ -29,6 +30,7 @@ import type { RadioPlaybackCommand, RadioPlaybackStatus } from '@/stores/radio-p
 import { cn, createMediaPlaybackCoordinator } from '@/utils'
 
 const PROGRAM_REFRESH_INTERVAL = 45_000
+const MAX_RADIO_HLS_RECOVERY_ATTEMPTS = 3
 
 export function RadioPlaybackEngine(): React.JSX.Element {
   const channel = useRadioPlayerStore((state) => state.channel)
@@ -114,24 +116,25 @@ export function RadioStreamEngine({
       reportStatus('paused')
     }
     const playbackCoordinator = createMediaPlaybackCoordinator('radio', pauseForExternalMedia)
-    const onPlay = (): void => {
+    const onPlaying = (): void => {
+      if (!['play', 'retry'].includes(commandRef.current)) return
       reportStatus('playing')
       playbackCoordinator.announcePlaying()
+    }
+    const onWaiting = (): void => {
+      if (statusRef.current === 'playing') reportStatus('loading')
     }
     const onPause = (): void => {
       if (statusRef.current === 'playing') reportStatus('paused')
     }
-    const onError = (): void => {
-      reportError('播放失败，请重试。')
-    }
-    audio.addEventListener('play', onPlay)
+    audio.addEventListener('playing', onPlaying)
+    audio.addEventListener('waiting', onWaiting)
     audio.addEventListener('pause', onPause)
-    audio.addEventListener('error', onError)
 
     return () => {
-      audio.removeEventListener('play', onPlay)
+      audio.removeEventListener('playing', onPlaying)
+      audio.removeEventListener('waiting', onWaiting)
       audio.removeEventListener('pause', onPause)
-      audio.removeEventListener('error', onError)
       playbackCoordinator.dispose()
     }
   }, [])
@@ -175,17 +178,43 @@ export function RadioStreamEngine({
     loadedChannelIdRef.current = currentChannel.id
     reportStatus('loading')
     let active = true
+    let recoveryAttempts = 0
+    const recoverPlayback = (hls: Hls, errorType: ErrorTypes): boolean => {
+      recoveryAttempts += 1
+      if (recoveryAttempts > MAX_RADIO_HLS_RECOVERY_ATTEMPTS) return false
+      if (errorType === Hls.ErrorTypes.NETWORK_ERROR) {
+        hls.startLoad()
+        return true
+      }
+      if (errorType === Hls.ErrorTypes.MEDIA_ERROR) {
+        hls.recoverMediaError()
+        return true
+      }
+      return false
+    }
+    const onAudioError = (): void => {
+      if (!hlsRef.current) reportError('播放失败，请重试。')
+    }
+    audio.addEventListener('error', onAudioError)
     void getRadioPlaybackUrl(currentChannel.id)
       .then((playbackUrl) => {
         if (!active) return
         if (Hls.isSupported()) {
-          const hls = new Hls({ enableWorker: true, lowLatencyMode: true })
+          const hls = new Hls(createRadioHlsConfig())
           hlsRef.current = hls
+          const isCurrentHls = (): boolean => active && hlsRef.current === hls
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            if (!isCurrentHls() || !['play', 'retry'].includes(commandRef.current)) return
             void audio.play().catch(() => reportError('无法开始播放，请重试。'))
           })
+          hls.on(Hls.Events.LEVEL_LOADED, () => {
+            if (!isCurrentHls()) return
+            recoveryAttempts = 0
+          })
           hls.on(Hls.Events.ERROR, (_event, data) => {
-            if (data.fatal) reportError('播放失败，请重试。')
+            if (!isCurrentHls()) return
+            if (!data.fatal || recoverPlayback(hls, data.type)) return
+            reportError('播放失败，请重试。')
           })
           hls.loadSource(playbackUrl)
           hls.attachMedia(audio)
@@ -199,6 +228,7 @@ export function RadioStreamEngine({
       })
     return () => {
       active = false
+      audio.removeEventListener('error', onAudioError)
     }
   }, [commandId])
 
@@ -377,18 +407,42 @@ export function RadioBottomPlayer(): React.JSX.Element {
       <div className="relative flex h-full w-full items-center gap-4 px-6 sm:gap-5 sm:px-8">
         <div className="flex min-w-0 flex-1 items-center gap-4">
           {channel ? (
-            <span className="relative size-20 shrink-0 overflow-hidden rounded-2xl shadow-md ring-1 ring-black/5">
+            <button
+              aria-label={
+                status === 'error'
+                  ? '播放失败，请使用重试按钮'
+                  : isPlaying || status === 'loading'
+                    ? '暂停播放'
+                    : '开始播放'
+              }
+              className="group/cover focus-visible:ring-ring relative size-20 shrink-0 cursor-pointer overflow-hidden rounded-2xl p-0 shadow-md ring-1 ring-black/5 transition-transform outline-none focus-visible:ring-2 active:scale-[0.97] disabled:cursor-default disabled:active:scale-100 motion-reduce:transition-none"
+              disabled={status === 'error'}
+              type="button"
+              onClick={toggle}
+            >
               <RadioStationCover className="size-full rounded-none" channel={channel} />
               <span
                 aria-hidden="true"
                 className={cn(
-                  'absolute inset-0 flex items-center justify-center bg-black/25 text-white',
-                  isPlaying && 'animate-pulse motion-reduce:animate-none',
+                  'absolute inset-0 flex items-center justify-center bg-black/25 text-white transition-colors motion-reduce:transition-none',
+                  status === 'error' ? 'bg-black/35' : 'group-hover/cover:bg-black/40',
                 )}
               >
-                <AudioLines className="drop-shadow-sm" size={32} strokeWidth={2.25} />
+                {status === 'error' ? (
+                  <AudioLines className="text-white/70 drop-shadow-lg" size={30} strokeWidth={2.25} />
+                ) : status === 'loading' ? (
+                  <LoaderCircle className="animate-spin drop-shadow-lg motion-reduce:animate-none" size={28} />
+                ) : isPlaying ? (
+                  <AudioLines
+                    className="animate-pulse drop-shadow-lg motion-reduce:animate-none"
+                    size={30}
+                    strokeWidth={2.25}
+                  />
+                ) : (
+                  <Play className="ml-0.5 drop-shadow-lg" size={28} fill="currentColor" />
+                )}
               </span>
-            </span>
+            </button>
           ) : (
             <span className="bg-primary/10 text-primary flex size-20 shrink-0 items-center justify-center rounded-2xl">
               <Radio size={26} />
@@ -429,20 +483,7 @@ export function RadioBottomPlayer(): React.JSX.Element {
           >
             <RotateCcw size={24} />
           </button>
-        ) : (
-          <button
-            aria-label={isPlaying || status === 'loading' ? '暂停播放' : '开始播放'}
-            className="group/playback focus-visible:ring-ring shrink-0 rounded-full outline-none focus-visible:ring-2"
-            disabled={!channel}
-            type="button"
-            onClick={toggle}
-          >
-            <RadioPlaybackControlIcon
-              size="default"
-              state={status === 'loading' ? 'loading' : isPlaying ? 'pause' : 'play'}
-            />
-          </button>
-        )}
+        ) : null}
 
         <div className="hidden items-center gap-1 sm:flex">
           <button
@@ -621,6 +662,27 @@ function teardownPlayback(audio: HTMLAudioElement, hlsRef: React.MutableRefObjec
   hlsRef.current = null
   audio.removeAttribute('src')
   audio.load()
+}
+
+/** 创建适用于直播电台的 HLS 加载与重试配置 */
+function createRadioHlsConfig(): ConstructorParameters<typeof Hls>[0] {
+  return {
+    enableWorker: true,
+    lowLatencyMode: false,
+    manifestLoadingMaxRetry: 6,
+    manifestLoadingRetryDelay: 1_000,
+    manifestLoadingMaxRetryTimeout: 64_000,
+    levelLoadingMaxRetry: 4,
+    levelLoadingRetryDelay: 1_000,
+    fragLoadingMaxRetry: 6,
+    fragLoadingRetryDelay: 1_000,
+    fragLoadingMaxRetryTimeout: 64_000,
+    liveSyncDurationCount: 4,
+    liveMaxLatencyDurationCount: 10,
+    maxBufferLength: 30,
+    maxMaxBufferLength: 60,
+    backBufferLength: 30,
+  }
 }
 
 function formatAudience(value: number | undefined): string | undefined {

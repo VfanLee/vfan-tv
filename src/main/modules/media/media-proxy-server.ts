@@ -10,10 +10,7 @@ import type {
   MediaStreamType,
 } from '@shared/types'
 import type { ContentNetworkContext, ContentNetworkService } from '../../infrastructure/network/content-network.service'
-import {
-  filterSensitiveRequestHeaders,
-  resolveSourceRequestHeaders,
-} from '../../infrastructure/http/source-request-headers'
+import { resolveSourceRequestHeaders } from '../../infrastructure/http/source-request-headers'
 
 const PLAYLIST_CONTENT_TYPES = ['application/vnd.apple.mpegurl', 'application/x-mpegurl', 'audio/mpegurl']
 const DOUBAN_IMAGE_REFERER = 'https://movie.douban.com/explore'
@@ -288,6 +285,9 @@ export class MediaProxyServer {
       throw new Error('媒体请求令牌已失效')
     }
     value.expiresAt = Date.now() + 12 * 60 * 60 * 1_000
+    // Map 保留插入顺序；重新插入后，容量清理会优先淘汰长期未访问的分片地址。
+    this.bindings.delete(token)
+    this.bindings.set(token, value)
     const mediaSession = value.mediaSessionId ? this.mediaSessions.get(value.mediaSessionId) : undefined
     if (value.mediaSessionId && !mediaSession) throw new Error('媒体播放会话已失效')
     if (mediaSession) mediaSession.expiresAt = value.expiresAt
@@ -354,7 +354,12 @@ export class MediaProxyServer {
       if (value.expiresAt <= now) this.destroyMediaSession(sessionId)
     }
     for (const [token, value] of this.bindings) {
-      if (value.expiresAt <= now || this.bindings.size > 768) this.removeBinding(token)
+      if (value.expiresAt <= now) this.removeBinding(token)
+    }
+    while (this.bindings.size > 768) {
+      const oldestToken = this.bindings.keys().next().value
+      if (!oldestToken) break
+      this.removeBinding(oldestToken)
     }
   }
 
@@ -494,39 +499,20 @@ async function followRedirectsOnly(
   configuredHeaders: Record<string, string>,
   network: ContentNetworkService,
   context: ContentNetworkContext,
-  maxRedirects = 5,
 ): Promise<string> {
-  let currentUrl = targetUrl
-
-  for (let redirectCount = 0; redirectCount <= maxRedirects; redirectCount += 1) {
-    const upstream = await network.fetch(
-      currentUrl,
-      {
-        headers: getResolveRequestHeaders(filterSensitiveRequestHeaders(targetUrl, currentUrl, configuredHeaders)),
-        redirect: 'manual',
-        signal: AbortSignal.timeout(12_000),
-      },
-      context,
-    )
-
-    // 读取响应头后断开连接。
-    await upstream.body?.cancel().catch(() => undefined)
-
-    if (upstream.status >= 300 && upstream.status < 400) {
-      const location = upstream.headers.get('location')
-      if (!location) return upstream.url || currentUrl
-      currentUrl = new URL(location, currentUrl).toString()
-      // 重定向目标为媒体地址时直接返回。
-      if (/\.(?:m3u8|flv|ts|m2ts)(?:$|[?#])/i.test(currentUrl)) {
-        return currentUrl
-      }
-      continue
-    }
-
-    return upstream.url || currentUrl
-  }
-
-  return currentUrl
+  const upstream = await network.fetchWithRedirects(
+    targetUrl,
+    {
+      headers: getResolveRequestHeaders(configuredHeaders),
+      signal: AbortSignal.timeout(12_000),
+    },
+    context,
+    targetUrl,
+  )
+  const resolvedUrl = upstream.url || targetUrl
+  // 只需要最终地址，读取响应头后立即断开媒体响应。
+  await upstream.body?.cancel().catch(() => undefined)
+  return resolvedUrl
 }
 
 function getResolveRequestHeaders(configuredHeaders: Record<string, string>): Record<string, string> {

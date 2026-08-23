@@ -130,27 +130,20 @@ export class ContentNetworkService {
     init: RequestInit | undefined,
     context: ContentNetworkContext,
     headerOriginUrl = url,
-    maxRedirects = 5,
   ): Promise<Response> {
-    let currentUrl = url
     const baseHeaders = Object.fromEntries(new Headers(init?.headers).entries())
-    for (let redirectCount = 0; redirectCount <= maxRedirects; redirectCount += 1) {
-      const response = await this.fetch(
-        currentUrl,
-        {
-          ...init,
-          headers: filterSensitiveRequestHeaders(headerOriginUrl, currentUrl, baseHeaders),
-          redirect: 'manual',
-        },
-        context,
-      )
-      if (response.status < 300 || response.status >= 400) return response
-      const location = response.headers.get('location')
-      if (!location) return response
-      await response.body?.cancel().catch(() => undefined)
-      currentUrl = new URL(location, currentUrl).toString()
-    }
-    throw new Error('上游重定向次数过多')
+    return this.fetch(
+      url,
+      {
+        ...init,
+        headers: filterSensitiveRequestHeaders(headerOriginUrl, url, baseHeaders),
+        // Electron 的 session.fetch 不支持读取 manual 重定向响应，会直接抛出
+        // `Redirect was cancelled`。交由 Chromium 跟随后仍会按 Fetch 规范移除
+        // 跨域重定向中的 Authorization、Cookie 等凭据头。
+        redirect: 'follow',
+      },
+      context,
+    )
   }
 
   async getStatus(): Promise<NetworkStatus> {

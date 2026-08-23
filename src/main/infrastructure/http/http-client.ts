@@ -6,6 +6,7 @@ import type { ContentNetworkRoute, ContentNetworkService } from '../network/cont
 type HttpNetworkRoute = Exclude<ContentNetworkRoute, 'vodPlayback' | 'update'>
 
 export interface HttpRequestOptions {
+  cache?: RequestCache
   headers?: Record<string, string | number | boolean | undefined>
   maxContentLength?: number
   responseType?: 'arraybuffer' | 'json' | 'text'
@@ -49,6 +50,7 @@ export class HttpClient {
         this.network.fetchWithRedirects(
           url,
           {
+            cache: options.cache,
             method: 'GET',
             redirect: 'follow',
             headers: requestHeaders,

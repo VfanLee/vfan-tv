@@ -47,6 +47,7 @@ export class IptvPlaylistService {
   private async loadPlaylistContent(parsedUrl: URL, headers: SourceHeaders): Promise<{ content: string; url: string }> {
     return {
       content: await this.httpClient.get<string>(parsedUrl.toString(), {
+        cache: 'no-store',
         headers: resolveSourceRequestHeaders(parsedUrl.toString(), parsedUrl.toString(), headers),
         requestLabel: 'IPTV 目录',
         responseType: 'text',

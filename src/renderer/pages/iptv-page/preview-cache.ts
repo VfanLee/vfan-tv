@@ -4,14 +4,20 @@ import type { MediaStreamType } from '@shared/types'
 
 /** 频道预览缓存最多保留的条目数 */
 const MAX_PREVIEWS = 120
-/** 频道预览捕获任务的最大并发数 */
-const MAX_CONCURRENT = 3
+/** 频道预览完整任务的最大并发数，为正式播放保留一个媒体探测槽位 */
+const MAX_CONCURRENT = 2
 /** 按播放地址保存的频道预览缓存 */
 const cache = new Map<string, string>()
 /** 等待获取预览执行槽位的任务队列 */
 const waiters: Array<() => void> = []
-/** 当前正在执行的预览捕获任务数 */
+/** 当前正在执行的完整预览任务数 */
 let activeCount = 0
+
+interface LivePreviewTarget {
+  src: string
+  type: MediaStreamType
+  release?: () => Promise<void> | void
+}
 
 /** 清除 IPTV 预览缓存 */
 export function clearIptvPreviewCache(): void {
@@ -21,9 +27,10 @@ export function clearIptvPreviewCache(): void {
 /** 返回频道直播画面的 JPEG 预览图，并复用已有缓存 */
 export async function getLivePreview(
   key: string,
-  target: { src: string; type: MediaStreamType },
+  resolveTarget: () => Promise<LivePreviewTarget>,
   signal: AbortSignal,
 ): Promise<string> {
+  if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
   const cached = cache.get(key)
   if (cached) {
     cache.delete(key)
@@ -31,12 +38,20 @@ export async function getLivePreview(
     return cached
   }
   await acquire(signal)
+  let target: LivePreviewTarget | undefined
   try {
+    target = await resolveTarget()
+    if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
     const image = await captureFrame(target.src, target.type, signal)
     cache.set(key, image)
     while (cache.size > MAX_PREVIEWS) cache.delete(cache.keys().next().value as string)
     return image
   } finally {
+    try {
+      await target?.release?.()
+    } catch {
+      /* 忽略预览媒体会话释放失败 */
+    }
     release()
   }
 }

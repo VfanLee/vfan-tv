@@ -1,7 +1,7 @@
 import type { FavoriteInput, MediaPlaybackCandidate, PlayLine, RecentPlayInput, VodSearchResult } from '@shared/types'
 import { parseVodPlayUrl } from '@shared/utils/vod-play-url'
 import { keyBy, mapAsync, uniqBy } from 'es-toolkit/array'
-import { clamp, sumBy } from 'es-toolkit/math'
+import { clamp } from 'es-toolkit/math'
 import type { EpisodeSelection, PlayerLocationState } from './types'
 
 /** 解析点播原始字段，并返回包含可播放剧集的线路 */
@@ -83,9 +83,9 @@ export function shouldApplyLocationInitialTime(
   )
 }
 
-/** 统计点播内容在全部线路中的可播放剧集数 */
+/** 统计点播内容单条线路中的最大可播放剧集数 */
 export function getEpisodeCount(item: VodSearchResult): number {
-  return sumBy(getPlayLines(item), (line) => line.episodes.length)
+  return getPlayLines(item).reduce((count, line) => Math.max(count, line.episodes.length), 0)
 }
 
 /** 获取另一播放线路中对应剧集的地址 */

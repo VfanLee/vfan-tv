@@ -100,12 +100,15 @@ export function IptvPlayerPage(): React.JSX.Element {
   useEffect(() => {
     if (!channel || !stream) return
     let active = true
+    let ownedSessionId: string | undefined
     void getIptvPlaybackTarget(sourceId, channel.id, stream.id)
       .then((nextTarget) => {
         if (!active) {
           void releaseMediaPlaybackSession(nextTarget.mediaSessionId)
           return
         }
+        ownedSessionId = nextTarget.mediaSessionId
+        mediaSessionIdRef.current = ownedSessionId
         setPlayback({ channelId: channel.id, streamId: stream.id, target: nextTarget })
       })
       .catch((error: unknown) => {
@@ -113,18 +116,10 @@ export function IptvPlayerPage(): React.JSX.Element {
       })
     return () => {
       active = false
+      if (ownedSessionId) void releaseMediaPlaybackSession(ownedSessionId)
+      if (mediaSessionIdRef.current === ownedSessionId) mediaSessionIdRef.current = undefined
     }
   }, [channel, handlePlaybackFailure, sourceId, stream])
-
-  /** 同步并释放当前媒体播放会话 */
-  useEffect(() => {
-    mediaSessionIdRef.current = target?.mediaSessionId
-    return () => {
-      const mediaSessionId = target?.mediaSessionId
-      if (mediaSessionId) void releaseMediaPlaybackSession(mediaSessionId)
-      if (mediaSessionIdRef.current === mediaSessionId) mediaSessionIdRef.current = undefined
-    }
-  }, [target?.mediaSessionId])
 
   /** 启动首帧超时检测并触发自动换线 */
   useEffect(() => {
@@ -276,5 +271,6 @@ function PlayerState({ children }: { children: React.ReactNode }): React.JSX.Ele
 
 /** 将未知错误转换为可展示的错误消息 */
 function toErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  const message = error instanceof Error ? error.message : String(error)
+  return message.replace(/^Error invoking remote method '[^']+': Error: /, '').trim()
 }

@@ -5,7 +5,7 @@ import { DropdownMenu } from 'radix-ui'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { IPTV_SELECTED_SOURCE_STORAGE_KEY, IPTV_WALL_STATE_STORAGE_KEY } from '@shared/constants'
-import type { IptvPlaylist, IptvSourceConfig } from '@shared/types'
+import type { IptvChannel, IptvPlaylist, IptvSourceConfig } from '@shared/types'
 import { EmptyState } from '@renderer/components'
 import { getIptvCatalog, listIptvSources, onAppDataChange, openSettingsWindow } from '@renderer/platform/api'
 import { Button } from '@/ui/button'
@@ -15,6 +15,8 @@ import { ChannelCard } from './components/channel-card'
 
 /** 代表“全部频道分组”的筛选值 */
 const ALL_GROUPS = '__all__'
+
+type CatalogRefreshStatus = 'idle' | 'background' | 'manual' | 'failed'
 
 /** 渲染 IPTV 频道浏览页面 */
 export function IptvPage(): React.JSX.Element {
@@ -29,10 +31,12 @@ export function IptvPage(): React.JSX.Element {
   const [group, setGroup] = useState(() => readWallState().group)
   const [previewRetryEpoch, setPreviewRetryEpoch] = useState(0)
   const [isLoading, setIsLoading] = useState(true)
-  const [isRefreshing, setIsRefreshing] = useState(false)
+  const [catalogRefreshStatus, setCatalogRefreshStatus] = useState<CatalogRefreshStatus>('idle')
   const [containerWidth, setContainerWidth] = useState(900)
+  const catalogRequestIdRef = useRef(0)
   const restoredScrollRef = useRef(false)
   const source = sources.find((item) => item.id === sourceId)
+  const isRefreshing = catalogRefreshStatus === 'background' || catalogRefreshStatus === 'manual'
   const groups = useMemo(() => [...new Set((playlist?.channels ?? []).map((channel) => channel.group))], [playlist])
   /** 根据频道分组和搜索词筛选后的频道列表 */
   const filteredChannels = useMemo(
@@ -94,21 +98,40 @@ export function IptvPage(): React.JSX.Element {
 
   /** 加载当前 IPTV 源的频道目录 */
   useEffect(() => {
+    const requestId = ++catalogRequestIdRef.current
     if (!sourceId) {
       setPlaylist(undefined)
+      setCatalogRefreshStatus('idle')
+      setIsLoading(false)
       return
     }
     let active = true
+    const isCurrent = (): boolean => active && catalogRequestIdRef.current === requestId
     setIsLoading(true)
+    setCatalogRefreshStatus('idle')
     void getIptvCatalog(sourceId)
       .then((catalog) => {
-        if (active) setPlaylist(catalog)
+        if (!isCurrent()) return
+        setPlaylist(catalog)
+        if (!catalog.stale) return
+        setCatalogRefreshStatus('background')
+        void getIptvCatalog(sourceId, true)
+          .then((freshCatalog) => {
+            if (!isCurrent()) return
+            setPlaylist(freshCatalog)
+            setCatalogRefreshStatus('idle')
+          })
+          .catch(() => {
+            if (isCurrent()) setCatalogRefreshStatus('failed')
+          })
       })
       .catch((error: unknown) => {
-        if (active) toast.error('IPTV 源加载失败', { description: toErrorMessage(error) })
+        if (!isCurrent()) return
+        setCatalogRefreshStatus('failed')
+        toast.error('IPTV 源加载失败', { description: toErrorMessage(error) })
       })
       .finally(() => {
-        if (active) setIsLoading(false)
+        if (isCurrent()) setIsLoading(false)
       })
     return () => {
       active = false
@@ -149,25 +172,31 @@ export function IptvPage(): React.JSX.Element {
     }
   }, [group, keyword, sourceId])
 
-  /** 刷新资源目录 */
+  /** 从源站强制更新频道目录 */
   const refreshCatalog = async (): Promise<void> => {
     if (!sourceId) return
-    setIsRefreshing(true)
+    const requestId = ++catalogRequestIdRef.current
+    const previousPlaylist = playlist
+    setCatalogRefreshStatus('manual')
     try {
       const catalog = await getIptvCatalog(sourceId, true)
+      if (catalogRequestIdRef.current !== requestId) return
       setPlaylist(catalog)
-      toast.success('频道列表已刷新', { description: `${catalog.channels.length} 个频道` })
+      setCatalogRefreshStatus('idle')
+      showCatalogRefreshResult(previousPlaylist, catalog)
     } catch (error) {
-      toast.error('刷新失败', { description: toErrorMessage(error) })
-    } finally {
-      setIsRefreshing(false)
+      if (catalogRequestIdRef.current !== requestId) return
+      setCatalogRefreshStatus('failed')
+      toast.warning('更新失败，继续使用缓存频道', { description: toErrorMessage(error) })
     }
   }
 
   /** 选择源 */
   const selectSource = (nextSourceId: string): void => {
+    catalogRequestIdRef.current += 1
     setSourceId(nextSourceId)
     setPlaylist(undefined)
+    setCatalogRefreshStatus('idle')
     setGroup(ALL_GROUPS)
     restoredScrollRef.current = true
     scrollRef.current?.scrollTo({ top: 0 })
@@ -181,7 +210,7 @@ export function IptvPage(): React.JSX.Element {
           <div className="mr-auto min-w-44">
             <h1 className="text-foreground text-2xl font-semibold tracking-tight">IPTV</h1>
             <p className="text-muted-foreground mt-0.5 text-xs">
-              {playlist ? `${playlist.channels.length} 个频道${playlist.cached ? ' · 已缓存' : ''}` : '频道墙'}
+              {playlist ? getCatalogSubtitle(playlist, catalogRefreshStatus) : '频道墙'}
             </p>
           </div>
           <Select disabled={!sources.length || isLoading} value={sourceId} onValueChange={selectSource}>
@@ -235,7 +264,7 @@ export function IptvPage(): React.JSX.Element {
                   onSelect={() => void refreshCatalog()}
                 >
                   <RefreshCw className={isRefreshing ? 'animate-spin' : undefined} />
-                  刷新频道
+                  从源更新频道
                 </DropdownMenu.Item>
                 <DropdownMenu.Item
                   className={REFRESH_MENU_ITEM_CLASS}
@@ -319,6 +348,85 @@ export function IptvPage(): React.JSX.Element {
 /** 频道墙刷新菜单项的共享样式 */
 const REFRESH_MENU_ITEM_CLASS =
   'focus:bg-accent focus:text-accent-foreground data-[disabled]:text-muted-foreground flex cursor-default items-center gap-2 rounded-md px-2.5 py-2 text-sm outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-4'
+
+const CATALOG_TIME_FORMATTER = new Intl.DateTimeFormat('zh-CN', {
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+})
+
+interface CatalogDiff {
+  added: number
+  removed: number
+  changed: number
+  reordered: boolean
+}
+
+/** 生成频道目录的缓存与刷新状态摘要 */
+function getCatalogSubtitle(playlist: IptvPlaylist, status: CatalogRefreshStatus): string {
+  const parts = [`${playlist.channels.length} 个频道`]
+  if (status === 'background') {
+    parts.push('缓存已过期', '正在后台更新')
+  } else if (status === 'manual') {
+    parts.push('正在从源更新')
+  } else if (status === 'failed') {
+    parts.push('更新失败，使用缓存')
+  } else if (playlist.cached) {
+    parts.push(playlist.stale ? '缓存已过期' : '缓存')
+  } else {
+    parts.push('源站')
+  }
+  parts.push(`上次成功拉取 ${CATALOG_TIME_FORMATTER.format(playlist.fetchedAt)}`)
+  return parts.join(' · ')
+}
+
+/** 展示手动更新后的频道差异 */
+function showCatalogRefreshResult(previous: IptvPlaylist | undefined, next: IptvPlaylist): void {
+  if (!previous) {
+    toast.success('频道列表已更新', { description: `共 ${next.channels.length} 个频道` })
+    return
+  }
+  const diff = compareCatalogs(previous.channels, next.channels)
+  if (diff.reordered) {
+    toast.success('频道顺序已更新', { description: `共 ${next.channels.length} 个频道` })
+    return
+  }
+  if (diff.added === 0 && diff.removed === 0 && diff.changed === 0) {
+    toast.info('源站频道暂无变化', { description: `共 ${next.channels.length} 个频道` })
+    return
+  }
+  const details = [
+    diff.added ? `新增 ${diff.added}` : undefined,
+    diff.removed ? `移除 ${diff.removed}` : undefined,
+    diff.changed ? `内容变更 ${diff.changed}` : undefined,
+    `共 ${next.channels.length} 个频道`,
+  ].filter((value): value is string => Boolean(value))
+  toast.success('频道列表已更新', { description: details.join(' · ') })
+}
+
+/** 比较频道增删、内容变化与纯顺序变化 */
+function compareCatalogs(previous: IptvChannel[], next: IptvChannel[]): CatalogDiff {
+  const previousById = new Map(previous.map((channel) => [channel.id, channel]))
+  const nextIds = new Set(next.map((channel) => channel.id))
+  let added = 0
+  let changed = 0
+  for (const channel of next) {
+    const oldChannel = previousById.get(channel.id)
+    if (!oldChannel) added += 1
+    else if (!isSameChannel(oldChannel, channel)) changed += 1
+  }
+  const removed = previous.reduce((count, channel) => count + (nextIds.has(channel.id) ? 0 : 1), 0)
+  const reordered =
+    added === 0 && removed === 0 && changed === 0 && previous.some((channel, index) => channel.id !== next[index]?.id)
+  return { added, removed, changed, reordered }
+}
+
+/** 判断同一频道的展示信息和播放线路是否一致 */
+function isSameChannel(previous: IptvChannel, next: IptvChannel): boolean {
+  return JSON.stringify(previous) === JSON.stringify(next)
+}
 
 interface WallState {
   sourceId: string
