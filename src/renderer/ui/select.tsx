@@ -58,10 +58,14 @@ function SelectTrigger({
 function SelectContent({
   className,
   children,
-  position = "item-aligned",
   align = "center",
+  alignItemWithTrigger = false,
   ...props
-}: React.ComponentProps<typeof SelectPrimitive.Content>) {
+}: Omit<React.ComponentProps<typeof SelectPrimitive.Content>, "position"> & {
+  alignItemWithTrigger?: boolean
+}) {
+  const position = alignItemWithTrigger ? "item-aligned" : "popper"
+
   return (
     <SelectPrimitive.Portal>
       <SelectPrimitive.Content

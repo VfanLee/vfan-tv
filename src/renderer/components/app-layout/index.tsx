@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
-import { Check, Clock3, Heart, Monitor, Moon, Search, Settings, Sun } from 'lucide-react'
+import { Clock3, Heart, Monitor, Moon, Search, Settings, Sun } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/utils'
 import logoMarkUrl from '@renderer/assets/logo-mark.svg'
@@ -244,7 +244,6 @@ function ThemeMenu(): React.JSX.Element {
               >
                 <Icon size={17} />
                 <span>{option.label}</span>
-                {active ? <Check className="ml-auto" size={16} /> : null}
               </button>
             )
           })}
