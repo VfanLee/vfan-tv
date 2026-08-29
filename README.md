@@ -64,7 +64,7 @@
 | 架构分层      | 主要技术栈                                            |
 | ------------- | ----------------------------------------------------- |
 | 🖥️ 桌面运行时 | Electron                                              |
-| 🛠️ 构建与分发 | Electron Forge（Webpack）、electron-updater           |
+| 🛠️ 构建与分发 | Electron Forge（Vite）、electron-updater              |
 | 🗄️ 数据层     | better-sqlite3、Drizzle ORM、Zod                      |
 | 🎨 渲染层     | React、React Router、Zustand、Tailwind CSS、shadcn/ui |
 | ▶️ 播放层     | ArtPlayer、hls.js、mpegts.js                          |
