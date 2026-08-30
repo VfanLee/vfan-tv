@@ -121,9 +121,9 @@ const config: ForgeConfig = {
   },
 }
 
-/** 把 Vite external 的原生运行时依赖复制到主进程构建目录 */
+/** 把 Vite external 的运行时依赖复制到 Forge 可重建的应用依赖目录 */
 async function copyExternalRuntimeDependencies(buildPath: string): Promise<void> {
-  const destinationRoot = join(buildPath, '.vite/build/node_modules')
+  const destinationRoot = join(buildPath, 'node_modules')
   await mkdir(destinationRoot, { recursive: true })
   await Promise.all(
     externalRuntimeDependencies.map((dependency) =>
