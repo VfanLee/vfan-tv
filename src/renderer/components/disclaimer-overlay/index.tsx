@@ -39,7 +39,7 @@ export function DisclaimerOverlay({ onAcknowledge }: { onAcknowledge: () => void
 
   return (
     <AlertDialog open>
-      <AlertDialogContent className="max-h-[calc(100dvh-2rem)] max-w-lg grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0 sm:max-h-[calc(100dvh-3rem)]">
+      <AlertDialogContent className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)]! max-w-none! grid-rows-[auto_minmax(0,1fr)_auto] gap-0 overflow-hidden p-0 sm:max-h-[calc(100dvh-3rem)] sm:w-[60%]! lg:w-[50%]! xl:w-[40%]!">
         <AlertDialogHeader className="block px-6 py-5 text-left sm:px-8 sm:py-6">
           <div className="flex items-start gap-4">
             <img alt="" className="size-16 shrink-0 sm:size-20" draggable={false} src={logoMarkUrl} />
