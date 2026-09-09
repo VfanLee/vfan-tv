@@ -1,22 +1,26 @@
 {
-  "extends": [
-    "@electron-toolkit/tsconfig/tsconfig.node.json",
-  ],
   "include": [
-    "config/**/*.ts",
-    "forge.config.ts",
-    "forge.env.d.ts",
-    "drizzle.config.ts",
-    "src/main/**/*",
-    "src/preload/**/*",
-    "src/shared/**/*"
+    "config/**/*.ts"
   ],
   "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true,
     "composite": true,
-    "types": ["node"],
-    "baseUrl": ".",
-    "paths": {
-      "@shared/*": ["src/shared/*"]
-    }
+    "types": [
+      "node"
+    ],
+    "isolatedModules": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noImplicitReturns": true,
+    "noImplicitAny": false
   }
 }

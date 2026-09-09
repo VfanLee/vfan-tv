@@ -8,6 +8,9 @@ tsconfig.json
 tsconfig.*.json
 
 components.json
-src/renderer/styles/main.css
-src/renderer/ui/
-src/renderer/utils/cn.ts
+src/styles/main.css
+src/ui/
+src/utils/cn.ts
+
+src-tauri/target/
+src-tauri/gen/

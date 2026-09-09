@@ -1,0 +1,37 @@
+[package]
+name = "vfan-tv"
+version = "0.11.1"
+description = "Vfan TV desktop client"
+edition = "2021"
+license = "GPL-3.0"
+
+[lib]
+name = "vfan_tv_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros", "json"] }
+tokio = { version = "1", features = ["fs", "macros", "rt", "net", "sync", "time"] }
+reqwest = { version = "0.13", features = ["stream", "socks", "json"] }
+axum = "0.8"
+futures-util = "0.3"
+tokio-util = { version = "0.7", features = ["rt"] }
+uuid = { version = "1", features = ["v4"] }
+regex = "1"
+infer = "0.19"
+bs58 = "0.5"
+tauri-plugin-dialog = "2"
+crispy-m3u = "0.1.1"
+tauri-plugin-log = "2"
+log = "0.4"
+tauri-plugin-updater = "2"
+tauri-plugin-single-instance = "2"
+
+[dev-dependencies]
+tauri = { version = "2", features = ["test"] }

@@ -2,11 +2,15 @@
 node_modules/
 .pnpm-store/
 
-# Electron Forge / build outputs
+# Historical build outputs
 .vite/
 out/
 
-# Legacy and auxiliary outputs
+# Tauri / Rust build outputs
+src-tauri/target/
+src-tauri/gen/
+
+# Frontend and auxiliary outputs
 dist/
 release/
 coverage/

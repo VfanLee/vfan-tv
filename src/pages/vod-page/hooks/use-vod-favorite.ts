@@ -1,0 +1,55 @@
+import { isDesktopRuntime } from '@/platform/tauri'
+import { useEffect, useState } from 'react'
+import type { VodSearchResult } from '@/types'
+import { addFavorite, isApiAvailable, isFavorite as checkIsFavorite, removeFavorite } from '@/platform/api'
+import { createFavoriteInput } from '../utils'
+
+interface VodFavoriteState {
+  isCurrentFavorite: boolean
+  isLoading: boolean
+  toggle: () => Promise<void>
+}
+
+/** 读取并切换当前点播内容的收藏状态 */
+export function useVodFavorite(current: VodSearchResult | undefined, resourceKey: string): VodFavoriteState {
+  const [isFavorite, setIsFavorite] = useState(false)
+  const [favoriteResourceKey, setFavoriteResourceKey] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const isCurrentFavorite = Boolean(current) && favoriteResourceKey === resourceKey && isFavorite
+
+  /** 切换当前点播内容的收藏状态 */
+  const toggle = async (): Promise<void> => {
+    if (!current || (!isDesktopRuntime() && !isApiAvailable()) || isLoading) return
+    setIsLoading(true)
+    try {
+      if (isCurrentFavorite) {
+        await removeFavorite(current.sourceId, current.vodId)
+        setIsFavorite(false)
+        setFavoriteResourceKey(resourceKey)
+        return
+      }
+      await addFavorite(createFavoriteInput(current))
+      setIsFavorite(true)
+      setFavoriteResourceKey(resourceKey)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  /** 加载当前点播内容的收藏状态 */
+  useEffect(() => {
+    if (!current || (!isDesktopRuntime() && !isApiAvailable())) return
+    let active = true
+    void checkIsFavorite(current.sourceId, current.vodId).then((nextValue) => {
+      if (active) {
+        setIsFavorite(nextValue)
+        setFavoriteResourceKey(`${current.sourceId}:${current.vodId}`)
+      }
+    })
+    return () => {
+      active = false
+    }
+  }, [current])
+
+  return { isCurrentFavorite, isLoading, toggle }
+}

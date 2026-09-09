@@ -1,29 +1,6 @@
 nodeLinker: hoisted
-
-overrides:
-  app-builder-lib: 26.0.12
-  dmg-builder: 26.0.12
-  electron-publish: 26.0.11
-
 autoInstallPeers: false
-
-peerDependencyRules:
-  ignoreMissing:
-    - dmg-builder
-    - electron-builder-squirrel-windows
-
-onlyBuiltDependencies:
-  - better-sqlite3
-  - electron
-  - esbuild
-
 allowBuilds:
-  better-sqlite3: true
   core-js-pure: false
-  electron: true
   esbuild: true
-  fs-xattr: true
-  macos-alias: true
 blockExoticSubdeps: false
-minimumReleaseAgeExclude:
-  - electron@43.4.0

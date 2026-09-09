@@ -1,7 +1,0 @@
-export const APP_DISPLAY_NAME = 'Vfan TV'
-export const APP_ID = 'com.vfanlee.vfan-tv'
-export const USER_DATA_DIR_NAME = 'vfan-tv'
-export const DB_FILE_NAME = 'vfan-tv.sqlite'
-export const DEFAULT_SOURCES_EXPORT_NAME = 'vfan-tv-sources.json'
-export const DEFAULT_IPTV_SOURCES_EXPORT_NAME = 'vfan-tv-iptv-sources.json'
-export const DEFAULT_APP_DATA_EXPORT_NAME = 'vfan-tv-data.json'

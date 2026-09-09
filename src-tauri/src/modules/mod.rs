@@ -1,0 +1,11 @@
+pub(crate) mod data_transfer;
+pub(crate) mod home;
+pub(crate) mod iptv;
+pub(crate) mod library;
+pub(crate) mod network_settings;
+pub(crate) mod preferences;
+pub(crate) mod radio;
+pub(crate) mod search_history;
+pub(crate) mod settings;
+pub(crate) mod sources;
+pub(crate) mod vod;

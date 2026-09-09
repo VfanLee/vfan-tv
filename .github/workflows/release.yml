@@ -1,196 +1,47 @@
-name: Build/release
+name: Tauri build verification
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: tauri-build-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  validate:
-    name: Validate tag
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version-file: .node-version
-
-      - name: Match tag to package version
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          node -e "const version = require('./package.json').version; const expected = 'v' + version; if (process.env.RELEASE_TAG !== expected) { console.error('Tag ' + process.env.RELEASE_TAG + ' does not match package version ' + expected); process.exit(1); }"
-
-  release:
-    name: Build and publish ${{ matrix.platform }}
-    needs: validate
+  build:
+    name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
-    permissions:
-      contents: write
     strategy:
       fail-fast: false
-      max-parallel: 1
       matrix:
         include:
-          - platform: macOS arm64
-            os: macos-14
-            script: publish:mac:arm64
-          - platform: macOS x64
-            os: macos-14
-            script: publish:mac:x64
-          - platform: Windows x64
-            os: windows-2022
-            script: publish:win:x64
-          - platform: Windows arm64
-            os: windows-11-arm
-            script: publish:win:arm64
-
-    env:
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-      GITHUB_TOKEN: ${{ github.token }}
-
+          - os: macos-14
+            target: aarch64-apple-darwin
+          - os: macos-14
+            target: x86_64-apple-darwin
+          - os: windows-2022
+            target: x86_64-pc-windows-msvc
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
     steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-
-      - name: Set up pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          version: 11.20.0
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
         with:
           node-version-file: .node-version
           cache: pnpm
-
+      - name: Set up Rust target
+        shell: bash
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add '${{ matrix.target }}'
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-
-      - name: Build and upload Forge artifacts
-        run: pnpm run ${{ matrix.script }}
-
-  publish:
-    name: Publish GitHub Release
-    needs: release
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Check out release history
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Verify published artifacts
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-
-          version="${RELEASE_TAG#v}"
-          assets="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
-          expected_assets=(
-            "vfan-tv-v${version}-arm64.dmg"
-            "vfan-tv-v${version}-x64.dmg"
-            "vfan-tv-v${version}-arm64-setup.exe"
-            "vfan-tv-v${version}-arm64-setup.exe.blockmap"
-            "vfan-tv-v${version}-x64-setup.exe"
-            "vfan-tv-v${version}-x64-setup.exe.blockmap"
-            "latest-arm64.yml"
-            "latest-x64.yml"
-          )
-
-          for expected in "${expected_assets[@]}"; do
-            if ! grep -Fxq "$expected" <<< "$assets"; then
-              echo "Missing release artifact: $expected" >&2
-              exit 1
-            fi
-          done
-
-      - name: Generate release notes
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          set -euo pipefail
-
-          temp_dir="$(mktemp -d)"
-          trap 'rm -rf "$temp_dir"' EXIT
-          features_file="$temp_dir/features"
-          fixes_file="$temp_dir/fixes"
-          improvements_file="$temp_dir/improvements"
-          conventional_pattern='^(feat|fix|perf|refactor)(\([^)]+\))?:[[:space:]]*(.+)$'
-          : > "$features_file"
-          : > "$fixes_file"
-          : > "$improvements_file"
-
-          previous_tag="$(git tag --merged "$RELEASE_TAG" --sort=-version:refname | grep -Fxv "$RELEASE_TAG" | head -n 1 || true)"
-          if [ -n "$previous_tag" ]; then
-            revision_range="$previous_tag..$RELEASE_TAG"
-          else
-            revision_range="$RELEASE_TAG"
-          fi
-
-          while IFS= read -r subject; do
-            if [[ "$subject" =~ $conventional_pattern ]]; then
-              kind="${BASH_REMATCH[1]}"
-              description="${BASH_REMATCH[3]}"
-            else
-              continue
-            fi
-
-            case "$kind" in
-              feat) target_file="$features_file" ;;
-              fix) target_file="$fixes_file" ;;
-              perf|refactor) target_file="$improvements_file" ;;
-            esac
-            printf -- '- %s\n' "$description" >> "$target_file"
-          done < <(git log "$revision_range" --format='%s')
-
-          append_section() {
-            title="$1"
-            file="$2"
-            if [ -s "$file" ]; then
-              printf '\n## %s\n\n' "$title" >> release-notes.md
-              cat "$file" >> release-notes.md
-            fi
-          }
-
-          {
-            printf '## 更新内容\n'
-          } > release-notes.md
-          append_section '✨ 新功能' "$features_file"
-          append_section '🐛 问题修复' "$fixes_file"
-          append_section '⚡ 体验优化' "$improvements_file"
-
-          if ! [ -s "$features_file" ] && ! [ -s "$fixes_file" ] && ! [ -s "$improvements_file" ]; then
-            printf '\n## 本次更新\n\n- 本次为维护性更新，提升了构建与发布稳定性。\n' >> release-notes.md
-          fi
-
-          cat >> release-notes.md <<'EOF'
-
-          ## 下载与安装
-
-          - **macOS Apple Silicon**：下载 `*-arm64.dmg`。
-          - **macOS Intel**：下载 `*-x64.dmg`。
-          - **Windows x64**：下载 `*-x64-setup.exe`。
-          - **Windows ARM64**：下载 `*-arm64-setup.exe`。
-          EOF
-
-      - name: Finalize Forge draft release
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: |
-          gh release edit "$RELEASE_TAG" --draft=false --notes-file release-notes.md --title "Vfan TV $RELEASE_TAG" --repo "$GITHUB_REPOSITORY"
+      - name: Check project
+        run: pnpm run check
+      - name: Compile Tauri application
+        run: pnpm run build:app --target ${{ matrix.target }}

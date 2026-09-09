@@ -1,5 +1,0 @@
-export * from './iptv'
-export * from './player'
-export * from './radio'
-export * from './storage'
-export * from './update'

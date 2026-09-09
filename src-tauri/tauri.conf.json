@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Vfan TV",
+  "version": "0.11.1",
+  "identifier": "com.vfanlee.vfan-tv",
+  "build": {
+    "beforeDevCommand": "pnpm dev:web",
+    "devUrl": "http://127.0.0.1:1420",
+    "beforeBuildCommand": "pnpm check:versions && pnpm typecheck && pnpm build:web",
+    "frontendDist": "../dist/tauri"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Vfan TV",
+        "width": 900,
+        "height": 670,
+        "maximized": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: http://127.0.0.1:*; connect-src 'self' ipc: http://ipc.localhost https: http://127.0.0.1:*; media-src 'self' https: http://127.0.0.1:* blob:; worker-src 'self' blob:",
+      "devCsp": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: http://127.0.0.1:*; connect-src 'self' ipc: http://ipc.localhost https: http://127.0.0.1:* ws://127.0.0.1:1420; media-src 'self' https: http://127.0.0.1:* blob:; worker-src 'self' blob:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "icon": ["../build/icon.png", "../build/icon.ico", "../build/icon.icns"],
+    "macOS": {
+      "minimumSystemVersion": "14.0"
+    },
+    "targets": ["app", "dmg", "nsis"]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": ["https://github.com/vfanlee/vfan-tv/releases/latest/download/tauri-latest.json"]
+    }
+  }
+}
