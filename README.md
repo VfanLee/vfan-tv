@@ -186,6 +186,17 @@
 
 目前仍然处于开发内测阶段，升级时可能不兼容旧数据。若升级后版本不能使用，请到设置中使用「恢复出厂设置」，或完全卸载后重装。
 
+数据和日志不在安装目录里，卸载安装包通常不会删掉它们。手动清理时可删除对应目录：
+
+|        | macOS                                                            | Windows                                           |
+| ------ | ---------------------------------------------------------------- | ------------------------------------------------- |
+| 数据库 | `~/Library/Application Support/com.vfanlee.vfan-tv/data/data.db` | `%LOCALAPPDATA%\com.vfanlee.vfan-tv\data\data.db` |
+| 日志   | `~/Library/Application Support/com.vfanlee.vfan-tv/logs/`        | `%LOCALAPPDATA%\com.vfanlee.vfan-tv\logs\`        |
+
+设置里也可使用「打开日志目录」。
+
+> Windows 的 `%LOCALAPPDATA%` 一般为 `C:\Users\<用户名>\AppData\Local`。
+
 ## 🙏 致谢
 
 - [LunaTV](https://github.com/MoonTechLab/LunaTV) —— 灵感来源，由此启发
