@@ -5,6 +5,18 @@ use reqwest::{
 use serde::Deserialize;
 use std::{collections::BTreeMap, time::Duration};
 
+/// macOS 网络请求默认模拟系统 Safari
+#[cfg(target_os = "macos")]
+const DEFAULT_USER_AGENT: &str = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Safari/605.1.15";
+
+/// Windows 网络请求默认模拟桌面 Chrome
+#[cfg(target_os = "windows")]
+const DEFAULT_USER_AGENT: &str = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
+
+/// 其他构建目标使用桌面 Chrome，保证开发检查可编译
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+const DEFAULT_USER_AGENT: &str = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36";
+
 /// 有界响应读取失败的原因，由业务调用方补充错误上下文
 #[derive(Debug)]
 pub enum BodyReadError {
@@ -52,7 +64,7 @@ pub fn client_builder() -> reqwest::ClientBuilder {
         .read_timeout(Duration::from_secs(30))
         .redirect(reqwest::redirect::Policy::none())
         .referer(false)
-        .user_agent("Vfan-TV/0.11")
+        .user_agent(DEFAULT_USER_AGENT)
 }
 
 /// 按直连或系统代理模式建立客户端

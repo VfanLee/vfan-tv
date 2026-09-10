@@ -84,7 +84,6 @@
       "name": "示例点播源",
       "url": "https://example.com/api.php/provide/vod",
       "headers": {
-        "User-Agent": "VfanTV",
         "Referer": "https://example.com/"
       },
       "backups": ["https://backup.example.com/api.php/provide/vod"]
@@ -95,7 +94,6 @@
       "name": "示例 IPTV 源",
       "url": "https://example.com/iptv.m3u",
       "headers": {
-        "User-Agent": "VfanTV",
         "Referer": "https://example.com/",
         "X-Custom-Header": "value"
       }
@@ -122,7 +120,6 @@
     "name": "示例源",
     "url": "https://example.com/api.php/provide/vod",
     "headers": {
-      "User-Agent": "VfanTV",
       "Referer": "https://example.com/"
     },
     "backups": ["https://backup.example.com/api.php/provide/vod"]
@@ -139,7 +136,7 @@
 
 `headers` 用于下载 IPTV 播放列表、加载台标、频道预览、正式播放和媒体分片。频道地址内嵌的 Header 优先于 IPTV 源 `headers`。
 
-`Host`、`Content-Length`、`Connection`、`Transfer-Encoding`、`Range` 等传输层 Header 不受支持；Header 名称不区分大小写，不能重复。未配置 `User-Agent` 时，应用不会主动向媒体上游设置该请求头。
+`Host`、`Content-Length`、`Connection`、`Transfer-Encoding`、`Range` 等传输层 Header 不受支持；Header 名称不区分大小写，不能重复。未配置 `User-Agent` 时，macOS 使用 Safari UA，Windows 使用 Chrome UA；源配置中的值可覆盖默认值。
 
 示例：
 
@@ -149,7 +146,6 @@
     "name": "示例源",
     "url": "https://example.com/iptv.m3u",
     "headers": {
-      "User-Agent": "VfanTV",
       "Referer": "https://example.com/",
       "X-Custom-Header": "value"
     }

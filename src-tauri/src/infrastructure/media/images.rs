@@ -11,6 +11,9 @@ use std::{collections::HashMap, sync::Arc, time::Instant};
 use tauri::State as AppState;
 use tokio::sync::{RwLock, Semaphore};
 
+/// 豆瓣图片 CDN 校验来源页，缺少 Referer 时返回 418
+const DOUBAN_REFERER: &str = "https://movie.douban.com/explore";
+
 #[derive(Clone)]
 struct ImageResource {
     url: Url,
@@ -68,7 +71,7 @@ pub async fn get_source_image_url(
             .map_err(|_| "图片地址无效")?,
     };
     let target = network::parse_http_url(target.as_str())?;
-    let headers = if let Some(source) = &source {
+    let mut headers = if let Some(source) = &source {
         network::source_headers(
             &network::parse_http_url(&source.url)?,
             &target,
@@ -77,6 +80,11 @@ pub async fn get_source_image_url(
     } else {
         Default::default()
     };
+    if source_type == "douban" {
+        headers
+            .entry(reqwest::header::REFERER)
+            .or_insert(reqwest::header::HeaderValue::from_static(DOUBAN_REFERER));
+    }
     let client = if source_type == "iptv" {
         network_settings::client(&network_settings::read(&db).await?)?
     } else {
