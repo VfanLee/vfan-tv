@@ -1,5 +1,4 @@
 export interface RecentPlayItem {
-  id: string
   sourceId: string
   sourceName: string
   vodId: string
@@ -8,12 +7,10 @@ export interface RecentPlayItem {
   lineName: string
   episodeName: string
   episodeUrl: string
-  currentTime: number
+  positionSeconds: number
   duration: number
   rawJson?: string
   playedAt: number
 }
-
-export type RecentPlayUniqueInput = Pick<RecentPlayItem, 'sourceId' | 'vodId' | 'lineName' | 'episodeName'>
 
 export type RecentPlayInput = RecentPlayItem

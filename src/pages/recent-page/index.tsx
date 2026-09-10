@@ -36,14 +36,14 @@ export function RecentPage(): React.JSX.Element {
           <div className="grid grid-cols-[repeat(auto-fill,220px)] items-start gap-x-6 gap-y-9">
             {recentPlays.map((item) => (
               <RecentCard
-                key={item.id}
+                key={JSON.stringify([item.sourceId, item.vodId])}
                 item={item}
                 onClick={() => {
                   setContext(item.title, [recentPlayToVodSearchResult(item)])
                   navigate(`/vod/${item.sourceId}/${item.vodId}`, {
                     state: {
                       episodeUrl: item.episodeUrl,
-                      initialTime: item.currentTime,
+                      initialTime: item.positionSeconds,
                     },
                   })
                 }}
@@ -130,9 +130,9 @@ function RecentCard({
 
 /** 计算最近播放记录的观看进度百分比 */
 function getProgress(item: RecentPlayItem): string {
-  if (item.duration <= 0 || item.currentTime <= 0) {
+  if (item.duration <= 0 || item.positionSeconds <= 0) {
     return '0%'
   }
 
-  return `${Math.min(100, Math.round((item.currentTime / item.duration) * 100))}%`
+  return `${Math.min(100, Math.round((item.positionSeconds / item.duration) * 100))}%`
 }

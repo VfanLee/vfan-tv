@@ -1,6 +1,6 @@
 import { isDesktopRuntime } from '@/platform/tauri'
 import { useEffect, useRef, useState } from 'react'
-import { isApiAvailable, listFavorites, listRecentPlays } from '@/platform/api'
+import { getRecentPlay, isApiAvailable, listFavorites } from '@/platform/api'
 import { favoriteToVodSearchResult, recentPlayToVodSearchResult } from '@/platform/playback'
 import { useSearchContextStore } from '@/stores'
 import type { PlayerLocationState } from '../types'
@@ -50,11 +50,10 @@ export function useVodPageHydration(
     let active = true
     void (async () => {
       try {
-        const [favorites, recentPlays] = await Promise.all([listFavorites(), listRecentPlays(50)])
+        const [favorites, matchedRecent] = await Promise.all([listFavorites(), getRecentPlay(sourceId, vodId)])
         if (!active) return
 
         const matchedFavorite = favorites.find((item) => item.sourceId === sourceId && item.vodId === vodId)
-        const matchedRecent = recentPlays.find((item) => item.sourceId === sourceId && item.vodId === vodId)
 
         if (needsCandidate) {
           if (matchedFavorite) {
@@ -79,7 +78,7 @@ export function useVodPageHydration(
             key: attemptKey,
             value: {
               episodeUrl: matchedRecent.episodeUrl,
-              initialTime: matchedRecent.currentTime > 0 ? matchedRecent.currentTime : undefined,
+              initialTime: matchedRecent.positionSeconds > 0 ? matchedRecent.positionSeconds : undefined,
             },
           })
         }

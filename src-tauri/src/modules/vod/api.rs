@@ -67,17 +67,19 @@ pub async fn request(
             &url,
             &source.headers,
         )?;
-        let mut response = network::request(client, reqwest::Method::GET, url, headers).await?;
+        let response = network::request(client, reqwest::Method::GET, url, headers).await?;
         if !response.status().is_success() {
             return Err(format!("点播源返回 HTTP {}", response.status().as_u16()));
         }
-        let mut bytes = Vec::new();
-        while let Some(chunk) = response.chunk().await.map_err(|_| "读取点播数据失败")? {
-            if bytes.len() + chunk.len() > 16 * 1024 * 1024 {
-                return Err("点播响应超过 16 MiB 限制".into());
-            }
-            bytes.extend_from_slice(&chunk);
-        }
+        let bytes = network::read_limited(response, 16 * 1024 * 1024)
+            .await
+            .map_err(|error| match error {
+                network::BodyReadError::Read(error) => {
+                    log::warn!("读取点播数据失败: {error}");
+                    "读取点播数据失败".to_owned()
+                }
+                network::BodyReadError::TooLarge => "点播响应超过 16 MiB 限制".to_owned(),
+            })?;
         let value: Value =
             serde_json::from_slice(&bytes).map_err(|_| "点播源返回的不是有效 JSON")?;
         if !value["list"].is_array() {
@@ -155,7 +157,7 @@ mod tests {
             headers: Default::default(),
             backups: vec![],
             sort: 0,
-            origin: "manual".into(),
+            subscription_id: None,
             remark: None,
             created_at: 0,
             updated_at: 0,
@@ -221,6 +223,49 @@ mod tests {
         let detail = details(&client, &source, &["7".into()]).await.unwrap();
         assert_eq!(detail[0]["title"], "Detail");
         assert!(detail[0]["poster"].is_string());
+        server.abort();
+        let _ = server.await;
+    }
+
+    /// 搜索详情保留首次出现顺序，重复 ID 不会扩大请求，空结果不请求详情
+    #[tokio::test]
+    async fn search_deduplicates_ids_and_skips_empty_details() {
+        use axum::{extract::Query, routing::get, Json, Router};
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+        let requests = Arc::new(AtomicUsize::new(0));
+        let counter = requests.clone();
+        let router = Router::new().route("/api", get(move |Query(params): Query<std::collections::HashMap<String, String>>| {
+            let counter = counter.clone();
+            async move {
+                counter.fetch_add(1, Ordering::SeqCst);
+                if params["ac"] == "detail" {
+                    assert_eq!(params["ids"], "9,7");
+                    Json(json!({"list": [{"vod_id":9,"vod_name":"Detail"},{"vod_id":7,"vod_name":"Other"}]}))
+                } else if params["wd"] == "empty" {
+                    Json(json!({"list": []}))
+                } else {
+                    assert_eq!(params["wd"], "电影 & 剧集");
+                    Json(json!({"list": [{"vod_id":9,"vod_name":"First"},{"vod_id":7,"vod_name":"Second"},{"vod_id":9,"vod_name":"Duplicate"}]}))
+                }
+            }
+        }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let source = source(&format!("http://{}/api", listener.local_addr().unwrap()));
+        let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        let client = network::create_client(&network::NetworkMode::Direct).unwrap();
+        let items = super::super::search_items(&client, &source, "电影 & 剧集")
+            .await
+            .unwrap();
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0]["title"], "Detail");
+        assert!(super::super::search_items(&client, &source, "empty")
+            .await
+            .unwrap()
+            .is_empty());
+        assert_eq!(requests.load(Ordering::SeqCst), 3);
         server.abort();
         let _ = server.await;
     }

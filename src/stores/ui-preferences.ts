@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { toast } from 'sonner'
-import { isDesktopRuntime, listUiPreferences, listenUiPreferences, setUiPreference } from '@/platform/tauri'
+import { isDesktopRuntime, getUiPreferencesSnapshot, listenUiPreferences, setUiPreference } from '@/platform/tauri'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 export type AppStyle = 'catalog' | 'trending'
@@ -74,8 +74,10 @@ const defaults: StoredPreferences = {
 
 /** 按用户操作顺序提交偏好，单次失败不阻塞后续操作 */
 let writes: Promise<void> = Promise.resolve()
-/** 串行读取快照，避免旧响应覆盖新状态 */
-let reads: Promise<void> = Promise.resolve()
+/** 合并进行中的读取，期间发生变更时再读取最新快照 */
+let reads: Promise<void> | undefined
+/** 记录读取期间是否收到新的刷新请求 */
+let refreshRequested = false
 /** 缓存初始化任务，避免重复注册窗口级监听 */
 let initialization: Promise<void> | undefined
 
@@ -184,30 +186,31 @@ export const useUiPreferencesStore = create<UiPreferencesState>(() => ({
 
 /** 从数据库刷新完整快照，删除的偏好恢复默认值 */
 function refreshUiPreferences(): Promise<void> {
-  const operation = reads.then(async () => {
-    const scopes = ['appearance', 'player', 'iptv', 'catalog', 'iptv-selection']
-    const groups = await Promise.all(
-      scopes.map(async (scope) => ({ scope, preferences: await listUiPreferences(scope) })),
-    )
-    const snapshot = groups.reduce(
-      (state, group) =>
-        group.preferences.reduce(
-          (current, preference) => mergePreference(current, preference.key, preference.value, group.scope),
-          state,
-        ),
-      defaults,
-    )
-    useUiPreferencesStore.setState(snapshot)
+  refreshRequested = true
+  reads ??= (async () => {
+    while (refreshRequested) {
+      refreshRequested = false
+      const preferences = await getUiPreferencesSnapshot()
+      const snapshot = preferences.reduce(
+        (state, preference) => mergePreference(state, preference.key, preference.value, preference.scope),
+        defaults,
+      )
+      useUiPreferencesStore.setState(snapshot)
+    }
+  })().finally(() => {
+    reads = undefined
+    if (refreshRequested) return refreshUiPreferences()
+    return undefined
   })
-  reads = operation.catch(() => {})
-  return operation
+  return reads
 }
 
 /** 在首次渲染前加载偏好，并在窗口生命周期内同步数据库变更 */
 export function initializeUiPreferences(): Promise<void> {
   if (!isDesktopRuntime()) return Promise.resolve()
   initialization ??= (async () => {
-    const unlisten = await listenUiPreferences(() => {
+    const unlisten = await listenUiPreferences((scope) => {
+      if (scope && !['appearance', 'player', 'iptv', 'catalog', 'iptv-selection'].includes(scope)) return
       void refreshUiPreferences().catch((error: unknown) => {
         toast.error('同步设置失败', { description: String(error) })
       })

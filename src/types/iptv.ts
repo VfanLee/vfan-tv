@@ -1,16 +1,17 @@
 import type { IptvSourceDefinition, SourceHeaders } from './source'
 import type { MediaPlaybackTarget } from './media'
 
-export type IptvSourceOrigin = 'manual' | 'subscription'
-
 export interface IptvSourceConfig {
   id: string
   name: string
   url: string
   disabled: boolean
   headers: SourceHeaders
+  backups: string[]
   sort: number
-  origin: IptvSourceOrigin
+  /** 为空表示手动添加，否则为来源订阅的标识 */
+  subscriptionId?: string
+  remark?: string
   createdAt: number
   updatedAt: number
 }

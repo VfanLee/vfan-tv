@@ -89,7 +89,7 @@ export function useGeneralSettings({
       try {
         result = await syncSourceSubscription(item.id, mode)
       } catch (error) {
-        await updateSettings({ subscriptions, activeSubscriptionId })
+        await updateSettings({ subscriptions, activeSubscriptionId: activeSubscriptionId ?? null })
         throw error
       }
       setSubscriptions(next)

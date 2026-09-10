@@ -97,18 +97,20 @@ fn payload(value: Value) -> Result<Value, String> {
 async fn get(url: reqwest::Url) -> Result<Value, String> {
     tokio::time::timeout(std::time::Duration::from_secs(15), async {
         let client = network::create_client(&network::NetworkMode::Direct)?;
-        let mut response =
+        let response =
             network::request(&client, reqwest::Method::GET, url, Default::default()).await?;
         if !response.status().is_success() {
             return Err(format!("电台 API 返回 HTTP {}", response.status().as_u16()));
         }
-        let mut bytes = Vec::new();
-        while let Some(chunk) = response.chunk().await.map_err(|_| "读取电台数据失败")? {
-            if bytes.len() + chunk.len() > 8 * 1024 * 1024 {
-                return Err("电台响应过大".into());
-            }
-            bytes.extend_from_slice(&chunk);
-        }
+        let bytes = network::read_limited(response, 8 * 1024 * 1024)
+            .await
+            .map_err(|error| match error {
+                network::BodyReadError::Read(error) => {
+                    log::warn!("读取电台数据失败: {error}");
+                    "读取电台数据失败".to_owned()
+                }
+                network::BodyReadError::TooLarge => "电台响应过大".to_owned(),
+            })?;
         payload(serde_json::from_slice(&bytes).map_err(|_| "电台响应不是有效 JSON")?)
     })
     .await

@@ -9,6 +9,7 @@ use std::{
 };
 use tauri::{Manager, Runtime, State};
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
+use tauri_plugin_opener::OpenerExt;
 
 const MAX_FILE_SIZE: u64 = 5 * 1024 * 1024;
 type Logger = Arc<Mutex<Option<Box<dyn log::Log>>>>;
@@ -45,6 +46,20 @@ impl log::Log for ManagedLogger {
             }
         }
     }
+}
+
+/// 记录底层错误链并返回稳定的用户提示，日志继续经过统一脱敏
+#[track_caller]
+pub(crate) fn command_error(context: &str, error: &(impl std::error::Error + ?Sized)) -> String {
+    let mut detail = error.to_string();
+    let mut source = error.source();
+    while let Some(cause) = source {
+        detail.push_str(": ");
+        detail.push_str(&cause.to_string());
+        source = cause.source();
+    }
+    log::error!("{context} [{}]: {detail}", std::panic::Location::caller());
+    context.to_owned()
 }
 
 /// 配置日志轮转和统一脱敏，保留当前文件及一个历史文件
@@ -211,10 +226,16 @@ pub async fn clear_logs(
 
 /// 响应用户点击，在系统文件管理器中显示日志目录
 #[tauri::command]
-pub async fn reveal_log_file(state: State<'_, Diagnostics>) -> Result<(), String> {
+pub async fn reveal_log_file(
+    app: tauri::AppHandle,
+    state: State<'_, Diagnostics>,
+) -> Result<(), String> {
     let directory = state.directory.clone();
     tauri::async_runtime::spawn_blocking(move || {
-        crate::desktop::windows::open_system_target(directory.as_os_str())
+        let path = directory.to_str().ok_or("日志目录不是有效的 UTF-8 路径")?;
+        app.opener()
+            .open_path(path, None::<&str>)
+            .map_err(|error| command_error("无法打开日志目录", &error))
     })
     .await
     .map_err(|_| "打开日志目录任务失败")?

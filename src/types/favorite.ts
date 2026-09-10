@@ -1,5 +1,4 @@
 export interface FavoriteItem {
-  id: string
   sourceId: string
   sourceName: string
   sourceUrl?: string

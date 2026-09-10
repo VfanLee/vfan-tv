@@ -3,6 +3,7 @@ import { isDesktopRuntime } from '../tauri'
 import type {
   AppDataClearSelection,
   AppSettings,
+  AppSettingsPatch,
   NetworkProxyTestInput,
   NetworkProxyTestResult,
   NetworkSettings,
@@ -16,7 +17,7 @@ export async function getSettings(): Promise<AppSettings | undefined> {
 }
 
 /** 保存应用订阅与主题设置 */
-export async function updateSettings(input: Partial<AppSettings>): Promise<AppSettings> {
+export async function updateSettings(input: AppSettingsPatch): Promise<AppSettings> {
   if (isDesktopRuntime()) return invoke('update_settings', { input })
   throw new Error('当前运行环境不支持此操作')
 }

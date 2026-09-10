@@ -1,4 +1,4 @@
-import '@fontsource-variable/noto-sans'
+import '@fontsource-variable/noto-sans/index.css'
 import '../styles/main.css'
 import '../styles/custom.css'
 

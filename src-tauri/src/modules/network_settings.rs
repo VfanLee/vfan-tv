@@ -1,3 +1,4 @@
+use crate::infrastructure::diagnostics::command_error;
 use crate::infrastructure::network::{self, NetworkMode};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
@@ -76,33 +77,44 @@ fn validate(settings: &mut NetworkSettings) -> Result<(), String> {
 
 /// 从数据库读取代理列表与直播路由的同一快照
 pub async fn read(db: &SqlitePool) -> Result<NetworkSettings, String> {
-    let mut tx = db.begin().await.map_err(|_| "无法读取网络配置")?;
+    let mut tx = db
+        .begin()
+        .await
+        .map_err(|error| command_error("无法读取网络配置", &error))?;
     let profiles =
         sqlx::query_as("SELECT id,name,protocol,host,port FROM proxy_profiles ORDER BY sort,id")
             .fetch_all(&mut *tx)
             .await
-            .map_err(|_| "读取代理配置失败")?;
+            .map_err(|error| command_error("读取代理配置失败", &error))?;
     let iptv =
         sqlx::query_as("SELECT mode,active_profile_id FROM network_routes WHERE route='iptv'")
             .fetch_one(&mut *tx)
             .await
-            .map_err(|_| "读取直播路由失败")?;
-    tx.commit().await.map_err(|_| "读取网络配置失败")?;
+            .map_err(|error| command_error("读取直播路由失败", &error))?;
+    tx.commit()
+        .await
+        .map_err(|error| command_error("读取网络配置失败", &error))?;
     Ok(NetworkSettings { profiles, iptv })
 }
 
 /// 原子替换代理配置，任何失败均保留原配置
 async fn save(db: &SqlitePool, mut settings: NetworkSettings) -> Result<NetworkSettings, String> {
     validate(&mut settings)?;
-    let mut tx = db.begin().await.map_err(|_| "无法开始网络配置修改")?;
-    sqlx::query("UPDATE network_routes SET active_profile_id=NULL WHERE route='iptv'")
-        .execute(&mut *tx)
+    let mut tx = db
+        .begin()
         .await
-        .map_err(|_| "更新网络路由失败")?;
+        .map_err(|error| command_error("无法开始网络配置修改", &error))?;
+    // 先回退到直连再清空代理，避免中间状态违反 custom 必须指向代理的约束
+    sqlx::query(
+        "UPDATE network_routes SET mode='direct',active_profile_id=NULL WHERE route='iptv'",
+    )
+    .execute(&mut *tx)
+    .await
+    .map_err(|error| command_error("更新网络路由失败", &error))?;
     sqlx::query("DELETE FROM proxy_profiles")
         .execute(&mut *tx)
         .await
-        .map_err(|_| "更新代理配置失败")?;
+        .map_err(|error| command_error("更新代理配置失败", &error))?;
     for (index, profile) in settings.profiles.iter().enumerate() {
         sqlx::query(
             "INSERT INTO proxy_profiles(id,name,protocol,host,port,sort) VALUES(?,?,?,?,?,?)",
@@ -115,15 +127,17 @@ async fn save(db: &SqlitePool, mut settings: NetworkSettings) -> Result<NetworkS
         .bind(index as i64)
         .execute(&mut *tx)
         .await
-        .map_err(|_| "保存代理配置失败")?;
+        .map_err(|error| command_error("保存代理配置失败", &error))?;
     }
     sqlx::query("UPDATE network_routes SET mode=?,active_profile_id=? WHERE route='iptv'")
         .bind(&settings.iptv.mode)
         .bind(&settings.iptv.active_profile_id)
         .execute(&mut *tx)
         .await
-        .map_err(|_| "保存直播路由失败")?;
-    tx.commit().await.map_err(|_| "提交网络配置失败")?;
+        .map_err(|error| command_error("保存直播路由失败", &error))?;
+    tx.commit()
+        .await
+        .map_err(|error| command_error("提交网络配置失败", &error))?;
     Ok(settings)
 }
 

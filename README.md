@@ -157,42 +157,11 @@
 ]
 ```
 
-### 💾 备份格式
+### 💾 数据备份
 
-应用数据备份使用 `schemaVersion: 3`。
+在设置的数据管理中导出或恢复完整备份，备份文件为独立的 SQLite `.db` 文件。
 
-```json
-{
-  "app": "vfan-tv",
-  "schemaVersion": 3,
-  "exportedAt": 1782518400000,
-  "recent": [],
-  "favorites": [],
-  "searchHistory": [],
-  "subscriptions": [],
-  "vod": [
-    {
-      "name": "示例点播源",
-      "url": "https://example.com/api.php/provide/vod",
-      "disabled": false,
-      "headers": { "Referer": "https://example.com/" },
-      "backups": ["https://backup.example.com/api.php/provide/vod"],
-      "origin": "manual",
-      "sort": 0
-    }
-  ],
-  "iptv": [
-    {
-      "name": "示例 IPTV 源",
-      "url": "https://example.com/iptv.m3u",
-      "disabled": false,
-      "headers": { "User-Agent": "VfanTV" },
-      "origin": "manual",
-      "sort": 0
-    }
-  ]
-}
-```
+源列表 JSON 仅用于交换点播源和 IPTV 源，不是整库备份；当前版本不支持旧版 JSON 整库备份。
 
 ## 📄 许可证
 
@@ -213,10 +182,6 @@
 
 2. 重新打开应用。
 
-### Windows 从 v0.9.0 或更早版本升级后无法自动更新？
-
-Windows 用户若从 v0.9.0 或更早版本升级，应用内自动升级不再可用。请前往 [Releases](https://github.com/vfanlee/vfan-tv/releases/latest) 按对应架构手动下载安装包覆盖安装一次；之后的版本即可继续使用自动升级。
-
 ### 升级后无法使用？
 
 目前仍然处于开发内测阶段，升级时可能不兼容旧数据。若升级后版本不能使用，请到设置中使用「恢复出厂设置」，或完全卸载后重装。
@@ -234,43 +199,3 @@ Windows 用户若从 v0.9.0 或更早版本升级，应用内自动升级不再�
 **如果这个项目对你有帮助，欢迎 Star ⭐**
 
 </div>
-
-## 本地开发（Tauri 重构版）
-
-使用 Node.js 24.14.0、pnpm 11.20.0 和 Rust stable；macOS 需要 Xcode 开发工具，Windows 需要 MSVC C++ 开发工具及 WebView2。当前目标为 macOS 14+ 与 Windows 11，支持 arm64/x64，跨机器行为由维护者验收。
-
-- `pnpm install`：安装前端及开发依赖。
-- `pnpm dev`：启动 Tauri 开发模式。
-- `pnpm dev:web`：仅启动前端预览，预览不提供本机数据服务。
-- `pnpm check`：统一执行应用版本、TypeScript、ESLint 和 Rust 编译检查。
-- `pnpm test`：运行 Rust 测试；部分测试需要允许本机回环端口。
-- `pnpm format` / `pnpm format:check`：格式化或只检查前端与 Rust 格式。
-- `pnpm lint:rust`：执行 Clippy 严格检查。
-- `pnpm build`：生成当前平台安装包；`pnpm build:web` 仅构建前端资源。
-- `pnpm build:app`：编译当前平台应用，不生成安装包。
-- `pnpm build:mac:arm64` / `pnpm build:mac:x64`：在 macOS 构建对应 DMG。
-- `pnpm build:win:x64` / `pnpm build:win:arm64`：在 Windows 构建对应 NSIS 安装包。
-
-数据库位于应用本地数据目录的 `data/data.db`，完整导出使用独立 SQLite 快照；日志单独存放在 `logs/`。不兼容旧版数据。
-
-签名与更新清单尚未配置，当前 GitHub workflow 仅手动触发编译验证，不发布安装包。详见 [重构进度](docs/tauri-rewrite.md) 和 [发布配置](docs/tauri-release.md)。
-
-### 项目目录
-
-- `src/`：React 前端；`platform/api` 封装 Rust 命令和事件，`types` 保存公共业务类型。
-- `src-tauri/src/modules/`：业务模块。
-- `src-tauri/src/infrastructure/`：数据库、网络、日志和媒体代理。
-- `src-tauri/src/desktop/`：窗口、小窗和更新。
-- `src-tauri/migrations/`：SQLite 结构迁移。
-- `config/`：构建配置与版本检查。
-- `docs/`：架构、发布与组件补丁记录。
-
-前端路径别名统一为 `@/`，指向 `src/`。Tauri 的 `target/` 和 `gen/` 是生成目录，不提交到 Git。
-
-### 工具与依赖版本
-
-项目统一使用 pnpm，版本以 package.json 的 packageManager 为准；CI 自动读取该字段。`.node-version` 固定本机与 CI 的 Node 版本，engines 声明允许的 Node 24 范围。依赖统一使用精确版本，新增依赖也默认保存精确版本，升级需主动执行并验证。CI 使用冻结锁文件安装。
-
-应用运行所需的 React、状态管理、播放器和 UI 库归入 dependencies；编译、CSS 处理、检查、类型声明与 CLI 工具归入 devDependencies。构建仍需安装两类依赖，不能使用仅生产依赖的安装模式。
-
-Tauri 构建钩子统一执行版本、类型检查及前端构建，直接调用 CLI 和平台脚本都会经过该入口。`build:app` 只编译，不生成 `.app`/DMG/NSIS 安装包。架构脚本须在对应系统及工具链下运行。

@@ -5,6 +5,25 @@ use reqwest::{
 use serde::Deserialize;
 use std::{collections::BTreeMap, time::Duration};
 
+/// 有界响应读取失败的原因，由业务调用方补充错误上下文
+#[derive(Debug)]
+pub enum BodyReadError {
+    Read(reqwest::Error),
+    TooLarge,
+}
+
+/// 按实际接收字节限制响应大小，不依赖上游 Content-Length 声明
+pub async fn read_limited(mut response: Response, limit: usize) -> Result<Vec<u8>, BodyReadError> {
+    let mut bytes = Vec::new();
+    while let Some(chunk) = response.chunk().await.map_err(BodyReadError::Read)? {
+        if chunk.len() > limit.saturating_sub(bytes.len()) {
+            return Err(BodyReadError::TooLarge);
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    Ok(bytes)
+}
+
 #[derive(Clone, Debug, Default, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum NetworkMode {
@@ -141,6 +160,50 @@ pub async fn request(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 固定长度与分块响应均接受恰好达到上限的内容，并拒绝超限数据
+    #[tokio::test]
+    async fn limited_body_checks_actual_bytes() {
+        use axum::{body::Body, routing::get, Router};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let router = Router::new()
+            .route("/fixed", get(|| async { "abcdef" }))
+            .route(
+                "/chunked",
+                get(|| async {
+                    Body::from_stream(futures_util::stream::iter([
+                        Ok::<_, std::io::Error>("abc"),
+                        Ok("def"),
+                    ]))
+                }),
+            )
+            .route("/empty", get(|| async { "" }));
+        let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        let client = create_client(&NetworkMode::Direct).unwrap();
+        for path in ["fixed", "chunked"] {
+            for limit in [5, 6, 7] {
+                let response = client
+                    .get(format!("http://{address}/{path}"))
+                    .send()
+                    .await
+                    .unwrap();
+                let result = read_limited(response, limit).await;
+                if limit < 6 {
+                    assert!(matches!(result, Err(BodyReadError::TooLarge)));
+                } else {
+                    assert_eq!(result.unwrap(), b"abcdef");
+                }
+            }
+        }
+        let response = client
+            .get(format!("http://{address}/empty"))
+            .send()
+            .await
+            .unwrap();
+        assert!(read_limited(response, 0).await.unwrap().is_empty());
+        server.abort();
+    }
     /// 跨域资源不继承凭据，但保留必要的来源头
     #[test]
     fn filters_source_headers() {

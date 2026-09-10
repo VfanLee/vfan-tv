@@ -44,7 +44,11 @@ export function FavoritesPage(): React.JSX.Element {
   const handleDelete = async (item: FavoriteItem): Promise<void> => {
     try {
       await removeFavorite(item.sourceId, item.vodId)
-      setItems((currentItems) => currentItems.filter((currentItem) => currentItem.id !== item.id))
+      setItems((currentItems) =>
+        currentItems.filter(
+          (currentItem) => currentItem.sourceId !== item.sourceId || currentItem.vodId !== item.vodId,
+        ),
+      )
       toast.success('已删除收藏')
     } catch (error) {
       toast.error('删除失败', {
@@ -62,7 +66,7 @@ export function FavoritesPage(): React.JSX.Element {
           <div className="grid grid-cols-[repeat(auto-fill,220px)] items-start gap-x-6 gap-y-9">
             {items.map((item) => (
               <FavoriteCard
-                key={item.id}
+                key={`${item.sourceId}:${item.vodId}`}
                 item={item}
                 onClick={() => {
                   setContext(item.title, [favoriteToVodSearchResult(item)])

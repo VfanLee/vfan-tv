@@ -1,3 +1,4 @@
+use crate::infrastructure::diagnostics::command_error;
 use sqlx::SqlitePool;
 use tauri::{Emitter, State};
 
@@ -7,7 +8,7 @@ pub async fn list_search_history(db: State<'_, SqlitePool>) -> Result<Vec<String
     sqlx::query_scalar("SELECT keyword FROM search_history ORDER BY searched_at DESC,keyword")
         .fetch_all(db.inner())
         .await
-        .map_err(|_| "读取搜索历史失败".into())
+        .map_err(|error| command_error("读取搜索历史失败", &error))
 }
 
 #[derive(serde::Deserialize)]
@@ -31,7 +32,7 @@ pub async fn change_search_history(
             sqlx::query("DELETE FROM search_history")
                 .execute(db.inner())
                 .await
-                .map_err(|_| "清理历史失败")?;
+                .map_err(|error| command_error("清理历史失败", &error))?;
         }
         action => {
             let keyword = keyword.ok_or("缺少搜索词")?.trim().to_owned();
@@ -43,7 +44,7 @@ pub async fn change_search_history(
                 .bind(keyword)
                 .execute(db.inner())
                 .await
-                .map_err(|_| "保存搜索历史失败")?;
+                .map_err(|error| command_error("保存搜索历史失败", &error))?;
         }
     }
     if let Err(error) = app.emit("search-history-changed", ()) {

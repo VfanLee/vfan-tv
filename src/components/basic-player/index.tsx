@@ -1,30 +1,19 @@
+import { useVideoMiniWindow, createMiniWindowControl } from './utils/mini-window'
+import { createPlayerContextMenu } from './utils/context-menu'
 import { isDesktopRuntime } from '@/platform/tauri'
-import { useEffect, useRef, useState, type MutableRefObject } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import Artplayer, { type Option } from 'artplayer'
 import artplayerPluginAudioTrack from 'artplayer-plugin-audio-track'
-import Hls, { type ErrorData } from 'hls.js'
-import mpegts from 'mpegts.js'
-import dayjs from 'dayjs'
-import { clamp } from 'es-toolkit/math'
+import Hls from 'hls.js'
 import { useUiPreferencesStore } from '@/stores'
-import type { MediaStreamType } from '@/types'
 import {
-  enterMiniWindowMode,
   getAssociatedAudioUrl,
-  getCurrentVersion,
   getMediaPlaybackSessionInfo,
   isApiAvailable,
-  onMiniWindowModeExit,
   reportMediaPlaybackEvent,
 } from '@/platform/api'
-import {
-  artplayerControlIcons,
-  artplayerSwitchIcons,
-  cn,
-  createMediaPlaybackCoordinator,
-  type MediaPlaybackCoordinator,
-} from '@/utils'
+import { artplayerSwitchIcons, cn, createMediaPlaybackCoordinator, type MediaPlaybackCoordinator } from '@/utils'
 import { CustomSliderDialog, DisplaySettingsMenu, MediaTrackDialog } from './components/display-settings-dialogs'
 import { createSafeAmbilightPlugin } from './utils/safe-ambilight-plugin'
 import { createSettingsPositionTracker } from './utils/settings-position'
@@ -36,6 +25,46 @@ import type {
   MiniWindowPlayerController,
   PlayerRuntimeInfo,
 } from './types'
+import {
+  type ArtplayerWithHls,
+  type MpegtsPlayer,
+  isHlsSource,
+  isLocalPlaybackUrl,
+  isFlvSource,
+  isMpegtsSource,
+  getStreamType,
+  getArtplayerType,
+  createMpegtsPlayback,
+  createHlsPlayback,
+  destroyHls,
+  destroyMpegts,
+} from './utils/playback-engine'
+import {
+  PlaybackDebugRecorder,
+  loadDebugAppVersion,
+  formatMediaElementError,
+  getMediaPlaybackFailureReason,
+} from './utils/playback-debug'
+import { localizeInfoPanel, getVideoFrameRate } from './utils/playback-stats'
+import {
+  removeDefaultContextMenuItems,
+  removeLiveSettingItems,
+  getVideoTrackMenuLabel,
+  getAudioTrackMenuLabel,
+  createVideoTrackSelection,
+  createAudioTrackSelection,
+  setContextMenuItemVisible,
+  injectPlayerChromeStyles,
+  readLoopEnabled,
+  readAutoNextEnabled,
+  createPlaybackRateSliderInput,
+  createSeekStepSliderInput,
+  nextFromList,
+  readPlaybackRate,
+  readSeekStep,
+  isTextInputTarget,
+  normalizePlaybackUrlForDisplay,
+} from './utils/player-settings'
 
 // 播放器适配层：统一 ArtPlayer、HLS.js 与 mpegts.js 的生命周期及持久化播放设置。
 export type {
@@ -56,63 +85,7 @@ interface BasicPlayerCallbacks {
   onSettingsVisibilityChange?: (visible: boolean) => void
 }
 
-type ArtplayerWithHls = Artplayer & { hls?: Hls }
-type MpegtsPlayer = ReturnType<typeof mpegts.createPlayer>
-
-let cachedAppVersion = ''
-
-interface PlaybackDebugLogEntry {
-  at: string
-  type: string
-  message: string
-}
-
-class PlaybackDebugRecorder {
-  private entries: PlaybackDebugLogEntry[] = []
-
-  push(type: string, message: string): void {
-    this.entries.push({
-      at: dayjs().format('HH:mm:ss'),
-      type,
-      message,
-    })
-    if (this.entries.length > 30) {
-      this.entries.shift()
-    }
-  }
-
-  format(): string {
-    if (!this.entries.length) {
-      return '（暂无记录）'
-    }
-
-    return this.entries.map((entry) => `[${entry.at}] ${entry.type}: ${entry.message}`).join('\n')
-  }
-}
-
-interface DebugInfoParams {
-  art: Artplayer
-  rawSrc: string
-  displayUrl: string
-  isHls: boolean
-  isFlv: boolean
-  isMpegts: boolean
-  isLive: boolean
-  title?: string
-  sourceType?: string
-  autoPlay: boolean
-  loop: boolean
-  initialTime: number
-  audioTrackUrl?: string
-  debugLog: PlaybackDebugRecorder
-  autoNextEnabled: boolean
-}
-
-interface VideoPlaybackQualityInfo {
-  droppedVideoFrames?: number
-  totalVideoFrames?: number
-}
-
+/** 组装视频播放器、播放资源生命周期与设置浮层 */
 export function BasicPlayer({
   autoPlay = false,
   audioTrackUrl: inputAudioTrackUrl,
@@ -154,7 +127,6 @@ export function BasicPlayer({
   const resolvedUrlRef = useRef('检测中…')
   const originalUrlRef = useRef('检测中…')
   const restoreFullscreenWebRef = useRef(false)
-  const miniWindowSessionIdRef = useRef<string | undefined>(undefined)
   const miniWindowControllerReadyRef = useRef(onMiniWindowControllerReady)
   const miniWindowPlayerStateChangeRef = useRef(onMiniWindowPlayerStateChange)
   const playbackCoordinatorRef = useRef<MediaPlaybackCoordinator | null>(null)
@@ -165,33 +137,29 @@ export function BasicPlayer({
   const [settingsPortalContainer, setSettingsPortalContainer] = useState<HTMLElement | undefined>(undefined)
   const [settingsBottomOffset, setSettingsBottomOffset] = useState(64)
   const src = inputSrc && sourceType ? inputSrc : undefined
-  const [resolvedAudioTrack, setResolvedAudioTrack] = useState<{ input?: string; url?: string }>()
+  const [resolvedAudioTrack, setResolvedAudioTrack] = useState<{ input: string; sessionId: string; url?: string }>()
   const audioTrackUrl = isLocalPlaybackUrl(inputAudioTrackUrl)
     ? inputAudioTrackUrl
-    : resolvedAudioTrack && resolvedAudioTrack.input === inputAudioTrackUrl
+    : resolvedAudioTrack &&
+        resolvedAudioTrack.input === inputAudioTrackUrl &&
+        resolvedAudioTrack.sessionId === mediaSessionId
       ? resolvedAudioTrack.url
       : undefined
 
   /** 解析外挂音轨的代理播放地址 */
   useEffect(() => {
     let active = true
-    if (!inputAudioTrackUrl || isLocalPlaybackUrl(inputAudioTrackUrl)) {
-      return () => {
-        active = false
-      }
-    }
-    if (!mediaSessionId) {
-      setResolvedAudioTrack({ input: inputAudioTrackUrl, url: undefined })
+    if (!inputAudioTrackUrl || isLocalPlaybackUrl(inputAudioTrackUrl) || !mediaSessionId) {
       return () => {
         active = false
       }
     }
     void getAssociatedAudioUrl(mediaSessionId, inputAudioTrackUrl)
       .then((url) => {
-        if (active) setResolvedAudioTrack({ input: inputAudioTrackUrl, url })
+        if (active) setResolvedAudioTrack({ input: inputAudioTrackUrl, sessionId: mediaSessionId, url })
       })
       .catch(() => {
-        if (active) setResolvedAudioTrack({ input: inputAudioTrackUrl, url: undefined })
+        if (active) setResolvedAudioTrack({ input: inputAudioTrackUrl, sessionId: mediaSessionId, url: undefined })
       })
     return () => {
       active = false
@@ -204,6 +172,8 @@ export function BasicPlayer({
   const isMpegts = isMpegtsSource(src, sourceType)
   const canEnterMiniWindowMode =
     !miniWindowMode && Boolean(sourceType && mediaSessionId) && (isDesktopRuntime() || isApiAvailable())
+
+  const miniWindowSessionIdRef = useVideoMiniWindow(artRef, callbacksRef, isLive, miniWindowMode)
 
   /** 创建视频播放协调器，并在组件卸载时释放 */
   useEffect(() => {
@@ -220,15 +190,17 @@ export function BasicPlayer({
     }
   }, [])
 
-  /** 切换播放源时重置播放器设置面板状态 */
-  useEffect(() => {
+  /** 播放源变化时在当前组件渲染中关闭旧源的设置面板 */
+  const [settingsSource, setSettingsSource] = useState({ src, sourceType })
+  if (settingsSource.src !== src || settingsSource.sourceType !== sourceType) {
+    setSettingsSource({ src, sourceType })
     setCustomNumberInput(undefined)
     setMediaTrackSelection(undefined)
     setDisplaySettings(undefined)
     setIsDisplaySettingsClosing(false)
     setSettingsPortalContainer(undefined)
     setSettingsBottomOffset(64)
-  }, [sourceType, src])
+  }
 
   /** 同步播放器回调、初始时间和迷你窗口控制引用 */
   useEffect(() => {
@@ -264,32 +236,6 @@ export function BasicPlayer({
     callbacksRef.current.onSettingsVisibilityChange?.(visible)
   }, [customNumberInput, displaySettings, mediaTrackSelection])
 
-  /** 监听迷你窗口退出事件并恢复播放进度 */
-  useEffect(() => {
-    if (miniWindowMode) return
-
-    return onMiniWindowModeExit((exit) => {
-      if (exit.variant === 'radio' || miniWindowSessionIdRef.current !== exit.sessionId) return
-      miniWindowSessionIdRef.current = undefined
-      const art = artRef.current
-      if (!art) return
-
-      if (isLive) {
-        reloadPlayback(art)
-        return
-      }
-
-      const resumedTime = Math.max(0, exit.currentTime)
-      callbacksRef.current.onProgress?.({
-        currentTime: Math.floor(resumedTime),
-        duration: Number.isFinite(art.duration) ? Math.floor(art.duration) : 0,
-        force: true,
-      })
-      art.currentTime = resumedTime
-      void art.play().catch(() => undefined)
-    })
-  }, [isLive, miniWindowMode])
-
   /** 根据播放地址和配置创建或销毁播放器实例 */
   useEffect(() => {
     const container = containerRef.current
@@ -318,13 +264,7 @@ export function BasicPlayer({
       resolvedUrlRef.current = displayPlaybackUrl
     }
 
-    if (!cachedAppVersion && isApiAvailable()) {
-      void getCurrentVersion()
-        .then((version) => {
-          cachedAppVersion = version
-        })
-        .catch(console.error)
-    }
+    loadDebugAppVersion()
 
     let audioMenuItem: HTMLElement | undefined
     let loopEnabled = loop ?? (persistPlaybackSettings ? readLoopEnabled() : false)
@@ -333,16 +273,17 @@ export function BasicPlayer({
     let seekStep = persistPlaybackSettings ? readSeekStep() : 5
     let hasReportedPlaybackFailure = false
     let hasReportedPlaybackReady = false
-    let hlsNetworkRecoveryAttempts = 0
     const playbackStartedAt = performance.now()
     let runtimeInfo: PlayerRuntimeInfo = {}
     let hasReportedFirstFrame = false
 
+    /** 合并并上报当前媒体的运行参数 */
     const reportRuntimeInfo = (patch: Partial<PlayerRuntimeInfo>): void => {
       runtimeInfo = { ...runtimeInfo, ...patch }
       callbacksRef.current.onRuntimeInfoChange?.(runtimeInfo)
     }
 
+    /** 记录首次出画耗时并更新媒体最终地址 */
     const reportFirstFrame = (): void => {
       if (hasReportedFirstFrame) return
       hasReportedFirstFrame = true
@@ -358,6 +299,7 @@ export function BasicPlayer({
 
     callbacksRef.current.onRuntimeInfoChange?.({})
 
+    /** 展示并上报首次不可恢复的播放错误 */
     const reportPlaybackFailure = (artInstance: Artplayer, reason: string): void => {
       if (hasReportedPlaybackFailure) return
       hasReportedPlaybackFailure = true
@@ -367,15 +309,11 @@ export function BasicPlayer({
       callbacksRef.current.onPlaybackError?.(reason)
     }
 
+    /** 通知页面当前媒体已可播放 */
     const reportPlaybackReady = (): void => {
       if (hasReportedPlaybackReady) return
       hasReportedPlaybackReady = true
       callbacksRef.current.onPlaybackReady?.()
-    }
-
-    const openSettingPanel = function (this: Artplayer, contextmenu: { show: boolean }): void {
-      this.setting.show = true
-      contextmenu.show = false
     }
 
     // https://artplayer.org/document/start/option.html
@@ -421,37 +359,20 @@ export function BasicPlayer({
         },
       },
       controls: canEnterMiniWindowMode
-        ? [
-            {
-              name: 'vfan-mini-window-mode',
-              position: 'right',
-              index: 20,
-              html: `<span class="vfan-mini-window-icon">${artplayerControlIcons.miniWindow}</span>`,
-              tooltip: '小窗模式',
-              click: () => {
-                if (!src || !sourceType || miniWindowSessionIdRef.current) return
-                const sessionId = crypto.randomUUID()
-                miniWindowSessionIdRef.current = sessionId
-                art.pause()
-                void enterMiniWindowMode({
-                  sessionId,
-                  src,
-                  sourceType,
-                  mediaSessionId: mediaSessionId!,
-                  title,
-                  variant,
-                  initialTime: isLive ? 0 : art.currentTime,
-                  loop: loopEnabled,
-                  audioTrackUrl,
-                }).catch((error: unknown) => {
-                  miniWindowSessionIdRef.current = undefined
-                  console.error('Failed to enter mini window mode:', error)
-                  art.notice.show = '进入小窗模式失败，请重启应用后重试'
-                  void art.play().catch(() => undefined)
-                })
-              },
-            },
-          ]
+        ? createMiniWindowControl(
+            () => art,
+            miniWindowSessionIdRef,
+            () => ({
+              src,
+              sourceType: sourceType!,
+              mediaSessionId: mediaSessionId!,
+              title,
+              variant,
+              initialTime: isLive ? 0 : art.currentTime,
+              loop: loopEnabled,
+              audioTrackUrl,
+            }),
+          )
         : [],
       plugins: [
         // 背光插件（跨域源采样失败时会自动停用，避免打断播放）
@@ -474,125 +395,49 @@ export function BasicPlayer({
       ],
       contextmenu: miniWindowMode
         ? []
-        : [
-            {
-              name: 'vfan-copy-url',
-              html: '复制视频地址',
-              click: (contextmenu) => {
-                void navigator.clipboard.writeText(displayPlaybackUrl)
-                art.notice.show = '视频地址已复制'
-                contextmenu.show = false
-              },
-              mounted(element) {
-                element.title = displayPlaybackUrl
-              },
+        : createPlayerContextMenu(
+            () => ({
+              art,
+              rawSrc: src,
+              displayUrl: displayPlaybackUrl,
+              isHls,
+              isLive,
+              title,
+              sourceType,
+              autoPlay,
+              loop: loopEnabled,
+              initialTime: initialTimeRef.current,
+              isFlv,
+              isMpegts,
+              audioTrackUrl,
+              debugLog,
+              autoNextEnabled,
+            }),
+            displayPlaybackUrl,
+            (element) => {
+              audioMenuItem = element
             },
-            {
-              name: 'vfan-audio',
-              html: '音效调节',
-              style: { display: 'none' },
-              click: openSettingPanel,
-              mounted(element: HTMLElement) {
-                audioMenuItem = element
-              },
-            },
-            {
-              name: 'vfan-copy-debug',
-              html: '复制调试信息',
-              click: (contextmenu) => {
-                void navigator.clipboard.writeText(
-                  buildDebugInfoText({
-                    art,
-                    rawSrc: src,
-                    displayUrl: displayPlaybackUrl,
-                    isHls,
-                    isLive,
-                    title,
-                    sourceType,
-                    autoPlay,
-                    loop: loopEnabled,
-                    initialTime: initialTimeRef.current,
-                    isFlv,
-                    isMpegts,
-                    audioTrackUrl,
-                    debugLog,
-                    autoNextEnabled,
-                  }),
-                )
-                art.notice.show = '调试信息已复制'
-                contextmenu.show = false
-              },
-            },
-            {
-              name: 'vfan-stats',
-              html: '统计信息',
-              click: (contextmenu) => {
-                art.info.show = true
-                contextmenu.show = false
-              },
-            },
-            {
-              name: 'vfan-refresh',
-              html: '刷新',
-              click: (contextmenu) => {
-                reloadPlayback(art)
-                contextmenu.show = false
-              },
-            },
-          ],
+          ),
       customType: {
         // 自定义媒体类型处理器
+        /** 为 HLS 媒体创建播放引擎 */
         m3u8(video, url, artInstance) {
-          destroyHls(hlsRef)
-          destroyMpegts(mpegtsRef)
-
-          if (Hls.isSupported()) {
-            const hls = new Hls(createHlsConfig(isLive))
-            hlsRef.current = hls
-            artInstance.hls = hls
-            hls.on(Hls.Events.MANIFEST_PARSED, () => {
-              debugLog.push('HLS', `清单已解析 · ${hls.levels.length} 档 · ${hls.audioTracks.length} 音轨`)
-              if (hasHlsAudioTracks(hls)) {
-                setContextMenuItemVisible(audioMenuItem, true)
-              }
-              reportRuntimeInfo(getHlsRuntimeInfo(hls, video))
-            })
-            hls.on(Hls.Events.LEVEL_SWITCHED, () => reportRuntimeInfo(getHlsRuntimeInfo(hls, video)))
-            hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, () => reportRuntimeInfo(getHlsRuntimeInfo(hls, video)))
-            hls.on(Hls.Events.LEVEL_LOADED, () => {
-              hlsNetworkRecoveryAttempts = 0
-            })
-            hls.on(Hls.Events.ERROR, (_event, data) => {
-              debugLog.push('HLS', formatHlsErrorBrief(data))
-              if (data.fatal && isLive && data.type === Hls.ErrorTypes.NETWORK_ERROR) {
-                hlsNetworkRecoveryAttempts += 1
-                if (hlsNetworkRecoveryAttempts <= 2) {
-                  debugLog.push('HLS', `network fatal · 第 ${hlsNetworkRecoveryAttempts} 次尝试重新加载清单`)
-                  hls.startLoad()
-                  return
-                }
-                reportPlaybackFailure(artInstance, 'HLS 网络连接持续失败，自动恢复未成功')
-                return
-              }
-
-              if (data.fatal) {
-                reportPlaybackFailure(artInstance, formatHlsPlaybackFailureReason(data))
-              }
-            })
-            hls.loadSource(url)
-            hls.attachMedia(video)
-            return
-          }
-
-          if (video.canPlayType('application/vnd.apple.mpegurl')) {
-            debugLog.push('HLS', '使用 Safari 原生 HLS')
-            video.src = url
-            return
-          }
-
-          debugLog.push('HLS', '当前环境不支持 HLS 播放')
-          reportPlaybackFailure(artInstance, '当前环境不支持 HLS 播放')
+          createHlsPlayback(
+            video,
+            url,
+            artInstance,
+            isLive,
+            hlsRef,
+            mpegtsRef,
+            debugLog,
+            reportPlaybackFailure,
+            reportRuntimeInfo,
+            (available) => {
+              if (available) setContextMenuItemVisible(audioMenuItem, true)
+            },
+          )
         },
+        /** 为 FLV 媒体创建播放引擎 */
         flv(video, url, artInstance) {
           createMpegtsPlayback(
             video,
@@ -607,6 +452,7 @@ export function BasicPlayer({
             (info) => reportRuntimeInfo(info),
           )
         },
+        /** 为 MPEG-TS 媒体创建播放引擎 */
         mpegts(video, url, artInstance) {
           createMpegtsPlayback(
             video,
@@ -635,6 +481,7 @@ export function BasicPlayer({
         fps: getVideoFrameRate(art),
       })
     })
+    /** 同步小窗的播放与静音状态 */
     const reportMiniWindowPlayerState = (): void => {
       miniWindowPlayerStateChangeRef.current?.({
         isPlaying: !art.video.paused && !art.video.ended,
@@ -678,11 +525,15 @@ export function BasicPlayer({
     }
     injectPlayerChromeStyles(art, miniWindowMode)
     localizeInfoPanel(art, originalUrlRef, resolvedUrlRef, getStreamType(isHls, isFlv, isMpegts), isLive, mpegtsRef)
+    /** 根据当前播放状态构建设置浮层 */
     const openDisplaySettings = (): void => {
       settingsPosition.refreshAfterControlTransition()
+      /** 刷新当前播放器展示状态 */
       const refresh = (): void => openDisplaySettings()
       const hls = (art as ArtplayerWithHls).hls
+      /** 打开视频轨道选择列表 */
       const openVideoTracks = (): void => setMediaTrackSelection(createVideoTrackSelection(art, isHls, openVideoTracks))
+      /** 打开音频轨道选择列表 */
       const openAudioTracks = (): void => setMediaTrackSelection(createAudioTrackSelection(art, isHls, openAudioTracks))
       const videoTrack =
         showMediaTrackSettings && hls && hls.levels.length > 1
@@ -768,7 +619,9 @@ export function BasicPlayer({
     art.on('fullscreen', settingsPosition.schedule)
     art.on('fullscreenWeb', settingsPosition.schedule)
 
+    /** 将键盘焦点移到当前播放器 */
     const focusPlayer = (): void => art.template.$player.focus()
+    /** 在播放器聚焦时处理方向键跳转 */
     const handleSeekShortcut = (event: KeyboardEvent): void => {
       if (
         isLive ||
@@ -792,6 +645,7 @@ export function BasicPlayer({
         art.notice.show = `回退 ${seekStep} 秒`
       }
     }
+    /** 阻止小窗显示浏览器右键菜单 */
     const preventMiniWindowContextMenu = (event: Event): void => event.preventDefault()
     art.template.$player.addEventListener('pointerdown', focusPlayer)
     if (miniWindowMode) art.template.$player.addEventListener('contextmenu', preventMiniWindowContextMenu)
@@ -799,6 +653,7 @@ export function BasicPlayer({
 
     let startTimeApplied = false
 
+    /** 媒体时长就绪后恢复指定播放进度 */
     const applyStartTime = (): void => {
       if (startTimeApplied || isLive) {
         return
@@ -895,6 +750,7 @@ export function BasicPlayer({
     mediaSessionId,
     miniWindowMode,
     canEnterMiniWindowMode,
+    miniWindowSessionIdRef,
     persistPlaybackSettings,
     showMediaTrackSettings,
     sourceType,
@@ -983,1431 +839,4 @@ export function BasicPlayer({
           : displaySettingsOverlay)}
     </div>
   )
-}
-
-function isHlsSource(src: string | undefined, sourceType: BasicPlayerProps['sourceType']): boolean {
-  return Boolean(src && sourceType === 'hls')
-}
-
-function isLocalPlaybackUrl(src: string | undefined): boolean {
-  if (!src) return false
-  try {
-    const url = new URL(src)
-    return !['http:', 'https:'].includes(url.protocol) || url.hostname === '127.0.0.1' || url.hostname === 'localhost'
-  } catch {
-    return true
-  }
-}
-
-function isFlvSource(src: string | undefined, sourceType: BasicPlayerProps['sourceType']): boolean {
-  return Boolean(src && sourceType === 'flv')
-}
-
-function isMpegtsSource(src: string | undefined, sourceType: BasicPlayerProps['sourceType']): boolean {
-  return Boolean(src && sourceType === 'mpegts')
-}
-
-function getStreamType(isHls: boolean, isFlv: boolean, isMpegts: boolean): MediaStreamType {
-  if (isHls) return 'hls'
-  if (isFlv) return 'flv'
-  if (isMpegts) return 'mpegts'
-  return 'native'
-}
-
-function getArtplayerType(src: string | undefined, sourceType: BasicPlayerProps['sourceType']): string {
-  if (isHlsSource(src, sourceType)) {
-    return 'm3u8'
-  }
-
-  if (isFlvSource(src, sourceType)) {
-    return 'flv'
-  }
-
-  if (isMpegtsSource(src, sourceType)) {
-    return 'mpegts'
-  }
-
-  return ''
-}
-
-const MAX_MPEGTS_RECONNECT_ATTEMPTS = 6
-const MPEGTS_RECONNECT_RESET_DELAY_MS = 5_000
-
-function createMpegtsPlayback(
-  video: HTMLVideoElement,
-  url: string,
-  art: Artplayer,
-  type: 'flv' | 'mpegts',
-  isLive: boolean,
-  mpegtsRef: MutableRefObject<MpegtsPlayer | null>,
-  hlsRef: MutableRefObject<Hls | null>,
-  debugLog: PlaybackDebugRecorder,
-  reportPlaybackFailure: (art: Artplayer, reason: string) => void,
-  reportRuntimeInfo: (info: Partial<PlayerRuntimeInfo>) => void,
-): void {
-  destroyHls(hlsRef)
-  destroyMpegts(mpegtsRef)
-
-  const label = type === 'flv' ? 'FLV' : 'MPEG-TS'
-  if (!mpegts.isSupported()) {
-    debugLog.push(label, '当前环境不支持播放')
-    reportPlaybackFailure(art, `当前环境不支持 ${label} 播放`)
-    return
-  }
-
-  const treatAsLive = isLive || type === 'flv'
-  let reconnectAttempts = 0
-  let resetAttemptsTimer: number | undefined
-
-  const clearResetAttemptsTimer = (): void => {
-    if (resetAttemptsTimer !== undefined) {
-      window.clearTimeout(resetAttemptsTimer)
-      resetAttemptsTimer = undefined
-    }
-  }
-
-  // 一段时间内没有再次触发重连，说明这次重连已经稳定住了，重置计数器，
-  // 避免「断了很多次」这个历史状态一直压着最大重试次数不放。
-  const scheduleResetAttempts = (): void => {
-    clearResetAttemptsTimer()
-    resetAttemptsTimer = window.setTimeout(() => {
-      reconnectAttempts = 0
-    }, MPEGTS_RECONNECT_RESET_DELAY_MS)
-  }
-
-  const startPlayer = (): MpegtsPlayer => {
-    const player = mpegts.createPlayer(
-      { type, url, isLive: treatAsLive },
-      {
-        enableWorker: true,
-        enableStashBuffer: !treatAsLive,
-        stashInitialSize: treatAsLive ? 128 * 1024 : 384 * 1024,
-        liveBufferLatencyChasing: treatAsLive,
-        // 直播必须关闭 lazyLoad：默认 true 会在缓冲足够后主动断开 HTTP，
-        // 推流一断就只剩已缓冲的一小段，表现为播几秒暂停、点播放又重播同一段。
-        // IPTV 场景下 FLV 基本都是推流，即使被标成录播也按直播处理。
-        lazyLoad: !treatAsLive,
-        deferLoadAfterSourceOpen: !treatAsLive,
-        autoCleanupSourceBuffer: treatAsLive,
-      },
-    )
-
-    // 用 ref 是否仍指向当前 player 实例判断回调是否过期：
-    // 组件卸载/切换源会替换或清空 mpegtsRef，此后旧 player 的异步事件应被忽略。
-    const isStale = (): boolean => mpegtsRef.current !== player
-
-    player.on(mpegts.Events.ERROR, (errorType: string, errorDetail: string, errorInfo: unknown) => {
-      if (isStale()) return
-      debugLog.push(label, `${errorType} · ${errorDetail} · ${formatUnknownErrorInfo(errorInfo)}`)
-      if (treatAsLive) {
-        reconnect(player, `${errorDetail || errorType}`)
-        return
-      }
-      reportPlaybackFailure(art, `${label} 播放失败：${errorDetail || errorType}`)
-    })
-    player.on(mpegts.Events.MEDIA_INFO, () => {
-      if (isStale()) return
-      debugLog.push(label, '媒体信息已解析')
-      const mediaInfo = player.mediaInfo
-      const codecInfo = mediaInfo as typeof mediaInfo & {
-        fps?: number
-        videoCodec?: string
-        audioCodec?: string
-      }
-      reportRuntimeInfo({
-        width: mediaInfo?.width,
-        height: mediaInfo?.height,
-        fps: codecInfo?.fps,
-        videoCodec: codecInfo?.videoCodec,
-        audioCodec: codecInfo?.audioCodec,
-      })
-    })
-    player.on(mpegts.Events.LOADING_COMPLETE, () => {
-      if (isStale() || !treatAsLive) return
-      // 直播推流被上游正常关闭（无报错的 HTTP 响应结束）时，mpegts.js 会直接判定为播放
-      // 完毕并调用 endOfStream，表现为播一会儿就停、点播放又重播同一小段。
-      // 直播场景下这其实等价于断线，需要自动重新拉流，而不是当作播放结束处理。
-      reconnect(player, '上游连接正常关闭')
-    })
-    player.attachMediaElement(video)
-    player.load()
-    return player
-  }
-
-  // reason 参数携带触发重连的原 player 实例：定时器触发时需要重新核对
-  // mpegtsRef 是否仍指向它，避免组件卸载/切换播放源后，过期的重连定时器
-  // 反而把新播放源刚创建好的 player 顶掉。
-  const reconnect = (fromPlayer: MpegtsPlayer, reason: string): void => {
-    reconnectAttempts += 1
-    clearResetAttemptsTimer()
-    if (reconnectAttempts > MAX_MPEGTS_RECONNECT_ATTEMPTS) {
-      reportPlaybackFailure(art, `${label} 直播连接反复中断（${reason}），已停止自动重连`)
-      return
-    }
-
-    const delayMs = Math.min(500 * 2 ** (reconnectAttempts - 1), 5_000)
-    debugLog.push(label, `直播连接中断 · ${reason} · ${delayMs}ms 后第 ${reconnectAttempts} 次重连`)
-    window.setTimeout(() => {
-      if (mpegtsRef.current !== fromPlayer) return
-      try {
-        fromPlayer.unload()
-        fromPlayer.detachMediaElement()
-        fromPlayer.destroy()
-      } catch {
-        // Ignore teardown errors from the previous, already-broken player instance.
-      }
-      const nextPlayer = startPlayer()
-      mpegtsRef.current = nextPlayer
-      scheduleResetAttempts()
-      void nextPlayer.play()?.catch(() => undefined)
-    }, delayMs)
-  }
-
-  mpegtsRef.current = startPlayer()
-}
-
-function removeDefaultContextMenuItems(art: Artplayer): void {
-  for (const name of ['playbackRate', 'aspectRatio', 'flip', 'info', 'version', 'close']) {
-    try {
-      art.contextmenu.remove(name)
-    } catch {
-      // Ignore missing built-in context menu entries.
-    }
-  }
-}
-
-function removeLiveSettingItems(art: Artplayer): void {
-  for (const name of ['playback-rate', 'vfan-loop', 'vfan-auto-next', 'hls-ad-filter']) {
-    try {
-      art.setting.remove(name)
-    } catch {
-      // Ignore settings that were not mounted for this source.
-    }
-  }
-}
-
-function hasHlsAudioTracks(hls: Hls): boolean {
-  return hls.audioTracks.length > 1
-}
-
-function getHlsRuntimeInfo(hls: Hls, video: HTMLVideoElement): Partial<PlayerRuntimeInfo> {
-  const levelIndex = hls.currentLevel >= 0 ? hls.currentLevel : hls.loadLevel
-  const level = hls.levels[levelIndex] ?? hls.levels[0]
-  const audioTrack = hls.audioTracks[hls.audioTrack] ?? hls.audioTracks[0]
-  return {
-    width: video.videoWidth || level?.width || undefined,
-    height: video.videoHeight || level?.height || undefined,
-    fps: level?.frameRate || undefined,
-    videoCodec: level?.videoCodec || undefined,
-    audioCodec: audioTrack?.audioCodec || level?.audioCodec || undefined,
-  }
-}
-
-function getVideoTrackMenuLabel(art: Artplayer, hls?: Hls): string {
-  if (!hls) return art.video.videoHeight ? `${art.video.videoHeight}p` : '当前流'
-  if (hls.autoLevelEnabled) return '自动'
-  const level = hls.levels[hls.currentLevel]
-  return level?.name || (level?.height ? `${level.height}p` : `线路 ${hls.currentLevel + 1}`)
-}
-
-function getAudioTrackMenuLabel(hls?: Hls): string {
-  if (!hls) return '当前音轨'
-  const track = hls.audioTracks[hls.audioTrack] ?? hls.audioTracks[0]
-  return track?.name || track?.lang || '当前音轨'
-}
-
-function createVideoTrackSelection(art: Artplayer, isHls: boolean, refresh: () => void): MediaTrackSelection {
-  const hls = isHls ? (art as ArtplayerWithHls).hls : undefined
-  if (!hls || !hls.levels.length) {
-    const dimensions =
-      art.video.videoWidth && art.video.videoHeight
-        ? `${art.video.videoWidth} × ${art.video.videoHeight}`
-        : '尚未识别视频参数'
-    return {
-      title: '视频',
-      hint: '当前流不支持切换',
-      options: [{ id: 'current', label: '当前视频', description: dimensions, selected: true, disabled: true }],
-    }
-  }
-
-  return {
-    title: '视频',
-    options: [
-      {
-        id: 'auto',
-        label: '自动',
-        description: '根据网络状况自动选择清晰度',
-        selected: hls.autoLevelEnabled,
-        onSelect: () => {
-          hls.currentLevel = -1
-          refresh()
-        },
-      },
-      ...hls.levels.map((level, index) => ({
-        id: `level-${index}`,
-        label: level.name || (level.height ? `${level.height}p` : `清晰度 ${index + 1}`),
-        description: [
-          level.videoCodec,
-          level.width && level.height ? `${level.width} × ${level.height}` : undefined,
-          level.bitrate ? formatBitsPerSecond(level.bitrate) : undefined,
-        ]
-          .filter(Boolean)
-          .join(' · '),
-        selected: !hls.autoLevelEnabled && hls.currentLevel === index,
-        onSelect: () => {
-          hls.currentLevel = index
-          refresh()
-        },
-      })),
-    ],
-  }
-}
-
-function createAudioTrackSelection(art: Artplayer, isHls: boolean, refresh: () => void): MediaTrackSelection {
-  const hls = isHls ? (art as ArtplayerWithHls).hls : undefined
-  if (!hls || hls.audioTracks.length <= 1) {
-    const track = hls?.audioTracks[0]
-    return {
-      title: '音频',
-      hint: '当前流不支持切换',
-      options: [
-        {
-          id: 'current',
-          label: track?.name || track?.lang || '当前音轨',
-          description: [track?.lang, track?.audioCodec].filter(Boolean).join(' · ') || '单音轨',
-          selected: true,
-          disabled: true,
-        },
-      ],
-    }
-  }
-
-  return {
-    title: '音频',
-    options: hls.audioTracks.map((track, index) => ({
-      id: `audio-${index}`,
-      label: track.name || track.lang || `音轨 ${index + 1}`,
-      description: [track.lang, track.audioCodec].filter(Boolean).join(' · '),
-      selected: hls.audioTrack === index,
-      onSelect: () => {
-        hls.audioTrack = index
-        refresh()
-      },
-    })),
-  }
-}
-
-function setContextMenuItemVisible(element: HTMLElement | undefined, visible: boolean): void {
-  if (element) {
-    element.style.display = visible ? '' : 'none'
-  }
-}
-
-function injectPlayerChromeStyles(art: Artplayer, miniWindowMode = false): void {
-  if (art.template.$player.querySelector('[data-vfan-player-style]')) {
-    return
-  }
-
-  const style = document.createElement('style')
-  style.dataset.vfanPlayerStyle = 'true'
-  // 主色（进度条 / 音量 / 选中项等）统一由 Artplayer 的 theme 选项驱动为纯白，
-  // 这里只补充 theme 覆盖不到的部分，避免重复覆盖产生残留元素。
-  style.textContent = `
-    .art-video-player .art-settings .art-setting-panel .art-setting-item.art-current,
-    .art-video-player .art-settings .art-setting-panel span.art-current {
-      font-weight: 700;
-    }
-    .art-video-player .art-setting-panel .art-setting-item-left-icon svg {
-      display: block;
-      width: 22px;
-      height: 22px;
-    }
-    .art-video-player .vfan-mini-window-icon,
-    .art-video-player .vfan-mini-window-icon svg {
-      display: block;
-      width: 19px;
-      height: 19px;
-    }
-    .art-video-player .vfan-mini-window-icon svg,
-    .art-video-player .vfan-mini-window-icon svg * {
-      fill: none !important;
-      stroke: currentColor !important;
-    }
-    .art-video-player:not(.art-control-show):not(.art-hover) .art-bottom .art-progress .art-progress-indicator {
-      display: none !important;
-    }
-    .art-video-player .vfan-player-top-overlay {
-      position: absolute;
-      inset: 0;
-      z-index: 190;
-      pointer-events: none;
-      opacity: 0;
-      transform: translateY(-4px);
-      transition: opacity 180ms ease, transform 180ms ease;
-    }
-    .art-video-player.art-control-show .vfan-player-top-overlay,
-    .art-video-player.vfan-player-overlay-pinned .vfan-player-top-overlay,
-    .art-video-player .vfan-player-top-overlay.vfan-player-top-overlay-pinned,
-    .art-video-player .vfan-player-top-overlay:focus-within {
-      opacity: 1;
-      transform: translateY(0);
-    }
-    .art-video-player.art-control-show .vfan-player-top-overlay > *,
-    .art-video-player.vfan-player-overlay-pinned .vfan-player-top-overlay > *,
-    .art-video-player .vfan-player-top-overlay.vfan-player-top-overlay-pinned > *,
-    .art-video-player .vfan-player-top-overlay:focus-within > * {
-      pointer-events: auto;
-    }
-    .art-video-player.vfan-mini-window-player .art-top,
-    .art-video-player.vfan-mini-window-player .art-bottom,
-    .art-video-player.vfan-mini-window-player .art-center,
-    .art-video-player.vfan-mini-window-player .art-state,
-    .art-video-player.vfan-mini-window-player .art-notice {
-      display: none !important;
-    }
-  `
-  if (miniWindowMode) art.template.$player.classList.add('vfan-mini-window-player')
-  art.template.$player.appendChild(style)
-}
-
-function buildDebugInfoText(params: DebugInfoParams): string {
-  const {
-    art,
-    rawSrc,
-    displayUrl,
-    isHls,
-    isFlv,
-    isMpegts,
-    isLive,
-    title,
-    sourceType,
-    autoPlay,
-    loop,
-    initialTime,
-    audioTrackUrl,
-    debugLog,
-    autoNextEnabled,
-  } = params
-  const hls = (art as ArtplayerWithHls).hls
-  const video = art.video
-  const sections: string[] = [
-    '=== Vfan TV 调试信息 ===',
-    `时间: ${dayjs().toISOString()}`,
-    `应用版本: ${cachedAppVersion || '-'}`,
-    `页面: ${window.location.hash || window.location.pathname}`,
-    ...(title ? [`标题: ${title}`] : []),
-    '',
-    '--- 环境 ---',
-    `User-Agent: ${navigator.userAgent}`,
-    `HLS 引擎: ${getHlsEngineText(isHls, hls, video)}`,
-    `FLV 引擎: ${getFlvEngineText(isFlv)}`,
-    `MPEG-TS 引擎: ${getMpegtsEngineText(isMpegts)}`,
-    `Artplayer: ${Artplayer.version}`,
-    `HLS.js: ${Hls.version}`,
-    `mpegts.js: ${mpegts.version}`,
-    '',
-    '--- 播放配置 ---',
-    `模式: ${isLive ? '直播' : '点播'}`,
-    `源类型: ${sourceType || (isHls ? 'hls' : isFlv ? 'flv' : isMpegts ? 'mpegts' : 'native')}`,
-    `原始地址: ${rawSrc}`,
-    `最终播放地址: ${displayUrl}`,
-    ...(rawSrc !== displayUrl ? ['地址转换: 是（可能与代理/格式化有关）'] : []),
-    `自动播放: ${autoPlay ? '是' : '否'}`,
-    `循环播放: ${loop ? '开启' : '关闭'}`,
-    `自动续播: ${autoNextEnabled ? '开启' : '关闭'}`,
-    `续播时间点: ${initialTime > 0 ? `${initialTime}s` : '无'}`,
-    `外部音轨: ${audioTrackUrl ? audioTrackUrl : '无'}`,
-    '',
-    '--- 当前状态 ---',
-    `播放状态: ${getPlaybackStateText(art)}`,
-    `就绪状态: ${formatMediaReadyState(video.readyState)}`,
-    `网络状态: ${formatMediaNetworkState(video.networkState)}`,
-    `当前时间: ${formatDebugTime(art.currentTime)}`,
-    ...(Number.isFinite(art.duration) && art.duration > 0 ? [`总时长: ${formatDebugTime(art.duration)}`] : []),
-    `静音: ${art.muted || video.muted ? '是' : '否'}`,
-    `倍速: ${art.playbackRate}x`,
-    `当前源: ${video.currentSrc || art.url || '-'}`,
-    '',
-    '--- 缓冲 / 跳转 ---',
-    `缓冲区间: ${formatTimeRanges(video.buffered)}`,
-    `可跳转区间: ${formatTimeRanges(video.seekable)}`,
-    '',
-    ...(isHls ? ['--- HLS 详情 ---', ...formatHlsDebugLines(hls, isLive), ''] : []),
-    '--- 媒体错误 ---',
-    formatMediaElementError(video) || '无',
-    '',
-    '--- 事件日志 ---',
-    debugLog.format(),
-  ]
-
-  return sections.join('\n')
-}
-
-function getHlsEngineText(isHls: boolean, hls: Hls | undefined, video: HTMLVideoElement): string {
-  if (!isHls) {
-    return '未使用'
-  }
-
-  if (hls) {
-    return 'hls.js'
-  }
-
-  if (video.canPlayType('application/vnd.apple.mpegurl')) {
-    return 'Safari 原生'
-  }
-
-  return '不支持'
-}
-
-function getFlvEngineText(isFlv: boolean): string {
-  if (!isFlv) {
-    return '未使用'
-  }
-
-  return mpegts.isSupported() ? 'mpegts.js' : '不支持'
-}
-
-function getMpegtsEngineText(isMpegts: boolean): string {
-  if (!isMpegts) {
-    return '未使用'
-  }
-
-  return mpegts.isSupported() ? 'mpegts.js' : '不支持'
-}
-
-function getPlaybackStateText(art: Artplayer): string {
-  const video = art.video
-  const flags = [
-    art.playing ? '播放中' : '未播放',
-    video.paused ? '暂停' : '未暂停',
-    video.ended ? '已结束' : null,
-    video.seeking ? '跳转中' : null,
-  ].filter(Boolean)
-
-  return flags.join(' · ')
-}
-
-function formatMediaReadyState(state: number): string {
-  const labels = ['HAVE_NOTHING', 'HAVE_METADATA', 'HAVE_CURRENT_DATA', 'HAVE_FUTURE_DATA', 'HAVE_ENOUGH_DATA']
-  return `${labels[state] ?? 'UNKNOWN'} (${state})`
-}
-
-function formatMediaNetworkState(state: number): string {
-  const labels = ['NETWORK_EMPTY', 'NETWORK_IDLE', 'NETWORK_LOADING', 'NETWORK_NO_SOURCE']
-  return `${labels[state] ?? 'UNKNOWN'} (${state})`
-}
-
-function formatMediaElementError(video: HTMLVideoElement): string | undefined {
-  const error = video.error
-  if (!error) {
-    return undefined
-  }
-
-  const codes = ['', 'MEDIA_ERR_ABORTED', 'MEDIA_ERR_NETWORK', 'MEDIA_ERR_DECODE', 'MEDIA_ERR_SRC_NOT_SUPPORTED']
-  const codeLabel = codes[error.code] ?? `CODE_${error.code}`
-  const message = error.message?.trim()
-  return message ? `${codeLabel} · ${message}` : codeLabel
-}
-
-function getMediaPlaybackFailureReason(video: HTMLVideoElement): string {
-  const error = video.error
-  if (!error) return '浏览器无法加载该媒体资源'
-
-  const reasons = ['', '媒体加载被中断', '媒体资源请求失败', '媒体解码失败', '浏览器不支持该媒体格式']
-  const reason = reasons[error.code] ?? '浏览器无法加载该媒体资源'
-  return error.message?.trim() ? `${reason}：${error.message.trim()}` : reason
-}
-
-function formatUnknownErrorInfo(errorInfo: unknown): string {
-  if (!errorInfo) {
-    return '-'
-  }
-
-  if (errorInfo instanceof Error) {
-    return errorInfo.message
-  }
-
-  if (typeof errorInfo === 'string') {
-    return errorInfo
-  }
-
-  try {
-    return JSON.stringify(errorInfo)
-  } catch {
-    return String(errorInfo)
-  }
-}
-
-function formatTimeRanges(ranges: TimeRanges): string {
-  if (!ranges.length) {
-    return '无'
-  }
-
-  return Array.from({ length: ranges.length }, (_, index) => {
-    const start = ranges.start(index)
-    const end = ranges.end(index)
-    return `${formatDebugTime(start)}-${formatDebugTime(end)}`
-  }).join(', ')
-}
-
-function formatDebugTime(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) {
-    return '-'
-  }
-
-  if (seconds < 3600) {
-    const minutes = Math.floor(seconds / 60)
-    const remain = Math.floor(seconds % 60)
-    const fraction = Math.round((seconds % 1) * 10)
-    return `${String(minutes).padStart(2, '0')}:${String(remain).padStart(2, '0')}.${fraction}`
-  }
-
-  const hours = Math.floor(seconds / 3600)
-  const minutes = Math.floor((seconds % 3600) / 60)
-  const remain = Math.floor(seconds % 60)
-  return `${hours}:${String(minutes).padStart(2, '0')}:${String(remain).padStart(2, '0')}`
-}
-
-function formatHlsErrorBrief(data: ErrorData): string {
-  const parts = [
-    data.fatal ? 'fatal' : 'non-fatal',
-    data.type,
-    data.details,
-    data.url ? `url=${data.url}` : null,
-    data.response?.code ? `http=${data.response.code}` : null,
-    data.response?.text ? `body=${truncateDebugText(data.response.text, 120)}` : null,
-    data.reason ? `reason=${data.reason}` : null,
-    data.error?.message ? `error=${data.error.message}` : null,
-  ].filter(Boolean)
-
-  return parts.join(' · ')
-}
-
-function formatHlsPlaybackFailureReason(data: ErrorData): string {
-  if (data.response?.code) {
-    return `HLS 资源请求失败（HTTP ${data.response.code}）`
-  }
-
-  const labels: Partial<Record<ErrorData['details'], string>> = {
-    manifestLoadError: 'HLS 播放列表加载失败',
-    manifestParsingError: 'HLS 播放列表解析失败',
-    levelLoadError: 'HLS 清晰度列表加载失败',
-    fragLoadError: 'HLS 视频分片加载失败',
-    fragParsingError: 'HLS 视频分片解析失败',
-  }
-  return labels[data.details] ?? `HLS 播放失败（${data.details}）`
-}
-
-function formatHlsDebugLines(hls: Hls | undefined, isLive: boolean): string[] {
-  if (!hls) {
-    return ['未初始化 hls.js 实例']
-  }
-
-  const levels = hls.levels
-    .map((level, index) => {
-      const label = level.name || (level.height ? `${level.height}p` : `level-${index}`)
-      const bitrate = level.bitrate ? `${Math.round(level.bitrate / 1000)}kbps` : 'unknown'
-      return `${index}:${label}@${bitrate}`
-    })
-    .join(', ')
-
-  const lines = [
-    `清单 URL: ${hls.url || '-'}`,
-    `档位 (${hls.levels.length}): ${levels || '无'}`,
-    `当前档位: ${formatHlsLevelLabel(hls)}`,
-    `加载档位: ${hls.loadLevel}`,
-    `下一档位: ${hls.nextLoadLevel}`,
-    `自动档位: ${hls.autoLevelEnabled ? '是' : '否'}`,
-    `音轨数: ${hls.audioTracks.length}`,
-    `带宽估计: ${formatBandwidthEstimate(hls.bandwidthEstimate)}`,
-  ]
-
-  if (isLive) {
-    lines.push(`直播延迟: ${Number.isFinite(hls.latency) ? `${hls.latency.toFixed(2)}s` : '-'}`)
-    lines.push(
-      `直播同步点: ${Number.isFinite(hls.liveSyncPosition) ? formatDebugTime(hls.liveSyncPosition ?? 0) : '-'}`,
-    )
-  }
-
-  return lines
-}
-
-function formatHlsLevelLabel(hls: Hls): string {
-  const currentLevel = hls.currentLevel
-  if (currentLevel < 0) {
-    return '自动 (-1)'
-  }
-
-  const level = hls.levels[currentLevel]
-  if (!level) {
-    return String(currentLevel)
-  }
-
-  const label = level.name || (level.height ? `${level.height}p` : `level-${currentLevel}`)
-  return `${label} (${currentLevel})`
-}
-
-function truncateDebugText(value: string, maxLength: number): string {
-  const normalized = value.replace(/\s+/g, ' ').trim()
-  if (normalized.length <= maxLength) {
-    return normalized
-  }
-
-  return `${normalized.slice(0, maxLength)}…`
-}
-
-function getHlsQualityLabel(level: { name?: string; height?: number } | undefined, video?: HTMLVideoElement): string {
-  const levelName = level?.name?.trim()
-  if (levelName) {
-    return levelName
-  }
-
-  const levelHeight = level?.height ?? 0
-  if (levelHeight > 0) {
-    return `${levelHeight}P`
-  }
-
-  const videoHeight = video?.videoHeight ?? 0
-  if (videoHeight > 0) {
-    return `${videoHeight}P`
-  }
-
-  return '检测中'
-}
-
-function getQualityText(art: Artplayer, isHls: boolean): string {
-  if (isHls) {
-    const hls = (art as ArtplayerWithHls).hls
-    if (!hls) {
-      return '-'
-    }
-
-    if (hls.currentLevel < 0) {
-      const videoHeight = art.video.videoHeight
-      return videoHeight > 0 ? `自动 · ${videoHeight}P` : '自动'
-    }
-
-    const level = hls.levels[hls.currentLevel]
-    return getHlsQualityLabel(level, art.video)
-  }
-
-  const height = art.video.videoHeight
-  return height > 0 ? `${height}P` : '-'
-}
-
-function formatBandwidthEstimate(bitsPerSecond: number | undefined): string {
-  if (!bitsPerSecond || !Number.isFinite(bitsPerSecond) || bitsPerSecond <= 0) {
-    return '检测中'
-  }
-
-  if (bitsPerSecond >= 1_000_000) {
-    return `${(bitsPerSecond / 1_000_000).toFixed(2)} Mbps`
-  }
-
-  return `${Math.round(bitsPerSecond / 1000)} Kbps`
-}
-
-function reloadPlayback(art: Artplayer): void {
-  const currentTime = art.currentTime
-  void art
-    .switchUrl(art.url)
-    .then(() => {
-      if (currentTime > 0 && Number.isFinite(art.duration) && currentTime < art.duration) {
-        art.currentTime = currentTime
-      }
-      return art.play()
-    })
-    .catch((error: unknown) => {
-      art.notice.show = error instanceof Error ? error.message : '刷新失败'
-    })
-}
-
-function localizeInfoPanel(
-  art: Artplayer,
-  playbackUrlRef: MutableRefObject<string>,
-  resolvedUrlRef: MutableRefObject<string>,
-  streamType: MediaStreamType,
-  isLive: boolean,
-  mpegtsRef: MutableRefObject<MpegtsPlayer | null>,
-): void {
-  const { $info, $infoClose, $infoPanel } = art.template
-  injectStatsStyles(art)
-  $info.classList.add('vfan-stats-overlay')
-  $info.style.setProperty('background', 'transparent', 'important')
-  $info.style.setProperty('background-color', 'transparent', 'important')
-  $info.style.setProperty('border', '0', 'important')
-  $info.style.setProperty('box-shadow', 'none', 'important')
-  $info.style.setProperty('backdrop-filter', 'none', 'important')
-  $info.style.setProperty('padding', '16px', 'important')
-  $infoClose.textContent = '×'
-  $infoPanel.className = 'vfan-stats-panel'
-  $infoPanel.innerHTML = `
-    <div class="vfan-stats-heading">统计信息</div>
-    <div class="vfan-stats-grid">
-      <div class="vfan-stats-heading">通用信息</div>
-      <div class="vfan-stats-row"><span class="vfan-stats-label">播放器</span><span class="vfan-stats-value" data-vfan-info="player"></span></div>
-      <div class="vfan-stats-row"><span class="vfan-stats-label">流类型</span><span class="vfan-stats-value" data-vfan-info="stream-type"></span></div>
-      <div class="vfan-stats-row"><span class="vfan-stats-label">媒体信息</span><span class="vfan-stats-value" data-vfan-info="mime"></span></div>
-      <div class="vfan-stats-row"><span class="vfan-stats-label">当前 / 最优</span><span class="vfan-stats-value" data-vfan-info="resolution"></span></div>
-      <div class="vfan-stats-row"><span class="vfan-stats-label">视口 / 帧</span><span class="vfan-stats-value" data-vfan-info="viewport"></span></div>
-      <div class="vfan-stats-row"><span class="vfan-stats-label">音量</span><span class="vfan-stats-value" data-vfan-info="volume"></span></div>
-      <div class="vfan-stats-row"><span class="vfan-stats-label">播放进度</span><span class="vfan-stats-value" data-vfan-info="progress"></span></div>
-      <div class="vfan-stats-row vfan-stats-row-meter"><span class="vfan-stats-label">缓冲健康</span><span class="vfan-stats-value"><span data-vfan-info="buffer-health"></span><span class="vfan-stats-meter" data-vfan-info="buffer-meter"><span></span></span></span></div>
-      <div class="vfan-stats-row"><span class="vfan-stats-label">丢帧</span><span class="vfan-stats-value" data-vfan-info="dropped-frames"></span></div>
-      <div class="vfan-stats-row vfan-stats-row-url"><span class="vfan-stats-label">视频地址</span><span class="vfan-stats-value vfan-stats-value-copyable" data-vfan-info="url" data-vfan-copy-label="视频地址" title="点击复制"></span></div>
-      <div class="vfan-stats-row vfan-stats-row-url"><span class="vfan-stats-label">最终播放地址</span><span class="vfan-stats-value vfan-stats-value-copyable" data-vfan-info="resolved-url" data-vfan-copy-label="最终播放地址" title="点击复制"></span></div>
-      ${getProtocolStatsMarkup(streamType)}
-    </div>
-  `
-  $infoPanel.appendChild($infoClose)
-
-  bindCopyableUrlClicks($infoPanel, art)
-
-  const refresh = (): void => {
-    const isHls = streamType === 'hls'
-    const hls = (art as ArtplayerWithHls).hls
-    const mpegtsPlayer = mpegtsRef.current
-    const bufferHealth = getBufferHealth(art)
-    const downloadSpeed = isHls ? hls?.bandwidthEstimate : undefined
-
-    setInfoText($infoPanel, 'stream-type', getStreamTypeText(streamType))
-    setInfoText($infoPanel, 'player', getPlayerEngineText(streamType))
-    setInfoText($infoPanel, 'mime', getMimeTypeText(art, streamType, hls, mpegtsPlayer))
-    setInfoText($infoPanel, 'resolution', getResolutionStatsText(art, isHls, hls))
-    setInfoText($infoPanel, 'viewport', getViewportStatsText(art))
-    setInfoText($infoPanel, 'volume', `${Math.round(art.volume * 100)}%`)
-    setInfoText($infoPanel, 'progress', getProgressStatsText(art, isLive))
-    setInfoText($infoPanel, 'buffer-health', bufferHealth.text)
-    setInfoMeter($infoPanel, 'buffer-meter', getBufferMeterPercent(bufferHealth.seconds, art.duration, isLive))
-    setInfoText($infoPanel, 'dropped-frames', getDroppedFramesText(art.video))
-    setInfoTextWithTitle($infoPanel, 'url', playbackUrlRef.current)
-    setInfoTextWithTitle($infoPanel, 'resolved-url', resolvedUrlRef.current)
-    if (isHls) {
-      setInfoText($infoPanel, 'quality', getQualityText(art, true))
-      setInfoText($infoPanel, 'download-speed', formatBandwidthEstimate(downloadSpeed))
-      setInfoMeter($infoPanel, 'download-meter', getBitrateMeterPercent(downloadSpeed))
-      setInfoText($infoPanel, 'track-count', `${hls?.levels.length ?? 0} 档 · ${hls?.audioTracks.length ?? 0} 音轨`)
-    }
-    if (streamType === 'flv' || streamType === 'mpegts') {
-      const stats = getMpegtsStatistics(mpegtsPlayer)
-      const mediaInfo = mpegtsPlayer?.mediaInfo
-      setInfoText($infoPanel, 'download-speed', formatMpegtsSpeed(stats?.speed))
-      setInfoMeter($infoPanel, 'download-meter', getMpegtsSpeedMeterPercent(stats?.speed))
-      setInfoText($infoPanel, 'loader', typeof stats?.loaderType === 'string' ? stats.loaderType : '-')
-      setInfoText($infoPanel, 'segments', formatMpegtsSegments(stats))
-      setInfoText($infoPanel, 'codec', formatMpegtsMediaInfo(mediaInfo))
-    }
-    if (streamType === 'native') {
-      setInfoText($infoPanel, 'buffered-ranges', formatTimeRanges(art.video.buffered))
-    }
-  }
-
-  refresh()
-  const timer = window.setInterval(refresh, 1000)
-  art.on('destroy', () => window.clearInterval(timer))
-}
-
-function injectStatsStyles(art: Artplayer): void {
-  if (art.template.$player.querySelector('[data-vfan-stats-style]')) {
-    return
-  }
-
-  const style = document.createElement('style')
-  style.dataset.vfanStatsStyle = 'true'
-  style.textContent = `
-    .art-video-player .vfan-stats-overlay {
-      box-sizing: border-box !important;
-      padding: 16px !important;
-      background: transparent !important;
-      border: 0 !important;
-      box-shadow: none !important;
-      backdrop-filter: none !important;
-      pointer-events: none;
-    }
-    .vfan-stats-overlay .vfan-stats-panel {
-      position: relative;
-      width: min(480px, calc(100vw - 32px));
-      max-height: calc(100vh - 48px);
-      overflow: auto;
-      background: rgba(24, 24, 27, 0.98);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 16px;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.55);
-      backdrop-filter: blur(4px);
-      pointer-events: auto;
-    }
-    .vfan-stats-panel {
-      padding: 14px 16px 16px;
-      color: rgba(255, 255, 255, 0.92);
-      font-size: 14px;
-      line-height: 1.5;
-    }
-    .vfan-stats-heading {
-      margin: 0 0 12px;
-      color: rgba(255, 255, 255, 0.96);
-      font-size: 16px;
-      font-weight: 600;
-    }
-    .vfan-stats-panel > .vfan-stats-heading {
-      padding-bottom: 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    .vfan-stats-grid {
-      display: grid;
-      gap: 8px;
-    }
-    .vfan-stats-grid .vfan-stats-heading {
-      margin: 12px 0 1px;
-      color: rgba(255, 255, 255, 0.72);
-      font-size: 12px;
-      font-weight: 600;
-      letter-spacing: 0.08em;
-    }
-    .vfan-stats-grid .vfan-stats-heading:first-child {
-      margin-top: 0;
-    }
-    .vfan-stats-grid .vfan-stats-section-heading {
-      margin-top: 10px;
-      padding-top: 14px;
-      border-top: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    .vfan-stats-row {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr);
-      gap: 12px;
-      align-items: start;
-    }
-    .vfan-stats-row-url {
-      align-items: start;
-    }
-    .vfan-stats-value-copyable {
-      cursor: pointer;
-      color: rgba(147, 197, 253, 0.95);
-      text-decoration: underline;
-      text-decoration-color: rgba(147, 197, 253, 0.35);
-      text-underline-offset: 2px;
-      transition: color 0.15s ease, text-decoration-color 0.15s ease;
-    }
-    .vfan-stats-value-copyable:hover {
-      color: rgba(191, 219, 254, 1);
-      text-decoration-color: rgba(191, 219, 254, 0.7);
-    }
-    .vfan-stats-label {
-      color: rgba(255, 255, 255, 0.62);
-      text-align: left;
-      white-space: nowrap;
-    }
-    .vfan-stats-value {
-      min-width: 0;
-      word-break: break-all;
-      text-align: right;
-    }
-    .vfan-stats-row-meter .vfan-stats-value {
-      display: grid;
-      gap: 4px;
-    }
-    .vfan-stats-meter {
-      display: block;
-      height: 5px;
-      overflow: hidden;
-      border-radius: 999px;
-      background: rgba(255, 255, 255, 0.12);
-    }
-    .vfan-stats-meter > span {
-      display: block;
-      height: 100%;
-      border-radius: inherit;
-      transition: width 0.35s ease, background 0.35s ease;
-    }
-    .vfan-stats-overlay .art-info-close {
-      position: absolute;
-      top: 12px;
-      right: 12px;
-      width: 28px;
-      height: 28px;
-      font-size: 18px;
-      line-height: 28px;
-    }
-    .vfan-copy-feedback {
-      position: absolute;
-      top: 16px;
-      right: 16px;
-      z-index: 100;
-      padding: 9px 12px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 10px;
-      background: rgba(24, 24, 27, 0.95);
-      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.35);
-      color: rgba(255, 255, 255, 0.95);
-      font-size: 14px;
-      opacity: 0;
-      pointer-events: none;
-      transform: translateY(-6px);
-      transition: opacity 0.15s ease, transform 0.15s ease;
-    }
-    .vfan-copy-feedback.is-visible {
-      opacity: 1;
-      transform: translateY(0);
-    }
-    .art-video-player .art-contextmenus {
-      padding: 4px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 12px;
-      background: rgba(24, 24, 27, 0.98) !important;
-      box-shadow: 0 18px 36px rgba(0, 0, 0, 0.42);
-      backdrop-filter: blur(4px);
-      font-size: 14px;
-    }
-    .art-video-player .art-contextmenus .art-contextmenu {
-      align-items: center;
-      min-height: 40px;
-      padding: 0 10px;
-      border: 0;
-      border-radius: 8px;
-      color: rgba(255, 255, 255, 0.92);
-      transition: background-color 0.15s ease;
-    }
-    .art-video-player .art-contextmenus .art-contextmenu:hover {
-      background-color: rgba(255, 255, 255, 0.1);
-    }
-  `
-  art.template.$player.appendChild(style)
-}
-
-function getProtocolStatsMarkup(streamType: MediaStreamType): string {
-  if (streamType === 'hls') {
-    return `
-      <div class="vfan-stats-heading vfan-stats-section-heading">HLS 详情</div>
-      <div class="vfan-stats-row"><span class="vfan-stats-label">清晰度</span><span class="vfan-stats-value" data-vfan-info="quality"></span></div>
-      <div class="vfan-stats-row"><span class="vfan-stats-label">档位 / 音轨</span><span class="vfan-stats-value" data-vfan-info="track-count"></span></div>
-      <div class="vfan-stats-row vfan-stats-row-meter"><span class="vfan-stats-label">带宽预估</span><span class="vfan-stats-value"><span data-vfan-info="download-speed"></span><span class="vfan-stats-meter" data-vfan-info="download-meter"><span></span></span></span></div>
-    `
-  }
-  if (streamType === 'flv' || streamType === 'mpegts') {
-    return `
-      <div class="vfan-stats-heading vfan-stats-section-heading">${streamType === 'flv' ? 'FLV' : 'MPEG-TS'} 详情</div>
-      <div class="vfan-stats-row vfan-stats-row-meter"><span class="vfan-stats-label">传输速度</span><span class="vfan-stats-value"><span data-vfan-info="download-speed"></span><span class="vfan-stats-meter" data-vfan-info="download-meter"><span></span></span></span></div>
-      <div class="vfan-stats-row"><span class="vfan-stats-label">加载器</span><span class="vfan-stats-value" data-vfan-info="loader"></span></div>
-      <div class="vfan-stats-row"><span class="vfan-stats-label">分段进度</span><span class="vfan-stats-value" data-vfan-info="segments"></span></div>
-      <div class="vfan-stats-row"><span class="vfan-stats-label">音视频信息</span><span class="vfan-stats-value" data-vfan-info="codec"></span></div>
-    `
-  }
-  return `
-    <div class="vfan-stats-heading vfan-stats-section-heading">原生媒体详情</div>
-    <div class="vfan-stats-row"><span class="vfan-stats-label">缓冲区间</span><span class="vfan-stats-value" data-vfan-info="buffered-ranges"></span></div>
-  `
-}
-
-function getStreamTypeText(streamType: MediaStreamType): string {
-  return { hls: 'HLS / M3U8', flv: 'FLV', mpegts: 'MPEG-TS', native: '原生直链' }[streamType]
-}
-
-function getPlayerEngineText(streamType: MediaStreamType): string {
-  const engine =
-    streamType === 'hls' ? 'HLS.js' : streamType === 'flv' || streamType === 'mpegts' ? 'mpegts.js' : '浏览器原生'
-  return `Artplayer ${Artplayer.version} · ${engine}`
-}
-
-function getMimeTypeText(
-  art: Artplayer,
-  streamType: MediaStreamType,
-  hls?: Hls,
-  mpegtsPlayer?: MpegtsPlayer | null,
-): string {
-  if (streamType === 'hls' && hls?.levels?.length) {
-    const level = hls.levels[Math.max(0, hls.currentLevel)] ?? hls.levels[0]
-    const codec = level.codecSet || level.videoCodec || level.attrs?.CODECS
-    if (codec) {
-      return `application/x-mpegURL · ${codec}`
-    }
-    return 'application/x-mpegURL'
-  }
-
-  if (streamType === 'flv' || streamType === 'mpegts') {
-    return formatMpegtsMediaInfo(mpegtsPlayer?.mediaInfo)
-  }
-
-  return art.video.currentSrc ? '浏览器原生媒体' : '-'
-}
-
-function formatMpegtsSpeed(speed: unknown): string {
-  return typeof speed === 'number' && Number.isFinite(speed) && speed > 0 ? `${speed.toFixed(1)} KB/s` : '检测中'
-}
-
-function getMpegtsSpeedMeterPercent(speed: unknown): number {
-  return typeof speed === 'number' && Number.isFinite(speed) ? Math.min(100, Math.round((speed / 1_250) * 100)) : 0
-}
-
-function getMpegtsStatistics(
-  player: MpegtsPlayer | null,
-): { speed?: unknown; loaderType?: unknown; currentSegmentIndex?: unknown; totalSegmentCount?: unknown } | undefined {
-  if (!player?.statisticsInfo || player.statisticsInfo.playerType !== 'MSEPlayer') return undefined
-  return player.statisticsInfo
-}
-
-function formatMpegtsSegments(
-  stats: { currentSegmentIndex?: unknown; totalSegmentCount?: unknown } | undefined,
-): string {
-  const current = stats?.currentSegmentIndex
-  const total = stats?.totalSegmentCount
-  return typeof current === 'number' && typeof total === 'number' && total > 0 ? `${current + 1} / ${total}` : '直播流'
-}
-
-function formatMpegtsMediaInfo(
-  mediaInfo:
-    | {
-        mimeType?: unknown
-        videoCodec?: unknown
-        audioCodec?: unknown
-        videoDataRate?: unknown
-        audioDataRate?: unknown
-      }
-    | undefined,
-): string {
-  if (!mediaInfo) return '-'
-  const codecs = [mediaInfo.videoCodec, mediaInfo.audioCodec].filter(
-    (value): value is string => typeof value === 'string',
-  )
-  const rates = [
-    typeof mediaInfo.videoDataRate === 'number' ? `视频 ${formatBitsPerSecond(mediaInfo.videoDataRate)}` : undefined,
-    typeof mediaInfo.audioDataRate === 'number' ? `音频 ${formatBitsPerSecond(mediaInfo.audioDataRate)}` : undefined,
-  ].filter(Boolean)
-  return [mediaInfo.mimeType, codecs.join(' / '), rates.join(' · ')].filter(Boolean).join(' · ') || '-'
-}
-
-function formatBitsPerSecond(bitsPerSecond: number): string {
-  return bitsPerSecond >= 1_000_000
-    ? `${(bitsPerSecond / 1_000_000).toFixed(2)} Mbps`
-    : `${Math.round(bitsPerSecond / 1_000)} Kbps`
-}
-
-function getResolutionStatsText(art: Artplayer, isHls: boolean, hls?: Hls): string {
-  const currentWidth = art.video.videoWidth
-  const currentHeight = art.video.videoHeight
-  const optimalHeight = isHls ? getOptimalHlsHeight(hls) : currentHeight
-  const fps = getVideoFrameRate(art)
-
-  if (currentWidth <= 0 || currentHeight <= 0) {
-    return optimalHeight > 0 ? `- / ${optimalHeight}P` : '-'
-  }
-
-  const fpsLabel = fps ? `@${fps.toFixed(3)}` : ''
-  const currentLabel = `${currentWidth} x ${currentHeight}${fpsLabel}`
-  const optimalLabel = optimalHeight > 0 ? `${optimalHeight}P` : `${currentWidth} x ${currentHeight}${fpsLabel}`
-  return `${currentLabel} / ${optimalLabel}`
-}
-
-function getViewportStatsText(art: Artplayer): string {
-  const player = art.template.$player
-  const dpr = window.devicePixelRatio || 1
-  const quality = getVideoPlaybackQuality(art.video)
-  const dropped = quality?.droppedVideoFrames ?? 0
-  const total = quality?.totalVideoFrames ?? 0
-  return `${player.clientWidth} x ${player.clientHeight}*${dpr.toFixed(2)} / ${dropped} dropped of ${total}`
-}
-
-function getProgressStatsText(art: Artplayer, isLive: boolean): string {
-  const current = formatInfoTime(art.currentTime)
-  if (isLive || !Number.isFinite(art.duration) || art.duration <= 0) {
-    return `${current} / LIVE`
-  }
-
-  return `${current} / ${formatInfoTime(art.duration)}`
-}
-
-function getBufferHealth(art: Artplayer): { seconds: number; text: string } {
-  const video = art.video
-  if (!video.buffered.length) {
-    return { seconds: 0, text: '0.00 s' }
-  }
-
-  const ahead = Math.max(0, video.buffered.end(video.buffered.length - 1) - video.currentTime)
-  return { seconds: ahead, text: `${ahead.toFixed(2)} s` }
-}
-
-function getBitrateMeterPercent(bitsPerSecond: number | undefined): number {
-  if (!bitsPerSecond || !Number.isFinite(bitsPerSecond) || bitsPerSecond <= 0) {
-    return 0
-  }
-
-  return Math.min(100, Math.round((bitsPerSecond / 10_000_000) * 100))
-}
-
-function getBufferMeterPercent(bufferSeconds: number, duration: number, isLive: boolean): number {
-  const maxSeconds = isLive || !Number.isFinite(duration) || duration <= 0 ? 30 : Math.min(duration, 120)
-  return Math.min(100, Math.round((bufferSeconds / maxSeconds) * 100))
-}
-
-function getOptimalHlsHeight(hls?: Hls): number {
-  if (!hls?.levels?.length) {
-    return 0
-  }
-
-  return hls.levels.reduce((max, level) => Math.max(max, level.height || 0), 0)
-}
-
-function getVideoFrameRate(art: Artplayer): number | undefined {
-  const quality = getVideoPlaybackQuality(art.video)
-  if (quality && 'totalVideoFrames' in quality && art.currentTime > 0 && quality.totalVideoFrames) {
-    return quality.totalVideoFrames / art.currentTime
-  }
-
-  return undefined
-}
-
-function getDroppedFramesText(video: HTMLVideoElement): string {
-  const quality = getVideoPlaybackQuality(video)
-  if (!quality) {
-    return '-'
-  }
-
-  return `${quality.droppedVideoFrames ?? 0} / ${quality.totalVideoFrames ?? 0}`
-}
-
-function getVideoPlaybackQuality(video: HTMLVideoElement): VideoPlaybackQualityInfo | undefined {
-  const getter = (video as HTMLVideoElement & { getVideoPlaybackQuality?: () => VideoPlaybackQualityInfo })
-    .getVideoPlaybackQuality
-  return getter?.call(video)
-}
-
-function shortenText(value: string, maxLength: number): string {
-  if (value.length <= maxLength) {
-    return value
-  }
-
-  const head = Math.max(18, Math.floor(maxLength * 0.45))
-  const tail = Math.max(12, maxLength - head - 1)
-  return `${value.slice(0, head)}…${value.slice(-tail)}`
-}
-
-function setInfoText(panel: HTMLElement, name: string, value: string): void {
-  const element = panel.querySelector(`[data-vfan-info="${name}"]`)
-  if (element && element.textContent !== value) {
-    element.textContent = value
-  }
-}
-
-function setInfoTextWithTitle(panel: HTMLElement, name: string, value: string): void {
-  const element = panel.querySelector(`[data-vfan-info="${name}"]`)
-  if (!(element instanceof HTMLElement)) {
-    return
-  }
-  const shortValue = shortenText(value, 56)
-  if (element.textContent !== shortValue) {
-    element.textContent = shortValue
-  }
-  if (element.dataset.vfanCopy !== value) {
-    element.dataset.vfanCopy = value
-  }
-  const nextTitle = `点击复制：${value}`
-  if (element.title !== nextTitle) {
-    element.title = nextTitle
-  }
-}
-
-function bindCopyableUrlClicks(panel: HTMLElement, art: Artplayer): void {
-  for (const element of panel.querySelectorAll<HTMLElement>('.vfan-stats-value-copyable')) {
-    element.addEventListener('click', () => {
-      const value = element.dataset.vfanCopy?.trim()
-      const label = element.dataset.vfanCopyLabel || '链接'
-      if (!value || value === '检测中…') {
-        return
-      }
-      void navigator.clipboard.writeText(value).then(
-        () => {
-          showCopyFeedback(art, `${label}已复制`)
-        },
-        () => {
-          showCopyFeedback(art, '复制失败')
-        },
-      )
-    })
-  }
-}
-
-function showCopyFeedback(art: Artplayer, message: string): void {
-  const player = art.template.$player
-  let feedback = player.querySelector<HTMLElement>('[data-vfan-copy-feedback]')
-  if (!feedback) {
-    feedback = document.createElement('div')
-    feedback.className = 'vfan-copy-feedback'
-    feedback.dataset.vfanCopyFeedback = 'true'
-    player.appendChild(feedback)
-  }
-
-  const previousTimer = Number(feedback.dataset.vfanCopyFeedbackTimer)
-  if (previousTimer) window.clearTimeout(previousTimer)
-  feedback.textContent = message
-  feedback.classList.remove('is-visible')
-  window.requestAnimationFrame(() => feedback?.classList.add('is-visible'))
-  feedback.dataset.vfanCopyFeedbackTimer = String(
-    window.setTimeout(() => feedback?.classList.remove('is-visible'), 1800),
-  )
-}
-
-function getHealthMeterBackground(percent: number): string {
-  const clamped = clamp(percent, 0, 100)
-  const hue = (clamped / 100) * 120
-
-  return `linear-gradient(90deg, hsl(${hue} 68% 42%), hsl(${hue} 78% 54%))`
-}
-
-function setInfoMeter(panel: HTMLElement, name: string, percent: number): void {
-  const element = panel.querySelector(`[data-vfan-info="${name}"] > span`)
-  if (element instanceof HTMLElement) {
-    const nextWidth = `${percent}%`
-    const nextBackground = getHealthMeterBackground(percent)
-
-    if (element.style.width !== nextWidth) {
-      element.style.width = nextWidth
-    }
-
-    if (element.style.background !== nextBackground) {
-      element.style.background = nextBackground
-    }
-  }
-}
-
-function formatInfoTime(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) {
-    return '00:00'
-  }
-
-  const total = Math.floor(seconds)
-  const hours = Math.floor(total / 3600)
-  const minutes = Math.floor((total % 3600) / 60)
-  const secs = total % 60
-  const pad = (value: number): string => String(value).padStart(2, '0')
-  return hours > 0 ? `${pad(hours)}:${pad(minutes)}:${pad(secs)}` : `${pad(minutes)}:${pad(secs)}`
-}
-
-/** 读取启动前已加载的循环播放偏好 */
-function readLoopEnabled(): boolean {
-  return useUiPreferencesStore.getState().player.loop
-}
-
-/** 读取自动续集偏好 */
-function readAutoNextEnabled(): boolean {
-  return useUiPreferencesStore.getState().player.autoNext
-}
-
-const PLAYBACK_RATE_OPTIONS = [0.5, 1, 1.25, 1.5, 2] as const
-const SEEK_STEP_OPTIONS = [3, 5, 10] as const
-
-function createPlaybackRateSliderInput(
-  art: Artplayer,
-  current: number,
-  setRate: (rate: number) => void,
-): CustomSliderInput {
-  return {
-    title: '播放速度',
-    initialValue: current,
-    min: 0.25,
-    max: 3,
-    step: 0.05,
-    suffix: '倍',
-    presets: PLAYBACK_RATE_OPTIONS,
-    normalPreset: 1,
-    formatValue: (rate) => `${rate.toFixed(2)}倍`,
-    onChange: (rate) => {
-      setRate(rate)
-      art.playbackRate = rate
-      art.notice.show = `播放速度 ${rate}倍`
-    },
-  }
-}
-
-function createSeekStepSliderInput(
-  art: Artplayer,
-  current: number,
-  setStep: (step: number) => void,
-): CustomSliderInput {
-  return {
-    title: '跳转步长',
-    initialValue: current,
-    min: 1,
-    max: 30,
-    step: 0.5,
-    suffix: '秒',
-    presets: SEEK_STEP_OPTIONS,
-    normalPreset: 5,
-    formatValue: (step) => `${formatSliderNumber(step)} 秒`,
-    onChange: (step) => {
-      setStep(step)
-      art.notice.show = `跳转步长 ${step} 秒`
-    },
-  }
-}
-
-function nextFromList<T extends string>(current: T, values: readonly T[]): T {
-  return values[(values.indexOf(current) + 1) % values.length] ?? values[0]
-}
-
-/** 读取倍速偏好 */
-function readPlaybackRate(): number {
-  return useUiPreferencesStore.getState().player.playbackRate
-}
-
-/** 读取快进步长偏好 */
-function readSeekStep(): number {
-  return useUiPreferencesStore.getState().player.seekStep
-}
-
-function formatSliderNumber(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(1)
-}
-
-function isTextInputTarget(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement
-  )
-}
-
-function normalizePlaybackUrlForDisplay(src: string): string {
-  return src
-}
-
-function createHlsConfig(isLive: boolean): ConstructorParameters<typeof Hls>[0] {
-  return {
-    startLevel: -1,
-    manifestLoadingMaxRetry: 6,
-    manifestLoadingRetryDelay: 1000,
-    manifestLoadingMaxRetryTimeout: 64_000,
-    levelLoadingMaxRetry: 4,
-    levelLoadingRetryDelay: 1000,
-    fragLoadingMaxRetry: 6,
-    fragLoadingMaxRetryTimeout: 64_000,
-    fragLoadingRetryDelay: 1000,
-    ...(isLive
-      ? {
-          lowLatencyMode: false,
-          liveSyncDurationCount: 4,
-          liveMaxLatencyDurationCount: 10,
-          maxBufferLength: 30,
-          maxMaxBufferLength: 60,
-          backBufferLength: 30,
-        }
-      : {}),
-  }
-}
-
-function destroyHls(hlsRef: MutableRefObject<Hls | null>): void {
-  hlsRef.current?.destroy()
-  hlsRef.current = null
-}
-
-function destroyMpegts(mpegtsRef: MutableRefObject<MpegtsPlayer | null>): void {
-  if (!mpegtsRef.current) {
-    return
-  }
-
-  try {
-    mpegtsRef.current.unload()
-    mpegtsRef.current.detachMediaElement()
-  } catch {
-    // Ignore teardown errors from partially initialized FLV players.
-  }
-
-  mpegtsRef.current.destroy()
-  mpegtsRef.current = null
 }

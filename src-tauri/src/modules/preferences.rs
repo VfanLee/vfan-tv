@@ -1,3 +1,4 @@
+use crate::infrastructure::diagnostics::command_error;
 use serde::Serialize;
 use serde_json::Value;
 use sqlx::{FromRow, SqlitePool};
@@ -27,10 +28,11 @@ pub async fn list_ui_preferences(
     .bind(scope)
     .fetch_all(db.inner())
     .await
-    .map_err(|_| "读取偏好失败".to_owned())?;
+    .map_err(|error| command_error("读取偏好失败", &error))?;
     rows.into_iter()
         .map(|row| {
-            let value = serde_json::from_str(&row.value).map_err(|_| "偏好数据损坏".to_owned())?;
+            let value = serde_json::from_str(&row.value)
+                .map_err(|error| command_error("偏好数据损坏", &error))?;
             Ok(Preference {
                 key: row.key,
                 value,
@@ -39,9 +41,33 @@ pub async fn list_ui_preferences(
         .collect()
 }
 
+/// 完整界面快照中的偏好项
+#[derive(Serialize, FromRow)]
+pub struct ScopedPreference {
+    scope: String,
+    key: String,
+    #[sqlx(json)]
+    value: Value,
+}
+
+/// 在单次查询中读取界面使用的全部作用域
+async fn read_snapshot(db: &SqlitePool) -> Result<Vec<ScopedPreference>, String> {
+    sqlx::query_as("SELECT scope,key,value FROM ui_preferences WHERE scope IN ('appearance','player','iptv','catalog','iptv-selection') ORDER BY scope,key")
+        .fetch_all(db).await.map_err(|error| command_error("读取界面偏好失败", &error))
+}
+
+/// 返回同一数据库快照中的界面偏好
+#[tauri::command]
+pub async fn get_ui_preferences_snapshot(
+    db: State<'_, SqlitePool>,
+) -> Result<Vec<ScopedPreference>, String> {
+    read_snapshot(&db).await
+}
+
 /// 校验并保存界面偏好，提交后通知其他窗口刷新
 #[tauri::command]
 pub async fn set_ui_preference(
+    window: tauri::WebviewWindow,
     app: tauri::AppHandle,
     db: State<'_, SqlitePool>,
     scope: String,
@@ -58,7 +84,10 @@ pub async fn set_ui_preference(
     validate_preference(&scope, &key, &value)?;
     save(db.inner(), &scope, &key, &value).await?;
     // 数据已提交，通知失败不能把成功写入报告为失败
-    if let Err(error) = app.emit("ui-preferences-changed", ()) {
+    if let Err(error) = app.emit(
+        "ui-preferences-changed",
+        serde_json::json!({"scope":scope,"origin":window.label()}),
+    ) {
         log::warn!("偏好同步通知失败: {error}");
     }
     Ok(())
@@ -163,9 +192,9 @@ fn validate_preference(scope: &str, key: &str, value: &Value) -> Result<(), Stri
 
 /// 原子更新单个偏好，保留其他窗口修改的字段
 async fn save(db: &SqlitePool, scope: &str, key: &str, value: &Value) -> Result<(), String> {
-    sqlx::query("INSERT INTO ui_preferences (scope, key, value, updated_at) VALUES (?, ?, ?, CAST(unixepoch('subsec') * 1000 AS INTEGER)) ON CONFLICT(scope, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at")
+    sqlx::query("INSERT INTO ui_preferences (scope, key, value) VALUES (?, ?, ?) ON CONFLICT(scope, key) DO UPDATE SET value = excluded.value")
         .bind(scope).bind(key).bind(value.to_string())
-        .execute(db).await.map_err(|_| "保存偏好失败".to_owned())?;
+        .execute(db).await.map_err(|error| command_error("保存偏好失败", &error))?;
     Ok(())
 }
 
@@ -173,6 +202,51 @@ async fn save(db: &SqlitePool, scope: &str, key: &str, value: &Value) -> Result<
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// 快照包含界面需要的全部作用域，隔离内部订阅设置和电台偏好
+    #[tokio::test]
+    async fn snapshot_contains_only_ui_scopes() {
+        let db = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&db).await.unwrap();
+        save(&db, "appearance", "theme", &json!("dark"))
+            .await
+            .unwrap();
+        save(&db, "player", "playbackRate", &json!(1.5))
+            .await
+            .unwrap();
+        save(&db, "iptv", "selectedSource", &json!("live"))
+            .await
+            .unwrap();
+        save(&db, "catalog", "selectedSource", &json!("vod"))
+            .await
+            .unwrap();
+        save(
+            &db,
+            "iptv-selection",
+            "live",
+            &json!({"channelId":"a","streamId":"b","expandedGroups":[]}),
+        )
+        .await
+        .unwrap();
+        save(&db, "radio", "volume", &json!(0.5)).await.unwrap();
+        save(&db, "subscription", "activeId", &json!("sub"))
+            .await
+            .unwrap();
+        let snapshot = read_snapshot(&db).await.unwrap();
+        assert_eq!(
+            snapshot
+                .iter()
+                .map(|item| item.scope.as_str())
+                .collect::<Vec<_>>(),
+            vec!["appearance", "catalog", "iptv", "iptv-selection", "player"]
+        );
+        assert_eq!(snapshot[4].value, json!(1.5));
+        db.close().await;
+    }
 
     /// 拒绝未知偏好、非法主题和错误类型
     #[test]

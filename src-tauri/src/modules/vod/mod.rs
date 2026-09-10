@@ -7,7 +7,10 @@ use futures_util::{stream, StreamExt};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sqlx::SqlitePool;
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 use tauri::{Emitter, State};
 use tokio_util::sync::CancellationToken;
 
@@ -65,8 +68,8 @@ pub async fn get_vod_catalog_page(
                 .iter_mut()
                 .find(|item| item["vodId"] == detail["vodId"])
             {
-                if let (Some(item), Some(detail)) = (item.as_object_mut(), detail.as_object()) {
-                    item.extend(detail.clone());
+                if let (Some(item), Value::Object(detail)) = (item.as_object_mut(), detail) {
+                    item.extend(detail);
                 }
             }
         }
@@ -134,33 +137,87 @@ pub async fn search_vod(
     }
     let id = search_id.clone();
     tauri::async_runtime::spawn(async move {
-        stream::iter(sources).map(|source|{
-            let token=token.clone();let window=window.clone();let client=client.clone();let keyword=keyword.clone();let id=id.clone();
-            async move {
-                let mut event=json!({"searchId":id,"sourceId":source.id,"sourceName":source.name});
-                if !token.is_cancelled(){event["type"]="source-start".into();if window.emit("vod-search-event",&event).is_err(){token.cancel();}}
-                let result=tokio::select! {
-                    biased;
-                    _=token.cancelled()=>Err("cancelled".to_owned()),
-                    result=async {
-                        let response=api::request(&client,&source,&[("ac","list".into()),("pg","1".into()),("wd",keyword)]).await?;
-                        let summaries=api::items(&response,&source);
-                        let mut ids=Vec::new();
-                        for item in &summaries {if let Some(id)=item["vodId"].as_str().filter(|id|!id.is_empty()) {if !ids.iter().any(|existing|existing==id){ids.push(id.to_owned());}}}
-                        api::details(&client,&source,&ids).await
-                    }=>result,
-                };
-                match result {
-                    Ok(items)=>{event["type"]="source-result".into();event["items"]=json!(items);},
-                    Err(error)=>{event["type"]=if token.is_cancelled(){"source-cancelled"}else if error.contains("超时"){"source-timeout"}else{"source-error"}.into();event["message"]=error.into();},
-                }
-                let _=window.emit("vod-search-event",event);
-            }
-        }).buffer_unordered(6).collect::<Vec<_>>().await;
+        stream::iter(sources)
+            .for_each_concurrent(6, |source| {
+                search_source(&window, &client, source, &keyword, &id, &token)
+            })
+            .await;
         let _ = window.emit("vod-search-event", json!({"type":"done","searchId":id}));
         registry.lock().await.remove(&id);
     });
     Ok(json!({"searchId":search_id}))
+}
+
+/// 搜索单个源并向所属窗口报告进度，取消时释放正在执行的请求
+async fn search_source(
+    window: &tauri::WebviewWindow,
+    client: &reqwest::Client,
+    source: Source,
+    keyword: &str,
+    search_id: &str,
+    token: &CancellationToken,
+) {
+    let mut event = json!({
+        "searchId": search_id,
+        "sourceId": source.id,
+        "sourceName": source.name,
+    });
+    if !token.is_cancelled() {
+        event["type"] = "source-start".into();
+        if window.emit("vod-search-event", &event).is_err() {
+            token.cancel();
+        }
+    }
+    let result = tokio::select! {
+        biased;
+        _ = token.cancelled() => Err("cancelled".to_owned()),
+        result = search_items(client, &source, keyword) => result,
+    };
+    match result {
+        Ok(items) => {
+            event["type"] = "source-result".into();
+            event["items"] = json!(items);
+        }
+        Err(error) => {
+            event["type"] = if token.is_cancelled() {
+                "source-cancelled"
+            } else if error.contains("超时") {
+                "source-timeout"
+            } else {
+                "source-error"
+            }
+            .into();
+            event["message"] = error.into();
+        }
+    }
+    let _ = window.emit("vod-search-event", event);
+}
+
+/// 按搜索顺序去重视频 ID，再批量获取可播放详情
+async fn search_items(
+    client: &reqwest::Client,
+    source: &Source,
+    keyword: &str,
+) -> Result<Vec<Value>, String> {
+    let response = api::request(
+        client,
+        source,
+        &[
+            ("ac", "list".into()),
+            ("pg", "1".into()),
+            ("wd", keyword.into()),
+        ],
+    )
+    .await?;
+    let summaries = api::items(&response, source);
+    let mut seen = HashSet::new();
+    let ids = summaries
+        .iter()
+        .filter_map(|item| item["vodId"].as_str())
+        .filter(|id| !id.is_empty() && seen.insert(*id))
+        .map(String::from)
+        .collect::<Vec<_>>();
+    api::details(client, source, &ids).await
 }
 
 /// 仅取消当前窗口创建的搜索任务

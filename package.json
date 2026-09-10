@@ -32,7 +32,9 @@
     "lint": "eslint --cache .",
     "lint:rust": "cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings",
     "prepare": "husky",
-    "test": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "test": "pnpm run test:rust && pnpm run test:frontend",
+    "test:frontend": "node --experimental-vm-modules --test config/*.test.ts",
+    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
     "typecheck": "pnpm run typecheck:node && pnpm run typecheck:web",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false"
@@ -43,8 +45,9 @@
   "dependencies": {
     "@fontsource-variable/noto-sans": "5.2.10",
     "@tanstack/react-virtual": "3.14.9",
-    "@tauri-apps/api": "2.11.1",
+    "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-log": "2.9.1",
+    "@tauri-apps/plugin-opener": "^2",
     "artplayer": "5.4.0",
     "artplayer-plugin-ambilight": "1.1.0",
     "artplayer-plugin-audio-track": "1.1.0",
@@ -70,11 +73,11 @@
     "@commitlint/config-conventional": "21.2.0",
     "@eslint/js": "9.39.4",
     "@tailwindcss/postcss": "4.3.3",
-    "@tauri-apps/cli": "2.11.4",
+    "@tauri-apps/cli": "^2",
     "@types/node": "24.13.3",
     "@types/react": "19.2.17",
     "@types/react-dom": "19.2.3",
-    "@vitejs/plugin-react": "4.7.0",
+    "@vitejs/plugin-react": "^6.1.1",
     "eslint": "9.39.4",
     "eslint-config-prettier": "10.1.8",
     "eslint-plugin-prettier": "5.5.6",
@@ -91,13 +94,13 @@
     "shadcn": "4.13.0",
     "tailwindcss": "4.3.2",
     "tw-animate-css": "1.4.0",
-    "typescript": "5.9.3",
+    "typescript": "~6.0.3",
     "typescript-eslint": "8.63.0",
-    "vite": "5.4.21"
+    "vite": "^8.0.16"
   },
-  "packageManager": "pnpm@11.20.0",
+  "packageManager": "pnpm@11.26.0",
   "engines": {
     "node": ">=24.14 <25",
-    "pnpm": "11.20.0"
+    "pnpm": "11.26.0"
   }
 }

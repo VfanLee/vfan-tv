@@ -161,7 +161,6 @@ export function createRecentPlayInput(
   progress: { currentTime: number; duration: number },
 ): RecentPlayInput {
   return {
-    id: createRecordId('recent', normalizeTitle(item.title)),
     sourceId: item.sourceId,
     sourceName: item.sourceName,
     vodId: item.vodId,
@@ -170,7 +169,7 @@ export function createRecentPlayInput(
     lineName,
     episodeName,
     episodeUrl,
-    currentTime: Math.max(0, Math.floor(progress.currentTime)),
+    positionSeconds: Math.max(0, Math.floor(progress.currentTime)),
     duration: Math.max(0, Math.floor(progress.duration)),
     rawJson: item.rawJson ?? stringifyRaw(item.raw),
     playedAt: Date.now(),
@@ -180,7 +179,6 @@ export function createRecentPlayInput(
 /** 根据当前点播详情创建收藏记录 */
 export function createFavoriteInput(item: VodSearchResult): FavoriteInput {
   return {
-    id: createRecordId(item.sourceId, item.vodId),
     sourceId: item.sourceId,
     sourceName: item.sourceName,
     sourceUrl: item.sourceUrl,
@@ -226,11 +224,6 @@ function isPlayableUrl(url: string): boolean {
   } catch {
     return false
   }
-}
-
-/** 为本地媒体记录创建稳定标识 */
-function createRecordId(...parts: string[]): string {
-  return parts.map((part) => encodeURIComponent(part)).join(':')
 }
 
 /** 将未知原始值安全序列化为字符串 */

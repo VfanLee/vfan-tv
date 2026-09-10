@@ -14,8 +14,14 @@ export async function upsertRecentPlay(input: RecentPlayInput): Promise<RecentPl
   throw new Error('当前运行环境不支持此操作')
 }
 
+/** 按源与视频标识读取完整的播放进度 */
+export async function getRecentPlay(sourceId: string, vodId: string): Promise<RecentPlayItem | null> {
+  if (isDesktopRuntime()) return invoke('get_recent_play', { sourceId, vodId })
+  return null
+}
+
 /** 删除播放记录 */
-export async function removeRecentPlay(title: string): Promise<void> {
-  if (isDesktopRuntime()) return invoke('remove_recent_play', { title })
+export async function removeRecentPlay(sourceId: string, vodId: string): Promise<void> {
+  if (isDesktopRuntime()) return invoke('remove_recent_play', { sourceId, vodId })
   throw new Error('当前运行环境不支持此操作')
 }

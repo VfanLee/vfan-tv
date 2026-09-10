@@ -34,8 +34,6 @@ export interface VodSourceExportItem extends VodSourceDefinition {
   backups: string[]
 }
 
-export type VodSourceOrigin = 'manual' | 'subscription'
-
 export type VodSourceSubscriptionItem = VodSourceDefinition
 
 export interface VodSourceConfig {
@@ -46,7 +44,8 @@ export interface VodSourceConfig {
   headers: SourceHeaders
   backups: string[]
   sort: number
-  origin: VodSourceOrigin
+  /** 为空表示手动添加，否则为来源订阅的标识 */
+  subscriptionId?: string
   remark?: string
   createdAt: number
   updatedAt: number

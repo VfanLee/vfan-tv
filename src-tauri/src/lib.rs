@@ -47,6 +47,11 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri_plugin_opener::Builder::new()
+                .open_js_links_on_click(false)
+                .build(),
+        )
         .setup(|app| {
             diagnostics::initialize(app.handle())?;
             let path = app.path().app_local_data_dir()?;
@@ -112,6 +117,7 @@ pub fn run() {
             data_transfer::restore_factory_settings,
             data_transfer::import_database,
             library::list_recent_plays,
+            library::get_recent_play,
             library::upsert_recent_play,
             library::remove_recent_play,
             library::list_favorites,
@@ -138,6 +144,7 @@ pub fn run() {
             sources::reorder_sources,
             sources::switch_source_backup,
             preferences::list_ui_preferences,
+            preferences::get_ui_preferences_snapshot,
             preferences::set_ui_preference,
             windows::open_settings_window,
             windows::is_window_maximized,

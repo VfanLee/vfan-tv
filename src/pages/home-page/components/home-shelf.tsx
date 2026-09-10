@@ -176,8 +176,8 @@ function HomeStarRating({ item }: { item: RecommendationItem }): React.JSX.Eleme
 
 /** 计算最近播放记录的观看进度百分比 */
 function getProgress(item: RecentPlayItem): string {
-  if (item.duration <= 0 || item.currentTime <= 0) return '0%'
-  return `${Math.min(100, Math.round((item.currentTime / item.duration) * 100))}%`
+  if (item.duration <= 0 || item.positionSeconds <= 0) return '0%'
+  return `${Math.min(100, Math.round((item.positionSeconds / item.duration) * 100))}%`
 }
 
 /** 将十分制评分转换为已填充的五星数量 */

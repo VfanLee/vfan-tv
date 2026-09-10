@@ -103,17 +103,19 @@ async fn fetch(url: reqwest::Url, referer: &str, input: &Request) -> Result<Valu
             reqwest::header::REFERER,
             referer.parse().map_err(|_| "推荐来源地址无效")?,
         );
-        let mut response = network::request(&client, reqwest::Method::GET, url, headers).await?;
+        let response = network::request(&client, reqwest::Method::GET, url, headers).await?;
         if !response.status().is_success() {
             return Err(format!("推荐服务返回 HTTP {}", response.status().as_u16()));
         }
-        let mut bytes = Vec::new();
-        while let Some(chunk) = response.chunk().await.map_err(|_| "读取推荐响应失败")? {
-            if bytes.len() + chunk.len() > 5 * 1024 * 1024 {
-                return Err("推荐响应过大".into());
-            }
-            bytes.extend_from_slice(&chunk);
-        }
+        let bytes = network::read_limited(response, 5 * 1024 * 1024)
+            .await
+            .map_err(|error| match error {
+                network::BodyReadError::Read(error) => {
+                    log::warn!("读取推荐响应失败: {error}");
+                    "读取推荐响应失败".to_owned()
+                }
+                network::BodyReadError::TooLarge => "推荐响应过大".to_owned(),
+            })?;
         normalize(
             serde_json::from_slice(&bytes).map_err(|_| "推荐响应不是有效 JSON")?,
             input,

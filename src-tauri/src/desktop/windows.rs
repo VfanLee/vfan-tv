@@ -1,4 +1,5 @@
 use tauri::{Emitter, Manager, WebviewUrl, WebviewWindow, WebviewWindowBuilder};
+use tauri_plugin_opener::OpenerExt;
 
 /// 打开设置窗口，已存在时通过路由通知切换分区
 #[tauri::command]
@@ -84,30 +85,16 @@ pub async fn restart_app(
     app.restart();
 }
 
-/// 使用系统标准入口打开目标，参数不经过 Shell 解析
-pub(crate) fn open_system_target(target: &std::ffi::OsStr) -> Result<(), String> {
-    #[cfg(target_os = "macos")]
-    let mut command = std::process::Command::new("open");
-    #[cfg(target_os = "windows")]
-    let mut command = std::process::Command::new("explorer.exe");
-    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-    let mut command = std::process::Command::new("xdg-open");
-    let status = command
-        .arg(target)
-        .status()
-        .map_err(|_| "无法打开系统应用")?;
-    if !status.success() {
-        return Err("系统应用未能打开目标".into());
-    }
-    Ok(())
-}
-
 /// 响应用户操作，在默认浏览器打开 HTTP/HTTPS 链接
 #[tauri::command]
-pub async fn open_external_url(url: String) -> Result<(), String> {
+pub async fn open_external_url(app: tauri::AppHandle, url: String) -> Result<(), String> {
     let url = crate::infrastructure::network::parse_http_url(&url)?;
     tauri::async_runtime::spawn_blocking(move || {
-        open_system_target(std::ffi::OsStr::new(url.as_str()))
+        app.opener()
+            .open_url(url.as_str(), None::<&str>)
+            .map_err(|error| {
+                crate::infrastructure::diagnostics::command_error("无法打开浏览器", &error)
+            })
     })
     .await
     .map_err(|_| "打开浏览器任务失败")?

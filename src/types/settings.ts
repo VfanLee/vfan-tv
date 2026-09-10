@@ -49,6 +49,8 @@ export interface NetworkProxyTestResult {
 export interface SubscriptionConfig {
   id: string
   url: string
+  /** 最近一次成功同步时间，未同步过为空 */
+  syncedAt?: number
 }
 
 export interface AppSettings {
@@ -56,4 +58,9 @@ export interface AppSettings {
   subscriptions: SubscriptionConfig[]
   activeSubscriptionId?: string
   network: NetworkSettings
+}
+
+/** update_settings 可修改的字段；网络配置须走网络设置接口 */
+export type AppSettingsPatch = Partial<Pick<AppSettings, 'theme' | 'subscriptions'>> & {
+  activeSubscriptionId?: string | null
 }
