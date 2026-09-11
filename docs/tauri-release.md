@@ -21,7 +21,7 @@
 
 ## 本机未签名应用验证
 
-已使用 `pnpm exec tauri build --bundles app --no-sign --ci -- --offline` 完成本机 Apple Silicon 的 Release 编译和 `.app` 打包。产物位于 `src-tauri/target/release/bundle/macos/Vfan TV.app`，架构 arm64、版本 0.11.1，Info.plist 与可执行文件最低系统版本均为 macOS 14.0。构建启用 custom-protocol，前端资源嵌入程序，不依赖开发服务器。没有启动、安装或发布该产物。
+已使用 `pnpm exec tauri build --bundles app --no-sign --ci -- --offline` 完成本机 Apple Silicon 的 Release 编译和 `.app` 打包。产物位于 `src-tauri/target/release/bundle/macos/Vfan TV.app`，架构 arm64、版本 0.11.1，Info.plist 与可执行文件最低系统版本均为 macOS 14.0。该记录对应 0.11.1 的历史验证；后续版本需重新验收。构建启用 custom-protocol，前端资源嵌入程序，不依赖开发服务器。没有启动、安装或发布该产物。
 
 构建前自动校验三处应用版本；缺失或不一致会终止构建。未签名产物仅用于本机验证，正式分发仍需完成上面的签名与公证配置。
 

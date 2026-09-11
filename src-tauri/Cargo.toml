@@ -1,6 +1,6 @@
 [package]
 name = "vfan-tv"
-version = "0.11.1"
+version = "0.12.0"
 description = "Vfan TV desktop client"
 edition = "2021"
 license = "GPL-3.0"
