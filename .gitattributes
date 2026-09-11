@@ -1,0 +1,5 @@
+# 所有文本文件在任意平台检出为 LF，保证跨平台构建产物一致
+* text=auto eol=lf
+
+# 迁移 SQL 的字节内容决定 sqlx 校验和，换行风格必须固定
+*.sql text eol=lf

@@ -1,6 +1,17 @@
+use crate::infrastructure::database::{canonical_checksum, canonical_schema, SchemaObject};
 use crate::infrastructure::diagnostics::command_error;
 use sqlx::{Connection, SqliteConnection, SqlitePool};
 use std::path::Path;
+
+/// 归一化迁移记录，忽略同一份 SQL 因换行风格不同产生的校验和差异
+fn canonical_migrations(rows: Vec<(i64, bool, Vec<u8>)>) -> Vec<(i64, bool, Vec<u8>)> {
+    rows.into_iter()
+        .map(|(version, success, checksum)| {
+            let checksum = canonical_checksum(version, &checksum).unwrap_or(checksum);
+            (version, success, checksum)
+        })
+        .collect()
+}
 
 /// 用 SQLite 一致性快照生成不依赖 WAL 文件的独立数据库
 pub(super) async fn snapshot(connection: &mut SqliteConnection, path: &Path) -> Result<(), String> {
@@ -37,9 +48,9 @@ async fn validate_attached(connection: &mut SqliteConnection) -> Result<(), Stri
     if integrity != ["ok"] {
         return Err("备份数据库已损坏".into());
     }
-    let current: Vec<(String,String,Option<String>)> = sqlx::query_as("SELECT type,name,sql FROM main.sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name").fetch_all(&mut *connection).await.map_err(|error| command_error("读取当前数据库结构失败", &error))?;
-    let incoming: Vec<(String,String,Option<String>)> = sqlx::query_as("SELECT type,name,sql FROM incoming.sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name").fetch_all(&mut *connection).await.map_err(|error| command_error("读取备份结构失败", &error))?;
-    if current != incoming {
+    let current: Vec<SchemaObject> = sqlx::query_as("SELECT type,name,sql FROM main.sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name").fetch_all(&mut *connection).await.map_err(|error| command_error("读取当前数据库结构失败", &error))?;
+    let incoming: Vec<SchemaObject> = sqlx::query_as("SELECT type,name,sql FROM incoming.sqlite_schema WHERE name NOT LIKE 'sqlite_%' ORDER BY type,name").fetch_all(&mut *connection).await.map_err(|error| command_error("读取备份结构失败", &error))?;
+    if canonical_schema(current) != canonical_schema(incoming) {
         return Err("备份数据库结构与当前版本不匹配".into());
     }
     let current: Vec<(i64, bool, Vec<u8>)> = sqlx::query_as(
@@ -54,6 +65,8 @@ async fn validate_attached(connection: &mut SqliteConnection) -> Result<(), Stri
     .fetch_all(&mut *connection)
     .await
     .map_err(|error| command_error("读取备份结构版本失败", &error))?;
+    let current = canonical_migrations(current);
+    let incoming = canonical_migrations(incoming);
     if current != incoming || incoming.iter().any(|(_, success, _)| !success) {
         return Err("备份迁移版本与当前应用不匹配".into());
     }

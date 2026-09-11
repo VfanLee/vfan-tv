@@ -23,6 +23,7 @@ axum = "0.8"
 futures-util = "0.3"
 tokio-util = { version = "0.7", features = ["rt"] }
 uuid = { version = "1", features = ["v4"] }
+sha2 = "0.10"
 regex = "1"
 infer = "0.19"
 bs58 = "0.5"

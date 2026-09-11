@@ -5,7 +5,9 @@ use sqlx::{
 use std::{path::Path, time::Duration};
 
 mod validation;
-pub(crate) use validation::IncompatibleDatabase;
+pub(crate) use validation::{
+    canonical_checksum, canonical_schema, IncompatibleDatabase, SchemaObject,
+};
 
 /// 应用数据库及默认导出文件名
 pub const FILE_NAME: &str = "data.db";
@@ -31,11 +33,47 @@ pub async fn open(app_data_dir: &Path) -> Result<SqlitePool, Box<dyn std::error:
         .max_connections(1)
         .connect_with(options)
         .await?;
-    if let Err(error) = MIGRATOR.run(&pool).await {
+    let prepared = async {
+        align_migration_checksums(&pool).await?;
+        MIGRATOR.run(&pool).await
+    }
+    .await;
+    if let Err(error) = prepared {
         pool.close().await;
         return Err(error.into());
     }
     Ok(pool)
+}
+
+/// 把仅换行风格不同的迁移校验和改写为当前构建的标准值，使 sqlx 继续按内容校验
+async fn align_migration_checksums(pool: &SqlitePool) -> Result<(), sqlx::migrate::MigrateError> {
+    let has_history: bool = sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type='table' AND name='_sqlx_migrations')",
+    )
+    .fetch_one(pool)
+    .await?;
+    if !has_history {
+        return Ok(());
+    }
+    let applied: Vec<(i64, Vec<u8>)> =
+        sqlx::query_as("SELECT version,checksum FROM _sqlx_migrations")
+            .fetch_all(pool)
+            .await?;
+    for (version, checksum) in applied {
+        let Some(canonical) = canonical_checksum(version, &checksum) else {
+            continue;
+        };
+        if canonical == checksum {
+            continue;
+        }
+        sqlx::query("UPDATE _sqlx_migrations SET checksum=? WHERE version=?")
+            .bind(canonical)
+            .bind(version)
+            .execute(pool)
+            .await?;
+        log::info!("迁移 {version} 的校验和仅换行风格不同，已对齐为当前版本");
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -118,6 +156,49 @@ mod tests {
             vec![0]
         );
         db.close().await;
+        tokio::fs::remove_dir_all(directory).await.unwrap();
+    }
+
+    /// 其他平台构建写入的换行风格差异不阻断启动，校验和会被对齐且数据保持不变。
+    #[tokio::test]
+    async fn newline_only_checksum_is_aligned_on_startup() {
+        use sha2::{Digest, Sha384};
+
+        let directory = std::env::temp_dir().join(format!("vfan-newline-{}", uuid::Uuid::new_v4()));
+        let db = open(&directory).await.unwrap();
+        sqlx::query("INSERT INTO search_history VALUES('kept',1)")
+            .execute(&db)
+            .await
+            .unwrap();
+        let migration = MIGRATOR.iter().next().unwrap();
+        let crlf = migration.sql.replace("\r\n", "\n").replace('\n', "\r\n");
+        sqlx::query("UPDATE _sqlx_migrations SET checksum=? WHERE version=?")
+            .bind(Sha384::digest(crlf.as_bytes()).to_vec())
+            .bind(migration.version)
+            .execute(&db)
+            .await
+            .unwrap();
+        db.close().await;
+
+        let reopened = open(&directory).await.unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("SELECT keyword FROM search_history")
+                .fetch_one(&reopened)
+                .await
+                .unwrap(),
+            "kept"
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, Vec<u8>>(
+                "SELECT checksum FROM _sqlx_migrations WHERE version=?"
+            )
+            .bind(migration.version)
+            .fetch_one(&reopened)
+            .await
+            .unwrap(),
+            migration.checksum.to_vec()
+        );
+        reopened.close().await;
         tokio::fs::remove_dir_all(directory).await.unwrap();
     }
 

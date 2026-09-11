@@ -1,5 +1,10 @@
 use super::{APPLICATION_ID, MIGRATOR};
-use sqlx::{migrate::Migrate, sqlite::SqliteConnectOptions, Connection, SqliteConnection};
+use sha2::{Digest, Sha384};
+use sqlx::{
+    migrate::{Migrate, Migration},
+    sqlite::SqliteConnectOptions,
+    Connection, SqliteConnection,
+};
 use std::{error::Error, fmt, path::Path};
 
 /// 已有文件不属于本应用或与其声明的迁移结构不一致。
@@ -14,6 +19,38 @@ impl fmt::Display for IncompatibleDatabase {
 }
 
 impl Error for IncompatibleDatabase {}
+
+/// 判断迁移记录与当前 SQL 内容一致，允许 LF 与 CRLF 的换行风格差异。
+fn checksum_matches(migration: &Migration, checksum: &[u8]) -> bool {
+    if migration.checksum.as_ref() == checksum {
+        return true;
+    }
+    let lf = migration.sql.replace("\r\n", "\n");
+    let crlf = lf.replace('\n', "\r\n");
+    [lf, crlf]
+        .iter()
+        .any(|sql| Sha384::digest(sql.as_bytes()).as_slice() == checksum)
+}
+
+/// 结构定义的类型、名称与建表语句，建表语句按 SQLite 保存的原文读取。
+pub(crate) type SchemaObject = (String, String, Option<String>);
+
+/// 归一化结构定义中的换行风格，使不同平台建库的语句原文可直接比对。
+pub(crate) fn canonical_schema(objects: Vec<SchemaObject>) -> Vec<SchemaObject> {
+    objects
+        .into_iter()
+        .map(|(kind, name, sql)| (kind, name, sql.map(|sql| sql.replace("\r\n", "\n"))))
+        .collect()
+}
+
+/// 返回该版本迁移的标准校验和，仅在记录值与当前 SQL 只差换行风格时给出。
+pub(crate) fn canonical_checksum(version: i64, checksum: &[u8]) -> Option<Vec<u8>> {
+    let migration = MIGRATOR
+        .iter()
+        .filter(|migration| !migration.migration_type.is_down_migration())
+        .find(|migration| migration.version == version)?;
+    checksum_matches(migration, checksum).then(|| migration.checksum.to_vec())
+}
 
 /// 在只读事务内验证已有文件，成功与失败路径都显式关闭连接。
 pub(super) async fn validate_file(path: &Path) -> Result<(), Box<dyn Error>> {
@@ -67,7 +104,7 @@ async fn validate(connection: &mut SqliteConnection) -> Result<(), Box<dyn Error
         else {
             return Err(IncompatibleDatabase("数据库迁移版本未知或记录不连续").into());
         };
-        if migration.checksum != applied.checksum {
+        if !checksum_matches(migration, &applied.checksum) {
             return Err(sqlx::migrate::MigrateError::VersionMismatch(applied.version).into());
         }
         migrations.push(migration);
@@ -97,15 +134,14 @@ async fn validate(connection: &mut SqliteConnection) -> Result<(), Box<dyn Error
     Ok(())
 }
 
-/// 读取用户定义的结构，忽略 SQLite 自身维护的内部对象。
-async fn schema(
-    connection: &mut SqliteConnection,
-) -> Result<Vec<(String, String, Option<String>)>, sqlx::Error> {
-    sqlx::query_as(
+/// 读取用户定义的结构，忽略 SQLite 自身维护的内部对象及换行风格差异。
+async fn schema(connection: &mut SqliteConnection) -> Result<Vec<SchemaObject>, sqlx::Error> {
+    let objects = sqlx::query_as(
         "SELECT type,name,sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY type,name",
     )
     .fetch_all(connection)
-    .await
+    .await?;
+    Ok(canonical_schema(objects))
 }
 
 #[cfg(test)]
