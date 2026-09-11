@@ -6,7 +6,7 @@
 
 当前配置的 `plugins.updater.pubkey` 为空，因此自动安装不可用。尚未生成正式签名密钥或发布更新清单，检查不存在的清单会报告失败，不会声称已是最新版。源代码中的下载和安装路径已接通；真实安装及升级回归仍需目标机器验收。
 
-开发与打包脚本已统一为 Tauri。`.github/workflows/release.yml` 当前只支持手动触发四个目标的编译验证，不上传安装包、不发布 Release；签名配置完成后再启用正式发布。
+开发与打包脚本已统一为 Tauri。`.github/workflows/release.yml` 在推送版本标签后使用 GitHub 托管的四个平台 runner 构建 DMG 与 NSIS 安装包，先上传到草稿 Release；全部目标成功后才公开 Release。当前未配置正式代码签名与 Tauri 更新签名，因此只发布手动下载安装包，不生成自动更新清单。
 
 ## 正式发布前
 

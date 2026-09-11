@@ -70,7 +70,7 @@
 
 本机 Node.js 24.14.0、pnpm 11.20.0、Xcode 26.6 和 Rust/Cargo 1.98.1 已就绪，Rust 默认目标为 aarch64-apple-darwin。跨机器测试由开发者负责；不控制用户桌面，不自动启动应用窗口。
 
-使用 `pnpm dev` 开发 Tauri；`pnpm dev:web` 仅运行前端；`pnpm check:rust` 检查 Rust。`pnpm build` 生成本机安装包，`pnpm build:app` 仅编译应用；各架构脚本见 README。CI 已替换为手动触发的四目标编译验证，正式签名与自动发布尚未启用。
+使用 `pnpm dev` 开发 Tauri；`pnpm dev:web` 仅运行前端；`pnpm check:rust` 检查 Rust。`pnpm build` 生成本机安装包，`pnpm build:app` 仅编译应用；各架构脚本见 README。推送版本标签会触发四目标安装包构建，全部成功后公开 GitHub Release；正式代码签名与自动更新发布尚未启用。
 
 `src/AGENTS.md` 保留目录与注释规范，并更新为 Tauri 通信、统一 SQLite 和按需复用工具库的约定。
 

@@ -1,31 +1,67 @@
-name: Tauri build verification
+name: Tauri release
 
 on:
-  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
-  group: tauri-build-${{ github.ref }}
+  group: tauri-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  prepare:
+    name: Prepare draft release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify release tag
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          test "$GITHUB_REF_NAME" = "v$version"
+      - name: Create draft release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
+            gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "Vfan TV $GITHUB_REF_NAME" --generate-notes
+
   build:
-    name: Build ${{ matrix.target }}
+    name: Build ${{ matrix.name }}
+    needs: prepare
+    if: github.ref_type == 'tag'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-14
+          - name: macOS arm64
+            os: macos-14
             target: aarch64-apple-darwin
-          - os: macos-14
+            bundle: dmg
+            asset: vfan-tv-${{ github.ref_name }}-macos-arm64.dmg
+          - name: macOS x64
+            os: macos-15-intel
             target: x86_64-apple-darwin
-          - os: windows-2022
+            bundle: dmg
+            asset: vfan-tv-${{ github.ref_name }}-macos-x64.dmg
+          - name: Windows x64
+            os: windows-2022
             target: x86_64-pc-windows-msvc
-          - os: windows-11-arm
+            bundle: nsis
+            asset: vfan-tv-${{ github.ref_name }}-windows-x64-setup.exe
+          - name: Windows arm64
+            os: windows-11-arm
             target: aarch64-pc-windows-msvc
+            bundle: nsis
+            asset: vfan-tv-${{ github.ref_name }}-windows-arm64-setup.exe
     steps:
       - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v6
@@ -43,5 +79,54 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Check project
         run: pnpm run check
-      - name: Compile Tauri application
-        run: pnpm run build:app --target ${{ matrix.target }}
+      - name: Build installer
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ startsWith(matrix.os, 'macos-') && '-' || '' }}
+        run: pnpm exec tauri build --target ${{ matrix.target }} --bundles ${{ matrix.bundle }} --ci
+      - name: Collect macOS installer
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir -p release-assets
+          installer="$(find src-tauri/target/${{ matrix.target }}/release/bundle/dmg -maxdepth 1 -name '*.dmg' -print -quit)"
+          test -n "$installer"
+          cp "$installer" "release-assets/${{ matrix.asset }}"
+      - name: Collect Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release-assets -Force | Out-Null
+          $installer = Get-ChildItem -LiteralPath 'src-tauri/target/${{ matrix.target }}/release/bundle/nsis' -Filter '*.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'NSIS installer was not generated' }
+          Copy-Item -LiteralPath $installer.FullName -Destination 'release-assets/${{ matrix.asset }}'
+      - name: Upload installer to draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.ref_name }}" "release-assets/${{ matrix.asset }}" --clobber
+
+  publish:
+    name: Publish release
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish complete release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_NOTES: |
+            ## 更新内容
+
+            - 桌面端重写为 Tauri 2 + Rust，保留现有界面与主要业务功能。
+            - 完善 SQLite 数据管理、完整备份与恢复流程。
+            - 改进网络请求、媒体代理、日志及错误处理。
+            - 更新应用图标并修复界面宽度等问题。
+
+            ## 下载与安装
+
+            - **macOS Apple Silicon**：下载 `*-macos-arm64.dmg`。
+            - **macOS Intel**：下载 `*-macos-x64.dmg`。
+            - **Windows x64**：下载 `*-windows-x64-setup.exe`。
+            - **Windows ARM64**：下载 `*-windows-arm64-setup.exe`。
+
+            当前安装包未进行正式代码签名，系统可能显示安全提醒。Tauri 自动更新签名尚未配置，请从 Releases 页面手动下载安装。
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false --latest --notes "$RELEASE_NOTES"
