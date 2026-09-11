@@ -341,7 +341,7 @@ export function BasicPlayer({
       airplay: !miniWindowMode, // 是否启用 AirPlay
       playsInline: true, // 是否内联播放，避免移动端强制全屏
       mutex: true, // 是否与页面上的其他 ArtPlayer 实例互斥播放
-      backdrop: !miniWindowMode, // 是否显示控制栏背景遮罩
+      backdrop: !miniWindowMode, // 是否启用设置菜单等浮层的背景虚化
       theme: '#fff', // 主色：进度条、音量、选中等高亮统一为纯白
       icons: {
         switchOn: artplayerSwitchIcons.on, // 开关“开启”态：纯白实心

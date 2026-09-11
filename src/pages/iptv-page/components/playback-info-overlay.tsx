@@ -15,7 +15,7 @@ interface PlaybackInfoOverlayProps {
   onSelectStream: (streamId: string) => void
 }
 
-/** 渲染播放信息浮层 */
+/** 渲染播放信息浮层，不使用背景滤镜以避免影响 Windows 视频硬件叠加 */
 export function PlaybackInfoOverlay({
   sourceId,
   channel,
@@ -31,12 +31,12 @@ export function PlaybackInfoOverlay({
     channel.streams.findIndex((stream) => stream.id === currentStream?.id),
   )
   return (
-    <div className="absolute top-5 right-5 w-[min(44rem,calc(100%-2.5rem))] text-white" data-player-overlay>
+    <div className="mt-5 mr-5 ml-auto w-[min(44rem,calc(100%-2.5rem))] text-white" data-player-overlay>
       <button
         type="button"
         aria-expanded={open}
         aria-label="查看播放信息和线路"
-        className="w-full rounded-[1.25rem] border border-white/12 bg-zinc-950/80 px-6 py-5 text-left shadow-2xl backdrop-blur-xl transition-colors hover:bg-zinc-950/88 focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none sm:px-7 sm:py-6"
+        className="w-full rounded-[1.25rem] border border-white/12 bg-zinc-950/80 px-6 py-5 text-left shadow-2xl focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none sm:px-7 sm:py-6"
         onClick={() => onOpenChange(!open)}
       >
         <div className="flex items-center gap-5 sm:gap-7">
@@ -65,7 +65,7 @@ export function PlaybackInfoOverlay({
       </button>
 
       {open ? (
-        <div className="mt-2 max-h-[min(44vh,22rem)] overflow-y-auto rounded-2xl border border-white/12 bg-zinc-950/92 p-2 shadow-2xl backdrop-blur-xl">
+        <div className="mt-2 max-h-[min(44vh,22rem)] overflow-y-auto rounded-2xl border border-white/12 bg-zinc-950/92 p-2 shadow-2xl">
           <div className="px-3 pt-2 pb-1 text-xs font-medium tracking-wide text-white/45">播放线路</div>
           {channel.streams.map((stream) => {
             const isCurrent = stream.id === currentStream?.id

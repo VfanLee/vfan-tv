@@ -166,9 +166,21 @@ export function injectPlayerChromeStyles(art: Artplayer, miniWindowMode = false)
     .art-video-player:not(.art-control-show):not(.art-hover) .art-bottom .art-progress .art-progress-indicator {
       display: none !important;
     }
+    .art-video-player .art-bottom {
+      background-image: none;
+    }
+    .art-video-player.art-control-show .art-bottom,
+    .art-video-player.art-hover .art-bottom {
+      top: auto;
+      height: auto;
+      overflow: visible;
+      background-image: none;
+    }
     .art-video-player .vfan-player-top-overlay {
       position: absolute;
-      inset: 0;
+      top: 0;
+      right: 0;
+      left: 0;
       z-index: 190;
       pointer-events: none;
       opacity: 0;
