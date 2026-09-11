@@ -27,7 +27,7 @@ async fn validate_attached(connection: &mut SqliteConnection) -> Result<(), Stri
         .fetch_one(&mut *connection)
         .await
         .map_err(|error| command_error("无法读取数据库标识", &error))?;
-    if application_id != 1447441494 {
+    if application_id != crate::infrastructure::database::APPLICATION_ID {
         return Err("此文件不是 Vfan TV 数据库".into());
     }
     let integrity: Vec<String> = sqlx::query_scalar("PRAGMA incoming.integrity_check")

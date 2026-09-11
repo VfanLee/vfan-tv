@@ -1,6 +1,7 @@
 mod desktop;
 mod infrastructure;
 mod modules;
+mod startup;
 
 use desktop::{mini_window, updates, windows};
 use infrastructure::{database, diagnostics, media};
@@ -53,18 +54,9 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
-            diagnostics::initialize(app.handle())?;
-            let path = app.path().app_local_data_dir()?;
-            let db = tauri::async_runtime::block_on(database::open(&path))?;
-            app.manage(db);
-            app.manage(updates::Updates::default());
-            app.manage(home::Recommendations::default());
-            app.manage(mini_window::MiniWindow::default());
-            app.manage(iptv::Catalog::default());
-            app.manage(vod::Searches::default());
-            app.manage(data_transfer::DataTransfer::default());
-            let proxy = tauri::async_runtime::block_on(media::proxy::MediaProxy::start())?;
-            app.manage(proxy);
+            if let Err(error) = startup::initialize(app.handle()) {
+                startup::report_failure(app.handle(), error.as_ref());
+            }
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -72,8 +64,11 @@ pub fn run() {
                 let app = window.app_handle().clone();
                 let label = window.label().to_owned();
                 tauri::async_runtime::spawn(async move {
-                    app.state::<vod::Searches>().cancel_window(&label).await;
-                    mini_window::window_destroyed(&app, &label).await;
+                    // 初始化失败时没有业务状态，避免退出清理再次触发 panic。
+                    if let Some(searches) = app.try_state::<vod::Searches>() {
+                        searches.cancel_window(&label).await;
+                        mini_window::window_destroyed(&app, &label).await;
+                    }
                 });
             }
         })
@@ -159,10 +154,14 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("无法启动 Vfan TV")
-        .run(|_app, _event| {
+        .run(|app, event| {
+            if matches!(event, tauri::RunEvent::Exit) {
+                // 此时事件循环即将结束，必须等待关闭完成，不能只派发后台任务。
+                tauri::async_runtime::block_on(windows::shutdown(app));
+            }
             #[cfg(target_os = "macos")]
-            if matches!(_event, tauri::RunEvent::Reopen { .. }) {
-                let app = _app.clone();
+            if matches!(event, tauri::RunEvent::Reopen { .. }) {
+                let app = app.clone();
                 tauri::async_runtime::spawn(async move {
                     mini_window::reopen(&app).await;
                 });

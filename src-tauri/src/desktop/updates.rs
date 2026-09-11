@@ -192,7 +192,7 @@ pub async fn install_update(
         return Err(failure(&app, format!("安装更新失败：{error}")));
     }
     drop(pending);
-    crate::desktop::windows::restart_app(app.clone(), app.state::<sqlx::SqlitePool>()).await
+    crate::desktop::windows::restart_app(app.clone()).await
 }
 
 #[cfg(test)]

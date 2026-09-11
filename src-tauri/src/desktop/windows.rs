@@ -56,33 +56,29 @@ pub fn toggle_window_maximize(window: WebviewWindow) -> Result<bool, String> {
     Ok(!maximized)
 }
 
-/// 关闭连接后退出应用
+/// 请求退出，由应用退出事件统一释放资源
 #[tauri::command]
-pub async fn quit_app(
-    app: tauri::AppHandle,
-    db: tauri::State<'_, sqlx::SqlitePool>,
-) -> Result<(), String> {
-    app.state::<crate::infrastructure::media::proxy::MediaProxy>()
-        .stop()
-        .await;
-    db.close().await;
-    log::logger().flush();
+pub async fn quit_app(app: tauri::AppHandle) -> Result<(), String> {
     app.exit(0);
     Ok(())
 }
 
-/// 关闭连接后重启应用
+/// 请求重启，确保触发统一退出清理事件
 #[tauri::command]
-pub async fn restart_app(
-    app: tauri::AppHandle,
-    db: tauri::State<'_, sqlx::SqlitePool>,
-) -> Result<(), String> {
-    app.state::<crate::infrastructure::media::proxy::MediaProxy>()
-        .stop()
-        .await;
-    db.close().await;
+pub async fn restart_app(app: tauri::AppHandle) -> Result<(), String> {
+    app.request_restart();
+    Ok(())
+}
+
+/// 退出前等待服务和数据库连接关闭，启动失败时允许业务状态缺失
+pub(crate) async fn shutdown(app: &tauri::AppHandle) {
+    if let Some(proxy) = app.try_state::<crate::infrastructure::media::proxy::MediaProxy>() {
+        proxy.stop().await;
+    }
+    if let Some(db) = app.try_state::<sqlx::SqlitePool>() {
+        db.close().await;
+    }
     log::logger().flush();
-    app.restart();
 }
 
 /// 响应用户操作，在默认浏览器打开 HTTP/HTTPS 链接

@@ -4,15 +4,25 @@ use sqlx::{
 };
 use std::{path::Path, time::Duration};
 
+mod validation;
+pub(crate) use validation::IncompatibleDatabase;
+
 /// 应用数据库及默认导出文件名
 pub const FILE_NAME: &str = "data.db";
+pub(crate) const APPLICATION_ID: i64 = 1447441494;
+static MIGRATOR: sqlx::migrate::Migrator = sqlx::migrate!("./migrations");
 
 /// 创建独立数据目录并初始化新版本数据库
 pub async fn open(app_data_dir: &Path) -> Result<SqlitePool, Box<dyn std::error::Error>> {
     let data_dir = app_data_dir.join("data");
+    let path = data_dir.join(FILE_NAME);
+    // 已有文件必须先只读验证，不能把外部数据库当成新库执行初始化。
+    if tokio::fs::try_exists(&path).await? {
+        validation::validate_file(&path).await?;
+    }
     tokio::fs::create_dir_all(&data_dir).await?;
     let options = SqliteConnectOptions::new()
-        .filename(data_dir.join(FILE_NAME))
+        .filename(path)
         .create_if_missing(true)
         .journal_mode(SqliteJournalMode::Wal)
         .foreign_keys(true)
@@ -21,13 +31,95 @@ pub async fn open(app_data_dir: &Path) -> Result<SqlitePool, Box<dyn std::error:
         .max_connections(1)
         .connect_with(options)
         .await?;
-    sqlx::migrate!("./migrations").run(&pool).await?;
+    if let Err(error) = MIGRATOR.run(&pool).await {
+        pool.close().await;
+        return Err(error.into());
+    }
     Ok(pool)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 最后一个连接正常关闭后，已提交数据写回主库并清除 WAL 辅助文件。
+    #[tokio::test]
+    async fn closing_database_preserves_data_and_removes_sidecars() {
+        let directory =
+            std::env::temp_dir().join(format!("vfan-shutdown-{}", uuid::Uuid::new_v4()));
+        let data_dir = directory.join("data");
+        let db = open(&directory).await.unwrap();
+        sqlx::query("INSERT INTO search_history VALUES('saved-before-exit',1)")
+            .execute(&db)
+            .await
+            .unwrap();
+        assert!(data_dir.join("data.db-wal").exists());
+        assert!(data_dir.join("data.db-shm").exists());
+
+        db.close().await;
+        assert!(data_dir.join(FILE_NAME).exists());
+        assert!(!data_dir.join("data.db-wal").exists());
+        assert!(!data_dir.join("data.db-shm").exists());
+        let reopened = open(&directory).await.unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("SELECT keyword FROM search_history")
+                .fetch_one(&reopened)
+                .await
+                .unwrap(),
+            "saved-before-exit"
+        );
+        reopened.close().await;
+        tokio::fs::remove_dir_all(directory).await.unwrap();
+    }
+
+    /// 校验失败必须拒绝启动，同时保留原数据及迁移记录。
+    #[tokio::test]
+    async fn incompatible_database_is_preserved() {
+        let directory = std::env::temp_dir().join(format!("vfan-startup-{}", uuid::Uuid::new_v4()));
+        let db = open(&directory).await.unwrap();
+        sqlx::query("INSERT INTO search_history VALUES('retained',1)")
+            .execute(&db)
+            .await
+            .unwrap();
+        sqlx::query("UPDATE _sqlx_migrations SET checksum=X'00' WHERE version=1")
+            .execute(&db)
+            .await
+            .unwrap();
+        db.close().await;
+
+        let error = open(&directory).await.unwrap_err();
+        assert!(matches!(
+            error.downcast_ref::<sqlx::migrate::MigrateError>(),
+            Some(sqlx::migrate::MigrateError::VersionMismatch(1))
+        ));
+        let db = SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect_with(
+                SqliteConnectOptions::new()
+                    .filename(directory.join("data").join(FILE_NAME))
+                    .read_only(true),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("SELECT keyword FROM search_history")
+                .fetch_one(&db)
+                .await
+                .unwrap(),
+            "retained"
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, Vec<u8>>(
+                "SELECT checksum FROM _sqlx_migrations WHERE version=1"
+            )
+            .fetch_one(&db)
+            .await
+            .unwrap(),
+            vec![0]
+        );
+        db.close().await;
+        tokio::fs::remove_dir_all(directory).await.unwrap();
+    }
 
     /// 从空库执行唯一初始迁移，构造独立测试数据库
     async fn initial_database() -> SqlitePool {
