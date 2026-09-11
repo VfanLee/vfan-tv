@@ -129,4 +129,4 @@ jobs:
             - **Windows ARM64**：下载 `*-windows-arm64-setup.exe`。
 
             当前安装包未进行正式代码签名，系统可能显示安全提醒。Tauri 自动更新签名尚未配置，请从 Releases 页面手动下载安装。
-        run: gh release edit "$GITHUB_REF_NAME" --draft=false --latest --notes "$RELEASE_NOTES"
+        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest --notes "$RELEASE_NOTES"
