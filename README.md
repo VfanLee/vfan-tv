@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="resources/icon.png" alt="Vfan TV Logo" width="120" />
+  <img src="src-tauri/icons/icon.png" alt="Vfan TV Logo" width="120" />
 
 # Vfan TV
 
