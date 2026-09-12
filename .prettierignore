@@ -12,5 +12,8 @@ src/styles/main.css
 src/ui/
 src/utils/cn.ts
 
+# Rust files are formatted by rustfmt.
+**/*.rs
+
 src-tauri/target/
 src-tauri/gen/

@@ -28,8 +28,12 @@
     "check:versions": "node config/check-versions.ts",
     "dev": "tauri dev",
     "dev:web": "vite --config config/vite.tauri.config.ts",
-    "format": "prettier --write . && cargo fmt --manifest-path src-tauri/Cargo.toml",
-    "format:check": "prettier --check . && cargo fmt --manifest-path src-tauri/Cargo.toml --check",
+    "format": "pnpm run format:web && pnpm run format:rust",
+    "format:check": "pnpm run format:web:check && pnpm run format:rust:check",
+    "format:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml",
+    "format:rust:check": "cargo fmt --manifest-path src-tauri/Cargo.toml --check",
+    "format:web": "prettier --write .",
+    "format:web:check": "prettier --check .",
     "lint": "eslint --cache .",
     "lint:rust": "cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings",
     "prepare": "husky",
@@ -39,9 +43,6 @@
     "typecheck": "pnpm run typecheck:node && pnpm run typecheck:web",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false"
-  },
-  "lint-staged": {
-    "*.{js,jsx,ts,tsx,mjs,cjs,json,css,md,html}": "prettier --write"
   },
   "dependencies": {
     "@fontsource-variable/noto-sans": "5.2.10",

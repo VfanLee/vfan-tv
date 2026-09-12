@@ -47,7 +47,7 @@ jobs:
           cache: pnpm
       - name: Set up Rust
         run: |
-          rustup toolchain install stable --profile minimal
+          rustup toolchain install stable --profile minimal --component clippy
           rustup default stable
       - uses: swatinem/rust-cache@v2
         with:
@@ -58,10 +58,12 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Check project
         run: pnpm run check
+      - name: Lint Rust
+        run: pnpm run lint:rust
 
   build:
     name: Build ${{ matrix.name }}
-    needs: prepare
+    needs: check
     if: github.ref_type == 'tag'
     runs-on: ${{ matrix.os }}
     strategy:
