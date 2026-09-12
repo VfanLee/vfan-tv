@@ -21,8 +21,9 @@ interface CatalogView {
   retrySources: () => void
   playlist?: IptvPlaylist
   isLoadingCatalog: boolean
-  catalogRefreshStatus: string
+  catalogStatus: string
   catalogError?: string
+  retryCatalog: () => Promise<unknown>
   refreshCatalog: () => Promise<unknown>
 }
 
@@ -70,10 +71,18 @@ async function fixture(initialSourceId = 'a'): Promise<{
   catalogRequests: Array<Deferred<IptvPlaylist> & { sourceId: string; force: boolean }>
   flush: () => Promise<void>
   emitSourceChange: () => void
+  replayEffects: () => void
   unmount: () => void
 }> {
   const slots: unknown[] = []
-  const effectSlots = new Map<number, { dependencies: readonly unknown[]; cleanup?: () => void }>()
+  const effectSlots = new Map<
+    number,
+    {
+      dependencies: readonly unknown[]
+      setup: () => void | (() => void)
+      cleanup?: () => void
+    }
+  >()
   const pendingEffects: Array<() => void> = []
   let cursor = 0
   let dirty = true
@@ -126,7 +135,7 @@ async function fixture(initialSourceId = 'a'): Promise<{
     if (previous && sameDependencies(previous.dependencies, dependencies)) return
     pendingEffects.push(() => {
       previous?.cleanup?.()
-      effectSlots.set(index, { dependencies, cleanup: effect() || undefined })
+      effectSlots.set(index, { dependencies, setup: effect, cleanup: effect() || undefined })
     })
   }
 
@@ -194,6 +203,10 @@ async function fixture(initialSourceId = 'a'): Promise<{
     catalogRequests,
     flush,
     emitSourceChange: () => listener?.('iptv-sources'),
+    replayEffects: () => {
+      for (const effect of effectSlots.values()) effect.cleanup?.()
+      for (const effect of effectSlots.values()) effect.cleanup = effect.setup() || undefined
+    },
     unmount: () => {
       mounted = false
       for (const effect of effectSlots.values()) effect.cleanup?.()
@@ -217,32 +230,30 @@ test('源列表完成不会提前结束频道加载，目录成功后才结束�
   assert.equal(f.read().playlist?.sourceId, 'a')
 })
 
-test('手动刷新接管未完成的初次加载，旧请求不能提前清除加载状态', async (t) => {
+test('首次加载时更新入口不另起请求，失败后可主动更新恢复', async (t) => {
   const f = await fixture()
   t.after(f.unmount)
   f.sourceRequests[0].resolve([source('a')])
   await f.flush()
-  const refresh = f.read().refreshCatalog()
+  assert.equal(await f.read().refreshCatalog(), undefined)
   await f.flush()
-  assert.equal(f.catalogRequests[1].force, true)
-  f.catalogRequests[0].resolve(playlist('a', '旧请求'))
-  await f.flush()
+  assert.equal(f.catalogRequests.length, 1)
   assert.equal(f.read().isLoadingCatalog, true)
   assert.equal(f.read().playlist, undefined)
-  f.catalogRequests[1].reject(new Error('源站超时'))
-  await refresh
+  f.catalogRequests[0].reject(new Error('直播目录返回 HTTP 503'))
   await f.flush()
   assert.equal(f.read().isLoadingCatalog, false)
-  assert.equal(f.read().catalogError, '源站超时')
+  assert.equal(f.read().catalogError, '直播目录返回 HTTP 503')
   const retry = f.read().refreshCatalog()
   await f.flush()
   assert.equal(f.read().catalogError, undefined)
   assert.equal(f.read().isLoadingCatalog, true)
-  f.catalogRequests[2].resolve(playlist('a', '重试成功'))
+  assert.equal(f.catalogRequests[1].force, true)
+  f.catalogRequests[1].resolve(playlist('a', '重试成功'))
   await retry
   await f.flush()
   assert.equal(f.read().playlist?.channels[0].title, '重试成功')
-  assert.equal(f.read().catalogRefreshStatus, 'idle')
+  assert.equal(f.read().catalogStatus, 'ready')
   assert.equal(f.read().isLoadingCatalog, false)
 })
 
@@ -274,11 +285,11 @@ test('过期目录立即展示，后台和手动更新失败均保留频道', as
   f.catalogRequests[0].resolve({ ...playlist('a'), cached: true, stale: true })
   await f.flush()
   assert.equal(f.read().isLoadingCatalog, false)
-  assert.equal(f.read().catalogRefreshStatus, 'background')
+  assert.equal(f.read().catalogStatus, 'refreshing')
   assert.equal(f.read().playlist?.sourceId, 'a')
   f.catalogRequests[1].reject(new Error('后台更新失败'))
   await f.flush()
-  assert.equal(f.read().catalogRefreshStatus, 'failed')
+  assert.equal(f.read().catalogStatus, 'error')
   assert.equal(f.read().playlist?.sourceId, 'a')
   const refresh = f.read().refreshCatalog()
   await f.flush()
@@ -337,13 +348,14 @@ test('页面卸载后手动刷新与源请求均不能回写状态或返回成�
   const f = await fixture()
   f.sourceRequests[0].resolve([source('a')])
   await f.flush()
+  f.catalogRequests[0].resolve(playlist('a', '初次请求'))
+  await f.flush()
   const refresh = f.read().refreshCatalog()
   f.emitSourceChange()
   await f.flush()
   f.unmount()
   const updates = f.updates
   f.sourceRequests[1].resolve([source('b')])
-  f.catalogRequests[0].resolve(playlist('a', '初次请求'))
   f.catalogRequests[1].resolve(playlist('a', '手动请求'))
   assert.equal(await refresh, undefined)
   await f.flush()
@@ -367,4 +379,171 @@ test('成功返回空目录与请求失败保持不同状态', async (t) => {
   assert.equal(f.read().isLoadingCatalog, false)
   assert.equal(f.read().catalogError, undefined)
   assert.equal(f.read().playlist?.channels.length, 0)
+})
+
+test('首次加载超时后原地补试，命中缓存时无需切换页面即可显示频道', async (t) => {
+  const f = await fixture()
+  t.after(f.unmount)
+  f.sourceRequests[0].resolve([source('a')])
+  await f.flush()
+  f.catalogRequests[0].reject(new Error('网络请求超时'))
+  await f.flush()
+  assert.equal(f.catalogRequests.length, 2)
+  assert.equal(f.catalogRequests[1].force, false)
+  assert.equal(f.read().isLoadingCatalog, true)
+  assert.equal(f.read().catalogError, undefined)
+  f.catalogRequests[1].resolve({ ...playlist('a'), cached: true })
+  await f.flush()
+  assert.equal(f.read().playlist?.channels.length, 1)
+  assert.equal(f.read().isLoadingCatalog, false)
+  assert.equal(f.read().catalogError, undefined)
+})
+
+test('连续超时仅自动补试一次，错误页重试允许读取已有缓存', async (t) => {
+  const f = await fixture()
+  t.after(f.unmount)
+  f.sourceRequests[0].resolve([source('a')])
+  await f.flush()
+  f.catalogRequests[0].reject(new Error('直播目录请求超时'))
+  await f.flush()
+  f.catalogRequests[1].reject(new Error('网络请求超时'))
+  await f.flush()
+  assert.equal(f.catalogRequests.length, 2)
+  assert.equal(f.read().catalogError, '网络请求超时')
+  assert.equal(f.read().isLoadingCatalog, false)
+  const retry = f.read().retryCatalog()
+  await f.flush()
+  assert.equal(f.catalogRequests[2].force, false)
+  assert.equal(f.read().catalogError, undefined)
+  f.catalogRequests[2].resolve({ ...playlist('a'), cached: true })
+  await retry
+  await f.flush()
+  assert.equal(f.read().playlist?.channels.length, 1)
+})
+
+test('自动补试期间切源，旧源恢复不能覆盖新源频道', async (t) => {
+  const f = await fixture()
+  t.after(f.unmount)
+  f.sourceRequests[0].resolve([source('a'), source('b')])
+  await f.flush()
+  f.catalogRequests[0].reject(new Error('网络请求超时'))
+  await f.flush()
+  f.read().selectSource('b')
+  await f.flush()
+  f.catalogRequests[2].resolve(playlist('b'))
+  f.catalogRequests[1].resolve(playlist('a'))
+  await f.flush()
+  assert.equal(f.read().playlist?.sourceId, 'b')
+  assert.equal(f.read().catalogError, undefined)
+})
+
+test('切源或卸载后的请求超时不会自动补试', async (t) => {
+  const f = await fixture()
+  t.after(f.unmount)
+  f.sourceRequests[0].resolve([source('a'), source('b')])
+  await f.flush()
+  f.read().selectSource('b')
+  await f.flush()
+  f.catalogRequests[0].reject(new Error('网络请求超时'))
+  f.catalogRequests[1].reject(new Error('直播目录返回 HTTP 403'))
+  await f.flush()
+  assert.equal(f.catalogRequests.length, 2)
+  assert.equal(f.read().catalogError, '直播目录返回 HTTP 403')
+  const retry = f.read().retryCatalog()
+  f.unmount()
+  const updates = f.updates
+  f.catalogRequests[2].reject(new Error('网络请求超时'))
+  assert.equal(await retry, undefined)
+  await f.flush()
+  assert.equal(f.catalogRequests.length, 3)
+  assert.equal(f.updates, updates)
+})
+
+test('主动更新和更新失败重试都强制联网，统一处理一次超时补试', async (t) => {
+  const f = await fixture()
+  t.after(f.unmount)
+  f.sourceRequests[0].resolve([source('a')])
+  await f.flush()
+  f.catalogRequests[0].resolve(playlist('a', '已有频道'))
+  await f.flush()
+  const refresh = f.read().refreshCatalog()
+  f.catalogRequests[1].reject(new Error('网络请求超时'))
+  await f.flush()
+  assert.equal(f.catalogRequests[2].force, true)
+  assert.equal(f.read().catalogStatus, 'refreshing')
+  assert.equal(f.read().playlist?.channels[0].title, '已有频道')
+  f.catalogRequests[2].reject(new Error('直播目录请求超时'))
+  await refresh
+  await f.flush()
+  assert.equal(f.catalogRequests.length, 3)
+  assert.equal(f.read().catalogStatus, 'error')
+  const retry = f.read().retryCatalog()
+  assert.equal(f.catalogRequests[3].force, true)
+  f.catalogRequests[3].resolve(playlist('a', '最新频道'))
+  await retry
+  await f.flush()
+  assert.equal(f.read().catalogError, undefined)
+  assert.equal(f.read().playlist?.channels[0].title, '最新频道')
+})
+
+test('后台更新同样补试一次，失败后重试直接更新且持续展示过期频道', async (t) => {
+  const f = await fixture()
+  t.after(f.unmount)
+  f.sourceRequests[0].resolve([source('a')])
+  await f.flush()
+  f.catalogRequests[0].resolve({ ...playlist('a'), cached: true, stale: true })
+  await f.flush()
+  f.catalogRequests[1].reject(new Error('网络请求超时'))
+  await f.flush()
+  f.catalogRequests[2].reject(new Error('网络请求超时'))
+  await f.flush()
+  assert.equal(f.catalogRequests.length, 3)
+  assert.equal(f.read().catalogStatus, 'error')
+  const retry = f.read().retryCatalog()
+  await f.flush()
+  assert.equal(f.catalogRequests[3].force, true)
+  assert.equal(f.read().isLoadingCatalog, false)
+  assert.equal(f.read().playlist?.stale, true)
+  f.catalogRequests[3].resolve(playlist('a', '新频道'))
+  await retry
+  await f.flush()
+  assert.equal(f.read().catalogStatus, 'ready')
+})
+
+test('重复点击更新或重试只产生一个活动请求，非超时错误不自动补试', async (t) => {
+  const f = await fixture()
+  t.after(f.unmount)
+  f.sourceRequests[0].resolve([source('a')])
+  await f.flush()
+  assert.equal(await f.read().retryCatalog(), undefined)
+  assert.equal(f.catalogRequests.length, 1)
+  f.catalogRequests[0].resolve(playlist('a', '已有频道'))
+  await f.flush()
+  const refresh = f.read().refreshCatalog()
+  assert.equal(await f.read().refreshCatalog(), undefined)
+  assert.equal(await f.read().retryCatalog(), undefined)
+  assert.equal(f.catalogRequests.length, 2)
+  f.catalogRequests[1].reject(new Error('直播目录返回 HTTP 403'))
+  await refresh
+  await f.flush()
+  assert.equal(f.catalogRequests.length, 2)
+  assert.equal(f.read().catalogStatus, 'error')
+  assert.equal(f.read().playlist?.channels[0].title, '已有频道')
+})
+
+test('开发模式重挂载 effect 后可以重新加载，失效请求不能回写', async (t) => {
+  const f = await fixture()
+  t.after(f.unmount)
+  f.sourceRequests[0].resolve([source('a')])
+  await f.flush()
+  f.replayEffects()
+  await f.flush()
+  assert.equal(f.catalogRequests.length, 2)
+  f.sourceRequests[1].resolve([source('a')])
+  f.catalogRequests[0].reject(new Error('网络请求超时'))
+  f.catalogRequests[1].resolve(playlist('a', '重新挂载'))
+  await f.flush()
+  assert.equal(f.catalogRequests.length, 2)
+  assert.equal(f.read().catalogStatus, 'ready')
+  assert.equal(f.read().playlist?.channels[0].title, '重新挂载')
 })

@@ -13,7 +13,7 @@ import { Input } from '@/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/ui/select'
 import { ChannelCard } from './components/channel-card'
 import { clearIptvPreviewFailures } from './preview-cache'
-import { useIptvCatalog, type CatalogRefreshStatus } from './use-iptv-catalog'
+import { useIptvCatalog, type CatalogStatus } from './use-iptv-catalog'
 
 /** 代表“全部频道分组”的筛选值 */
 const ALL_GROUPS = '__all__'
@@ -32,8 +32,9 @@ export function IptvPage(): React.JSX.Element {
     retrySources,
     playlist,
     isLoadingCatalog,
-    catalogRefreshStatus,
+    catalogStatus,
     catalogError,
+    retryCatalog,
     refreshCatalog: loadFreshCatalog,
   } = useIptvCatalog(readWallState().sourceId)
   const [keyword, setKeyword] = useState(() => readWallState().keyword)
@@ -44,7 +45,7 @@ export function IptvPage(): React.JSX.Element {
   const restoredScrollRef = useRef(false)
   const isLoading = (isLoadingSources && !sources.length) || isLoadingCatalog
   const pageError = !sources.length ? sourcesError : !playlist ? catalogError : undefined
-  const isRefreshing = catalogRefreshStatus === 'background' || catalogRefreshStatus === 'manual'
+  const isCatalogBusy = catalogStatus === 'loading' || catalogStatus === 'refreshing'
   const groups = useMemo(() => [...new Set((playlist?.channels ?? []).map((channel) => channel.group))], [playlist])
   /** 根据频道分组和搜索词筛选后的频道列表 */
   const filteredChannels = useMemo(
@@ -108,11 +109,11 @@ export function IptvPage(): React.JSX.Element {
     }
   }, [group, keyword, sourceId])
 
-  /** 从源站更新目录并展示最新请求的执行结果 */
-  const refreshCatalog = async (): Promise<void> => {
-    if (isRefreshing) return
-    const result = await loadFreshCatalog()
-    if (!result) return
+  /** 统一处理更新与重试入口，主动更新完成后展示频道差异 */
+  const runCatalogAction = async (action: 'refresh' | 'retry'): Promise<void> => {
+    if (isCatalogBusy) return
+    const result = await (action === 'refresh' ? loadFreshCatalog() : retryCatalog())
+    if (!result || action === 'retry') return
     if (result.status === 'success') showCatalogRefreshResult(result.previous, result.catalog)
     else {
       toast.warning(result.hasPrevious ? '更新失败，保留已加载频道' : '频道加载失败', { description: result.error })
@@ -143,7 +144,7 @@ export function IptvPage(): React.JSX.Element {
           <div className="mr-auto min-w-44">
             <h1 className="text-foreground text-2xl font-semibold tracking-tight">IPTV</h1>
             <p className="text-muted-foreground mt-0.5 text-xs">
-              {playlist ? getCatalogSubtitle(playlist, catalogRefreshStatus) : '频道墙'}
+              {playlist ? getCatalogSubtitle(playlist, catalogStatus) : '频道墙'}
             </p>
           </div>
           <Select disabled={!sources.length || isLoadingSources} value={sourceId} onValueChange={selectSource}>
@@ -181,7 +182,7 @@ export function IptvPage(): React.JSX.Element {
             <DropdownMenu.Trigger asChild>
               <Button disabled={!source || isLoadingSources} variant="outline">
                 <RefreshCw
-                  className={isRefreshing || isLoadingCatalog ? 'animate-spin' : undefined}
+                  className={isCatalogBusy || isLoadingCatalog ? 'animate-spin' : undefined}
                   data-icon="inline-start"
                 />
                 刷新
@@ -196,15 +197,15 @@ export function IptvPage(): React.JSX.Element {
               >
                 <DropdownMenu.Item
                   className={REFRESH_MENU_ITEM_CLASS}
-                  disabled={isRefreshing}
-                  onSelect={() => void refreshCatalog()}
+                  disabled={isCatalogBusy}
+                  onSelect={() => void runCatalogAction('refresh')}
                 >
-                  <RefreshCw className={isRefreshing ? 'animate-spin' : undefined} />
+                  <RefreshCw className={isCatalogBusy ? 'animate-spin' : undefined} />
                   从源更新频道
                 </DropdownMenu.Item>
                 <DropdownMenu.Item
                   className={REFRESH_MENU_ITEM_CLASS}
-                  disabled={!playlist || isRefreshing}
+                  disabled={!playlist || isCatalogBusy}
                   onSelect={() => {
                     clearIptvPreviewFailures()
                     setPreviewRetryEpoch((value) => value + 1)
@@ -237,8 +238,8 @@ export function IptvPage(): React.JSX.Element {
           </p>
           <Button
             variant="outline"
-            disabled={isLoadingSources || isRefreshing}
-            onClick={() => (sourcesError ? retrySources() : void refreshCatalog())}
+            disabled={isLoadingSources || isCatalogBusy}
+            onClick={() => (sourcesError ? retrySources() : void runCatalogAction('retry'))}
           >
             重试
           </Button>
@@ -278,7 +279,7 @@ export function IptvPage(): React.JSX.Element {
                   ? {
                       icon: RefreshCw,
                       label: '重试',
-                      onClick: () => (!sources.length ? retrySources() : void refreshCatalog()),
+                      onClick: () => (!sources.length ? retrySources() : void runCatalogAction('retry')),
                     }
                   : !sources.length
                     ? {
@@ -290,7 +291,7 @@ export function IptvPage(): React.JSX.Element {
                       ? {
                           icon: RefreshCw,
                           label: '从源更新频道',
-                          onClick: () => void refreshCatalog(),
+                          onClick: () => void runCatalogAction('refresh'),
                         }
                       : { icon: ListFilter, label: '清除筛选', onClick: clearFilters }
               }
@@ -347,13 +348,11 @@ interface CatalogDiff {
 }
 
 /** 生成频道目录的缓存与刷新状态摘要 */
-function getCatalogSubtitle(playlist: IptvPlaylist, status: CatalogRefreshStatus): string {
+function getCatalogSubtitle(playlist: IptvPlaylist, status: CatalogStatus): string {
   const parts = [`${playlist.channels.length} 个频道`]
-  if (status === 'background') {
-    parts.push('缓存已过期', '正在后台更新')
-  } else if (status === 'manual') {
+  if (status === 'refreshing') {
     parts.push('正在从源更新')
-  } else if (status === 'failed') {
+  } else if (status === 'error') {
     parts.push('更新失败，保留已加载频道')
   } else if (playlist.cached) {
     parts.push(playlist.stale ? '缓存已过期' : '缓存')

@@ -13,13 +13,34 @@ use std::{
     time::{Duration, Instant},
 };
 use tauri::State;
-use tokio::sync::{Mutex, Semaphore};
+use tokio::sync::{Mutex, RwLock, Semaphore};
 
 struct Cached {
     fetched: Instant,
     playlist: Playlist,
 }
-type Entry = Arc<Mutex<Option<Cached>>>;
+/// 缓存读取独立于下载锁，后台更新期间仍可展示已有频道
+#[derive(Default)]
+struct CatalogEntry {
+    cached: RwLock<Option<Cached>>,
+    refresh: Mutex<()>,
+}
+type Entry = Arc<CatalogEntry>;
+
+impl CatalogEntry {
+    /// 普通读取返回任意缓存，强制更新只复用请求开始后取得的结果
+    async fn read(&self, force: bool, requested: Instant) -> Option<Playlist> {
+        let cached = self.cached.read().await;
+        let cached = cached.as_ref()?;
+        if force && cached.fetched < requested {
+            return None;
+        }
+        let mut result = cached.playlist.clone();
+        result.cached = true;
+        result.stale = cached.fetched.elapsed() >= Duration::from_secs(6 * 3600);
+        Some(result)
+    }
+}
 pub struct Catalog {
     entries: Mutex<HashMap<String, Entry>>,
     permits: Semaphore,
@@ -35,7 +56,7 @@ impl Default for Catalog {
 }
 
 impl Catalog {
-    /// 按源配置与网络配置缓存频道列表，同源并发刷新复用同一结果
+    /// 普通读取直接返回缓存及过期标记；无缓存或强制更新时下载，同源并发复用成功结果
     async fn get(&self, db: &SqlitePool, source_id: &str, force: bool) -> Result<Playlist, String> {
         let requested = Instant::now();
         let source = sources::find(db, SourceKind::Iptv, source_id).await?;
@@ -51,20 +72,17 @@ impl Catalog {
             }
             entries
                 .entry(key)
-                .or_insert_with(|| Arc::new(Mutex::new(None)))
+                .or_insert_with(|| Arc::new(CatalogEntry::default()))
                 .clone()
         };
-        let mut cached = entry.lock().await;
-        if let Some(cached) = cached.as_ref() {
-            if (!force && cached.fetched.elapsed() < Duration::from_secs(6 * 3600))
-                || cached.fetched >= requested
-            {
-                let mut result = cached.playlist.clone();
-                result.cached = true;
-                return Ok(result);
-            }
+        if let Some(result) = entry.read(force, requested).await {
+            return Ok(result);
         }
-        let fetched = tokio::time::timeout(Duration::from_secs(30), async {
+        let _refresh = entry.refresh.lock().await;
+        if let Some(result) = entry.read(force, requested).await {
+            return Ok(result);
+        }
+        let playlist = tokio::time::timeout(Duration::from_secs(30), async {
             let _permit = self
                 .permits
                 .acquire()
@@ -97,27 +115,12 @@ impl Catalog {
         })
         .await
         .map_err(|_| "直播目录请求超时".to_owned())
-        .and_then(|result| result);
-        match fetched {
-            Ok(playlist) => {
-                *cached = Some(Cached {
-                    fetched: Instant::now(),
-                    playlist: playlist.clone(),
-                });
-                Ok(playlist)
-            }
-            Err(error) => {
-                if !force {
-                    if let Some(cached) = cached.as_ref() {
-                        let mut result = cached.playlist.clone();
-                        result.cached = true;
-                        result.stale = true;
-                        return Ok(result);
-                    }
-                }
-                Err(error)
-            }
-        }
+        .and_then(|result| result)?;
+        *entry.cached.write().await = Some(Cached {
+            fetched: Instant::now(),
+            playlist: playlist.clone(),
+        });
+        Ok(playlist)
     }
 }
 
@@ -202,6 +205,94 @@ impl Catalog {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// 过期缓存直接返回，进行中的更新不阻塞读取，更新失败保留缓存并允许再次更新
+    #[tokio::test]
+    async fn stale_cache_remains_readable_during_failed_refresh() {
+        use axum::{http::StatusCode, routing::get, Router};
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let requests = Arc::new(AtomicUsize::new(0));
+        let started = Arc::new(tokio::sync::Notify::new());
+        let release = Arc::new(Semaphore::new(0));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let app = Router::new().route(
+            "/list",
+            get({
+                let requests = requests.clone();
+                let started = started.clone();
+                let release = release.clone();
+                move || {
+                    let requests = requests.clone();
+                    let started = started.clone();
+                    let release = release.clone();
+                    async move {
+                        if requests.fetch_add(1, Ordering::SeqCst) == 1 {
+                            started.notify_one();
+                            release.acquire().await.unwrap().forget();
+                            (StatusCode::SERVICE_UNAVAILABLE, "暂时不可用")
+                        } else {
+                            (
+                                StatusCode::OK,
+                                "新闻,#genre#\n频道,https://stream.test/live.m3u8",
+                            )
+                        }
+                    }
+                }
+            }),
+        );
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let db = sqlx::sqlite::SqlitePoolOptions::new()
+            .max_connections(1)
+            .connect("sqlite::memory:")
+            .await
+            .unwrap();
+        sqlx::migrate!("./migrations").run(&db).await.unwrap();
+        sqlx::query("INSERT INTO sources(id,kind,name,url,sort,created_at,updated_at) VALUES('test','iptv','test',?,0,0,0)")
+            .bind(format!("http://{address}/list")).execute(&db).await.unwrap();
+        let catalog = Catalog::default();
+        catalog.get(&db, "test", false).await.unwrap();
+        let entry = catalog
+            .entries
+            .lock()
+            .await
+            .values()
+            .next()
+            .unwrap()
+            .clone();
+        entry.cached.write().await.as_mut().unwrap().fetched =
+            Instant::now() - Duration::from_secs(7 * 3600);
+
+        let stale = catalog.get(&db, "test", false).await.unwrap();
+        assert!(stale.cached && stale.stale);
+        assert_eq!(requests.load(Ordering::SeqCst), 1);
+
+        let (refresh, read) = tokio::join!(catalog.get(&db, "test", true), async {
+            tokio::time::timeout(Duration::from_secs(2), started.notified())
+                .await
+                .unwrap();
+            let read =
+                tokio::time::timeout(Duration::from_secs(1), catalog.get(&db, "test", false)).await;
+            release.add_permits(1);
+            read.expect("缓存读取不应等待更新结束").unwrap()
+        });
+        assert!(read.cached && read.stale);
+        assert_eq!(read.channels.len(), 1);
+        assert_eq!(refresh.err().as_deref(), Some("直播目录返回 HTTP 503"));
+        let retained = catalog.get(&db, "test", false).await.unwrap();
+        assert!(retained.stale);
+        assert_eq!(retained.channels.len(), 1);
+        assert_eq!(requests.load(Ordering::SeqCst), 2);
+
+        let recovered = catalog.get(&db, "test", true).await.unwrap();
+        assert!(!recovered.cached && !recovered.stale);
+        assert_eq!(requests.load(Ordering::SeqCst), 3);
+        assert!(!catalog.get(&db, "test", false).await.unwrap().stale);
+        db.close().await;
+        server.abort();
+        let _ = server.await;
+    }
+
     /// 同源并发只下载一次，强制刷新和源配置变更均重新请求
     #[tokio::test]
     async fn cache_respects_refresh_and_configuration() {
