@@ -1,9 +1,9 @@
 use super::snapshot::{restore, snapshot};
 use super::{cancelled, DataTransfer, TransferResult};
 use crate::infrastructure::diagnostics::command_error;
-use sqlx::{Connection, SqliteConnection, SqlitePool};
+use sqlx::SqlitePool;
 use std::path::Path;
-use tauri::{Manager, State};
+use tauri::State;
 use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
 
@@ -30,9 +30,7 @@ pub async fn export_database(
         return Ok(cancelled());
     };
     let path = file.into_path().map_err(|_| "请选择本地文件")?;
-    let data_dir = app
-        .path()
-        .app_local_data_dir()
+    let data_dir = crate::infrastructure::app_data_directory(&app)
         .map_err(|error| command_error("无法定位数据目录", &error))?
         .join("data");
     let parent = path.parent().ok_or("备份路径无效")?;
@@ -97,36 +95,11 @@ pub async fn import_database(
         .ok_or("找不到应用数据库")?
         .2;
     let directory = Path::new(&data_path).parent().ok_or("数据目录无效")?;
-    let staged = directory.join(format!(".restore-{}.db", Uuid::new_v4()));
     let safety = directory.join(format!("before-restore-{}.db", Uuid::new_v4()));
-    let result = async {
-        let options = sqlx::sqlite::SqliteConnectOptions::new()
-            .filename(&path)
-            .read_only(true)
-            .pragma("trusted_schema", "OFF");
-        let mut source = SqliteConnection::connect_with(&options)
-            .await
-            .map_err(|error| command_error("无法读取所选数据库", &error))?;
-        let id: i64 = sqlx::query_scalar("PRAGMA application_id")
-            .fetch_one(&mut source)
-            .await
-            .map_err(|error| command_error("无效数据库文件", &error))?;
-        if id != 1447441494 {
-            return Err("此文件不是 Vfan TV 数据库".to_owned());
-        }
-        snapshot(&mut source, &staged).await?;
-        source
-            .close()
-            .await
-            .map_err(|error| command_error("关闭源数据库失败", &error))?;
-        restore(&db, &staged, &safety).await?;
-        Ok(TransferResult {
-            cancelled: false,
-            file_path: Some(path.to_string_lossy().into()),
-            safety_backup_path: Some(safety.to_string_lossy().into()),
-        })
-    }
-    .await;
-    let _ = tokio::fs::remove_file(&staged).await;
-    result
+    restore(&db, &path, &safety).await?;
+    Ok(TransferResult {
+        cancelled: false,
+        file_path: Some(path.to_string_lossy().into()),
+        safety_backup_path: Some(safety.to_string_lossy().into()),
+    })
 }

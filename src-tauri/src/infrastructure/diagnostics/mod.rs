@@ -91,7 +91,7 @@ fn builder(directory: &Path) -> tauri_plugin_log::Builder {
 
 /// 安装官方日志命令和可安全重开的文件日志实例
 pub fn initialize(app: &tauri::AppHandle) -> Result<(), Box<dyn std::error::Error>> {
-    let directory = app.path().app_local_data_dir()?.join("logs");
+    let directory = super::app_data_directory(app)?.join("logs");
     let (plugin, level, logger) = builder(&directory).split(app)?;
     let logger = Arc::new(Mutex::new(Some(logger)));
     tauri_plugin_log::attach_logger(level, Box::new(ManagedLogger(logger.clone())))?;

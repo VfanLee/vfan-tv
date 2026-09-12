@@ -1,13 +1,13 @@
-use super::{APPLICATION_ID, MIGRATOR};
+use super::{DatabaseError, APPLICATION_ID};
 use sha2::{Digest, Sha384};
 use sqlx::{
-    migrate::{Migrate, Migration},
+    migrate::{Migrate, Migration, Migrator},
     sqlite::SqliteConnectOptions,
     Connection, SqliteConnection,
 };
 use std::{error::Error, fmt, path::Path};
 
-/// 已有文件不属于本应用或与其声明的迁移结构不一致。
+/// 已有文件不属于本应用，或迁移历史与当前应用不兼容。
 #[derive(Debug)]
 pub(crate) struct IncompatibleDatabase(pub(crate) &'static str);
 
@@ -20,46 +20,57 @@ impl fmt::Display for IncompatibleDatabase {
 
 impl Error for IncompatibleDatabase {}
 
-/// 判断迁移记录与当前 SQL 内容一致，允许 LF 与 CRLF 的换行风格差异。
+/// 接受标准校验和，以及首个已发布迁移因 Windows 换行产生的已知变体。
 fn checksum_matches(migration: &Migration, checksum: &[u8]) -> bool {
     if migration.checksum.as_ref() == checksum {
         return true;
     }
-    let lf = migration.sql.replace("\r\n", "\n");
-    let crlf = lf.replace('\n', "\r\n");
-    [lf, crlf]
-        .iter()
-        .any(|sql| Sha384::digest(sql.as_bytes()).as_slice() == checksum)
+    migration.version == 1
+        && Sha384::digest(migration.sql.replace('\n', "\r\n").as_bytes()).as_slice() == checksum
 }
 
-/// 结构定义的类型、名称与建表语句，建表语句按 SQLite 保存的原文读取。
-pub(crate) type SchemaObject = (String, String, Option<String>);
-
-/// 归一化结构定义中的换行风格，使不同平台建库的语句原文可直接比对。
-pub(crate) fn canonical_schema(objects: Vec<SchemaObject>) -> Vec<SchemaObject> {
-    objects
-        .into_iter()
-        .map(|(kind, name, sql)| (kind, name, sql.map(|sql| sql.replace("\r\n", "\n"))))
-        .collect()
+/// 已应用迁移数量及需要修复的历史换行校验和。
+pub(crate) struct MigrationState {
+    applied: usize,
+    corrections: Vec<(i64, Vec<u8>)>,
 }
 
-/// 返回该版本迁移的标准校验和，仅在记录值与当前 SQL 只差换行风格时给出。
-pub(crate) fn canonical_checksum(version: i64, checksum: &[u8]) -> Option<Vec<u8>> {
-    let migration = MIGRATOR
-        .iter()
-        .filter(|migration| !migration.migration_type.is_down_migration())
-        .find(|migration| migration.version == version)?;
-    checksum_matches(migration, checksum).then(|| migration.checksum.to_vec())
+impl MigrationState {
+    /// 判断是否需要在修改数据库前创建安全快照。
+    pub(crate) fn needs_update(&self, migrator: &Migrator) -> bool {
+        !self.corrections.is_empty()
+            || self.applied
+                < migrator
+                    .iter()
+                    .filter(|m| !m.migration_type.is_down_migration())
+                    .count()
+    }
+
+    /// 原子修复已确认的历史换行校验和，其他值不会进入修复列表。
+    pub(crate) async fn align(&self, connection: &mut SqliteConnection) -> Result<(), sqlx::Error> {
+        if self.corrections.is_empty() {
+            return Ok(());
+        }
+        let mut transaction = connection.begin().await?;
+        for (version, checksum) in &self.corrections {
+            sqlx::query("UPDATE _sqlx_migrations SET checksum=? WHERE version=?")
+                .bind(checksum)
+                .bind(version)
+                .execute(&mut *transaction)
+                .await?;
+        }
+        transaction.commit().await
+    }
 }
 
 /// 在只读事务内验证已有文件，成功与失败路径都显式关闭连接。
-pub(super) async fn validate_file(path: &Path) -> Result<(), Box<dyn Error>> {
+pub(super) async fn validate_file(path: &Path, migrator: &Migrator) -> Result<(), DatabaseError> {
     let mut connection =
         SqliteConnection::connect_with(&SqliteConnectOptions::new().filename(path).read_only(true))
             .await?;
     let result = async {
         let mut transaction = connection.begin().await?;
-        let result = validate(&mut transaction).await;
+        let result = validate_history(&mut transaction, migrator).await;
         transaction.rollback().await?;
         result
     }
@@ -70,8 +81,11 @@ pub(super) async fn validate_file(path: &Path) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// 校验身份和迁移历史，并以相同迁移构造内存参考库核对表、索引与触发器。
-async fn validate(connection: &mut SqliteConnection) -> Result<(), Box<dyn Error>> {
+/// 只读检查身份和迁移历史，允许已知旧版本继续升级，不比较建表 SQL 文本。
+pub(crate) async fn validate_history(
+    connection: &mut SqliteConnection,
+    migrator: &Migrator,
+) -> Result<MigrationState, DatabaseError> {
     let application_id: i64 = sqlx::query_scalar("PRAGMA application_id")
         .fetch_one(&mut *connection)
         .await?;
@@ -93,10 +107,19 @@ async fn validate(connection: &mut SqliteConnection) -> Result<(), Box<dyn Error
     if applied.is_empty() {
         return Err(IncompatibleDatabase("数据库迁移记录为空").into());
     }
-    let mut expected = MIGRATOR
+    let mut expected = migrator
         .iter()
         .filter(|migration| !migration.migration_type.is_down_migration());
-    let mut migrations = Vec::with_capacity(applied.len());
+    let latest = migrator
+        .iter()
+        .filter(|m| !m.migration_type.is_down_migration())
+        .map(|m| m.version)
+        .max()
+        .unwrap_or(0);
+    if applied.iter().any(|m| m.version > latest) {
+        return Err(IncompatibleDatabase("数据库来自更新版本，请先升级应用后再打开或导入").into());
+    }
+    let mut corrections = Vec::new();
     for applied in &applied {
         let Some(migration) = expected
             .next()
@@ -107,41 +130,15 @@ async fn validate(connection: &mut SqliteConnection) -> Result<(), Box<dyn Error
         if !checksum_matches(migration, &applied.checksum) {
             return Err(sqlx::migrate::MigrateError::VersionMismatch(applied.version).into());
         }
-        migrations.push(migration);
+        if migration.checksum.as_ref() != applied.checksum.as_ref() {
+            corrections.push((migration.version, migration.checksum.to_vec()));
+        }
     }
 
-    let mut reference = SqliteConnection::connect("sqlite::memory:").await?;
-    let result = async {
-        reference.ensure_migrations_table().await?;
-        // 只重建已执行的迁移；未来新增的正式迁移仍由正常启动流程执行。
-        for migration in migrations {
-            reference.apply(migration).await?;
-        }
-        if schema(connection).await? != schema(&mut reference).await? {
-            return Err::<(), Box<dyn Error>>(
-                IncompatibleDatabase(
-                    "数据库实际结构与迁移记录不一致，可能混入其他应用的表或被手动修改",
-                )
-                .into(),
-            );
-        }
-        Ok(())
-    }
-    .await;
-    let closed = reference.close().await;
-    result?;
-    closed?;
-    Ok(())
-}
-
-/// 读取用户定义的结构，忽略 SQLite 自身维护的内部对象及换行风格差异。
-async fn schema(connection: &mut SqliteConnection) -> Result<Vec<SchemaObject>, sqlx::Error> {
-    let objects = sqlx::query_as(
-        "SELECT type,name,sql FROM sqlite_schema WHERE name NOT GLOB 'sqlite_*' ORDER BY type,name",
-    )
-    .fetch_all(connection)
-    .await?;
-    Ok(canonical_schema(objects))
+    Ok(MigrationState {
+        applied: applied.len(),
+        corrections,
+    })
 }
 
 #[cfg(test)]
@@ -149,6 +146,30 @@ mod tests {
     use super::*;
     use crate::infrastructure::database::{open, FILE_NAME};
     use std::path::PathBuf;
+
+    /// 首个已发布迁移的字节必须固定，结构变更通过追加迁移实现。
+    #[test]
+    fn published_initial_migration_is_immutable() {
+        let initial = super::super::MIGRATOR
+            .iter()
+            .find(|m| m.version == 1)
+            .unwrap();
+        assert_eq!(format!("{:x}", Sha384::digest(initial.sql.as_bytes())), "2df33be7430e79ab2d80ec77f4b533c6d7970bae89be3d0ea74b43e99e567819dd2535a6264c7e61abdaf34d87a3071a");
+    }
+
+    /// 换行例外只覆盖首个已发布迁移，不能放宽未来迁移的内容校验。
+    #[test]
+    fn newline_exception_does_not_apply_to_future_migrations() {
+        let migration = Migration::new(
+            2,
+            "test".into(),
+            sqlx::migrate::MigrationType::Simple,
+            "SELECT 1;\n".into(),
+            false,
+        );
+        let checksum = Sha384::digest(b"SELECT 1;\r\n");
+        assert!(!checksum_matches(&migration, checksum.as_slice()));
+    }
 
     /// 为每个拒绝场景创建独立目录，避免接触实际应用数据。
     async fn test_directory() -> PathBuf {
@@ -206,20 +227,47 @@ mod tests {
         }
     }
 
-    /// 迁移记录正常时，额外表、字段修改和索引或触发器缺失仍必须拒绝。
+    /// 普通启动不重建参考库，也不因额外的用户表拒绝合法迁移历史。
     #[tokio::test]
-    async fn modified_schema_is_rejected_even_with_valid_migrations() {
+    async fn additional_table_does_not_block_startup() {
+        let directory = test_directory().await;
+        let db = open(&directory).await.unwrap();
+        sqlx::query("CREATE TABLE notes(value TEXT)")
+            .execute(&db)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO notes VALUES('keep')")
+            .execute(&db)
+            .await
+            .unwrap();
+        db.close().await;
+        let reopened = open(&directory).await.unwrap();
+        assert_eq!(
+            sqlx::query_scalar::<_, String>("SELECT value FROM notes")
+                .fetch_one(&reopened)
+                .await
+                .unwrap(),
+            "keep"
+        );
+        reopened.close().await;
+        tokio::fs::remove_dir_all(directory).await.unwrap();
+    }
+
+    /// 更高版本或失败的迁移记录在写入前被拒绝，原库字节不变。
+    #[tokio::test]
+    async fn future_or_dirty_database_is_preserved() {
         for statement in [
-            "CREATE TABLE unrelated(id INTEGER PRIMARY KEY)",
-            "ALTER TABLE search_history ADD COLUMN unexpected TEXT",
-            "DROP INDEX favorites_updated_at",
-            "DROP TRIGGER sources_cleanup_preferences",
+            "UPDATE _sqlx_migrations SET version=999999",
+            "UPDATE _sqlx_migrations SET success=0",
         ] {
             let directory = test_directory().await;
             let db = open(&directory).await.unwrap();
             sqlx::query(statement).execute(&db).await.unwrap();
             db.close().await;
-            assert_rejected_unchanged(&directory).await;
+            let path = directory.join("data").join(FILE_NAME);
+            let before = tokio::fs::read(&path).await.unwrap();
+            assert!(open(&directory).await.is_err());
+            assert_eq!(tokio::fs::read(&path).await.unwrap(), before);
             tokio::fs::remove_dir_all(directory).await.unwrap();
         }
     }

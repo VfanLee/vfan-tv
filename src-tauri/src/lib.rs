@@ -23,10 +23,8 @@ struct RuntimeInfo {
 /// 返回当前运行时版本与数据库位置
 #[tauri::command]
 fn get_runtime_info(app: tauri::AppHandle) -> Result<RuntimeInfo, String> {
-    let path = app
-        .path()
-        .app_local_data_dir()
-        .map_err(|_| "无法定位应用数据目录".to_owned())?;
+    let path =
+        infrastructure::app_data_directory(&app).map_err(|_| "无法定位应用数据目录".to_owned())?;
     Ok(RuntimeInfo {
         version: app.package_info().version.to_string(),
         database_path: path

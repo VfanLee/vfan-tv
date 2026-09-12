@@ -10,12 +10,13 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 /// 完成可失败的服务初始化后，再注册业务状态。
 pub(crate) fn initialize(app: &tauri::AppHandle) -> Result<(), Box<dyn Error>> {
     diagnostics::initialize(app)?;
-    let directory = app.path().app_local_data_dir()?;
+    let directory = crate::infrastructure::app_data_directory(app)?;
     log::info!(
         "数据库路径：{}",
         directory.join("data").join(database::FILE_NAME).display()
     );
-    let db = tauri::async_runtime::block_on(database::open(&directory))?;
+    let db = tauri::async_runtime::block_on(database::open(&directory))
+        .map_err(|error| -> Box<dyn Error> { error })?;
     let proxy = tauri::async_runtime::block_on(MediaProxy::start())?;
     app.manage(db);
     app.manage(proxy);
@@ -28,7 +29,7 @@ pub(crate) fn initialize(app: &tauri::AppHandle) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-/// 数据库身份、结构或迁移不兼容时提供手动重置说明，其他故障保留排查提示。
+/// 数据库不兼容时引导保留数据并确认应用版本，其他故障保留排查提示。
 fn failure_message(error: &(dyn Error + 'static), directory: Option<&Path>) -> String {
     let incompatible = error.is::<database::IncompatibleDatabase>()
         || matches!(
@@ -40,7 +41,7 @@ fn failure_message(error: &(dyn Error + 'static), directory: Option<&Path>) -> S
             )
         );
     let mut message = if incompatible {
-        "现有数据库与当前应用版本不兼容，应用无法启动。\n\n应用没有删除或重置数据。若不再需要现有数据，请先关闭此提示并退出应用，再手动删除下方 data 文件夹（包含数据库及其辅助文件），然后重新启动。收藏、播放记录、源和设置等数据将被清空，应用会创建全新数据库。".to_owned()
+        "现有数据库与当前应用版本不兼容，应用无法启动。\n\n应用没有删除或重置数据。请保留整个 data 文件夹及其中的安全备份；如果数据来自更新版本，请先升级应用。其他情况请根据下方原因和日志排查，不要直接删除数据库。".to_owned()
     } else {
         "应用初始化失败，数据未自动重置。请根据错误原因和日志排查后重试。".to_owned()
     };
@@ -66,7 +67,7 @@ pub(crate) fn report_failure(app: &tauri::AppHandle, error: &(dyn Error + 'stati
             log::warn!("隐藏未就绪窗口失败：{error}");
         }
     }
-    let directory = app.path().app_local_data_dir().ok();
+    let directory = crate::infrastructure::app_data_directory(app).ok();
     let handle = app.clone();
     app.dialog()
         .message(failure_message(error, directory.as_deref()))
@@ -79,18 +80,17 @@ pub(crate) fn report_failure(app: &tauri::AppHandle, error: &(dyn Error + 'stati
 mod tests {
     use super::*;
 
-    /// 两种迁移版本冲突都展示完整路径和手动删除的后果。
+    /// 迁移冲突提示保留数据和升级应用，并展示完整路径。
     #[test]
-    fn incompatible_database_has_manual_reset_instructions() {
+    fn incompatible_database_preserves_data_and_suggests_upgrade() {
         for error in [
             sqlx::migrate::MigrateError::VersionMismatch(1),
             sqlx::migrate::MigrateError::VersionMissing(2),
         ] {
             let directory = Path::new("app-data");
             let message = failure_message(&error, Some(directory));
-            assert!(message.contains("手动删除"));
-            assert!(message.contains("先关闭此提示并退出应用"));
-            assert!(message.contains("数据将被清空"));
+            assert!(message.contains("请先升级应用"));
+            assert!(message.contains("不要直接删除数据库"));
             assert!(message.contains(&directory.join("data/data.db").display().to_string()));
             assert!(message.contains(&directory.join("logs/main.log").display().to_string()));
         }
@@ -108,11 +108,11 @@ mod tests {
 
     /// 外部数据库和结构冲突走同一提示流程，而非被静默初始化。
     #[test]
-    fn incompatible_identity_or_schema_has_manual_reset_instructions() {
+    fn incompatible_identity_explains_reason_without_reset() {
         let error = database::IncompatibleDatabase("此文件不是 Vfan TV 数据库");
         let message = failure_message(&error, Some(Path::new("app-data")));
         assert!(message.contains("此文件不是 Vfan TV 数据库"));
-        assert!(message.contains("手动删除"));
+        assert!(message.contains("保留整个 data 文件夹"));
         assert!(message.contains("应用没有删除或重置数据"));
     }
 }
