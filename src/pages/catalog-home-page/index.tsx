@@ -230,6 +230,11 @@ export function CatalogHomePage(): React.JSX.Element {
 
         <section className="mt-8">
           <h2 className="mb-5 text-2xl font-bold tracking-tight">{keyword ? `“${keyword}”的结果` : '片库内容'}</h2>
+          {catalog.isRefreshing ? (
+            <p role="status" className="text-muted-foreground mb-4 text-sm">
+              正在更新片库，当前内容仍可浏览
+            </p>
+          ) : null}
 
           {catalog.isLoading ? (
             <div className="grid grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">

@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { VodCatalogCategory, VodSearchResult, VodSourceConfig } from '@/types'
-import { getVodCatalogPage, listSources, onAppDataChange, switchSourceBackup } from '@/platform/api'
+import type { VodCatalogCategory, VodCatalogPage, VodSearchResult, VodSourceConfig } from '@/types'
+import { listSources, onAppDataChange, switchSourceBackup } from '@/platform/api'
+import {
+  fetchVodCatalogPage,
+  getVodCatalogCacheRevision,
+  getVodCatalogContextKey,
+  getVodCatalogSourceKey,
+  isRecommendationCacheExpired,
+  pruneVodCatalogPages,
+  readVodCatalogContext,
+  readVodCatalogPage,
+  subscribeVodCatalogInvalidation,
+} from '@/platform/cache/recommendation-cache'
 import {
   pruneVodCategoryCache,
   readCachedVodCategories,
@@ -11,6 +22,7 @@ interface CatalogPageState {
   categories: VodCatalogCategory[]
   errorMessage: string
   isLoading: boolean
+  isRefreshing: boolean
   items: VodSearchResult[]
   page: number
   pageCount: number
@@ -28,6 +40,7 @@ const emptyPageState: CatalogPageState = {
   categories: [],
   errorMessage: '',
   isLoading: false,
+  isRefreshing: false,
   items: [],
   page: 0,
   pageCount: 0,
@@ -49,20 +62,23 @@ export function useEnabledVodSources(): {
   /** 加载已启用点播源并订阅源数据变化 */
   useEffect(() => {
     let active = true
+    let requestId = 0
     /** 重新加载已启用的点播源 */
     const refresh = (): void => {
+      const request = ++requestId
       void listSources()
         .then((items) => {
-          if (!active) return
+          if (!active || request !== requestId) return
           pruneVodCategoryCache(items)
+          pruneVodCatalogPages(items)
           setSources(items.filter((item) => !item.disabled))
           setErrorMessage('')
         })
         .catch((error: unknown) => {
-          if (active) setErrorMessage(toErrorMessage(error))
+          if (active && request === requestId) setErrorMessage(toErrorMessage(error))
         })
         .finally(() => {
-          if (active) setIsLoading(false)
+          if (active && request === requestId) setIsLoading(false)
         })
     }
     refresh()
@@ -98,132 +114,178 @@ export function useVodCatalog({
   source?: VodSourceConfig
 }): CatalogPageState & { retry: () => Promise<void> } {
   const [state, setState] = useState<CatalogPageState>(emptyPageState)
-  const sourceKey = `${source?.id ?? ''}|${source?.url ?? ''}`
+  const sourceKey = source ? getVodCatalogSourceKey(source) : ''
   /** 标识当前点播源、分类和关键词的分页上下文键 */
-  const paginationContextKey = `${sourceKey}|${categoryId ?? ''}|${keyword ?? ''}`
-  const requestKey = `${paginationContextKey}|${page}`
-  const activeRequestKeyRef = useRef(requestKey)
+  const paginationContextKey = source ? getVodCatalogContextKey(source, categoryId, keyword) : ''
+  const requestIdRef = useRef(0)
+  const sourceRef = useRef(source)
+  sourceRef.current = source
+  const [cacheRevision, setCacheRevision] = useState(getVodCatalogCacheRevision)
   const activeSourceKeyRef = useRef(sourceKey)
-  const paginationContextKeyRef = useRef(paginationContextKey)
+  const paginationContextKeyRef = useRef('')
+  const appliedCacheRevisionRef = useRef(cacheRevision)
   const pageCountCeilingRef = useRef<number | null>(null)
   const pageSnapshotsRef = useRef(new Map<number, PageSnapshot>())
-  const unsupportedPaginationSourcesRef = useRef(new Set<string>())
+  const unsupportedPaginationRef = useRef(false)
   const stateRef = useRef(state)
   stateRef.current = state
 
-  /** 请求指定分页的资源目录数据 */
-  const requestPage = useCallback(async (): Promise<void> => {
-    if (!source) return
-    const requestIdentity = requestKey
-    setState((current) => ({
-      ...current,
-      errorMessage: '',
-      isLoading: true,
-      redirectPage: null,
-    }))
-    try {
-      const result = await getVodCatalogPage({ sourceId: source.id, page, categoryId, keyword })
-      if (activeRequestKeyRef.current !== requestIdentity) return
-      if (result.categories.length > 0) writeCachedVodCategories(source, result.categories)
-      const categories = result.categories.length > 0 ? result.categories : stateRef.current.categories
-      const fallbackSnapshot = getPreviousSnapshot(pageSnapshotsRef.current, page)
+  /** 监听跨页面缓存清理，清理后重新请求当前目录 */
+  useEffect(() => subscribeVodCatalogInvalidation(() => setCacheRevision(getVodCatalogCacheRevision())), [])
 
-      if (page > 1 && result.items.length === 0) {
-        pageCountCeilingRef.current = fallbackSnapshot?.state.page ?? 1
-        if (fallbackSnapshot) {
-          setState({
-            ...fallbackSnapshot.state,
-            categories,
-            errorMessage: '',
-            isLoading: false,
-            pageCount: fallbackSnapshot.state.page,
-            redirectPage: fallbackSnapshot.state.page,
-          })
-        } else {
-          setState({ ...emptyPageState, categories, redirectPage: 1 })
+  /** 读取当前页缓存或联网更新，统一执行分页校正并隔离迟到结果 */
+  const requestPage = useCallback(
+    async (force = false): Promise<void> => {
+      const source = sourceRef.current
+      if (!source) return
+      const requestId = ++requestIdRef.current
+      const revision = getVodCatalogCacheRevision()
+      /** 判断结果是否仍属于当前页面与缓存版本 */
+      const isCurrent = (): boolean => requestIdRef.current === requestId && revision === getVodCatalogCacheRevision()
+      const cached = readVodCatalogPage(paginationContextKey, page)
+      const needsUpdate = force || !cached || isRecommendationCacheExpired(cached.fetchedAt)
+      for (const snapshotPage of pageSnapshotsRef.current.keys()) {
+        const entry = readVodCatalogPage(paginationContextKey, snapshotPage)
+        if (!entry || isRecommendationCacheExpired(entry.fetchedAt)) {
+          pageSnapshotsRef.current.delete(snapshotPage)
+          pageCountCeilingRef.current = null
+          unsupportedPaginationRef.current = false
         }
-        return
       }
+      /** 将服务端或缓存分页转换为已校正的页面状态 */
+      const applyResult = (result: VodCatalogPage): CatalogPageState => {
+        if (result.categories.length > 0) writeCachedVodCategories(source, result.categories)
+        const categories = result.categories.length > 0 ? result.categories : readCachedVodCategories(source)
+        const fallbackSnapshot = getPreviousSnapshot(pageSnapshotsRef.current, page)
 
-      const fingerprint = createPageFingerprint(result.items)
-      const duplicateSnapshot = findDuplicateSnapshot(pageSnapshotsRef.current, page, fingerprint)
-      if (page > 1 && duplicateSnapshot) {
-        const onlyFirstPageKnown = pageSnapshotsRef.current.size === 1 && pageSnapshotsRef.current.has(1)
-        if (!onlyFirstPageKnown) {
-          pageCountCeilingRef.current = page - 1
-          const previousSnapshot = getPreviousSnapshot(pageSnapshotsRef.current, page) ?? duplicateSnapshot
-          setState({
-            ...previousSnapshot.state,
+        if (page > 1 && result.items.length === 0) {
+          pageCountCeilingRef.current = fallbackSnapshot?.state.page ?? 1
+          if (fallbackSnapshot) {
+            return {
+              ...fallbackSnapshot.state,
+              categories,
+              errorMessage: '',
+              isLoading: false,
+              isRefreshing: false,
+              pageCount: fallbackSnapshot.state.page,
+              redirectPage: fallbackSnapshot.state.page,
+            }
+          } else {
+            return { ...emptyPageState, categories, redirectPage: 1 }
+          }
+        }
+
+        const fingerprint = createPageFingerprint(result.items)
+        const duplicateSnapshot = findDuplicateSnapshot(pageSnapshotsRef.current, page, fingerprint)
+        if (page > 1 && duplicateSnapshot) {
+          const otherPages = [...pageSnapshotsRef.current.keys()].filter((snapshotPage) => snapshotPage !== page)
+          const onlyFirstPageKnown = otherPages.length === 1 && otherPages[0] === 1
+          if (!onlyFirstPageKnown) {
+            pageCountCeilingRef.current = page - 1
+            const previousSnapshot = getPreviousSnapshot(pageSnapshotsRef.current, page) ?? duplicateSnapshot
+            return {
+              ...previousSnapshot.state,
+              categories,
+              errorMessage: '',
+              isLoading: false,
+              isRefreshing: false,
+              pageCount: Math.min(previousSnapshot.state.pageCount, page - 1),
+              redirectPage: previousSnapshot.state.page,
+            }
+          }
+
+          unsupportedPaginationRef.current = true
+          const firstSnapshot = pageSnapshotsRef.current.get(1) ?? duplicateSnapshot
+          const fallbackState = {
+            ...firstSnapshot.state,
             categories,
             errorMessage: '',
             isLoading: false,
-            pageCount: Math.min(previousSnapshot.state.pageCount, page - 1),
-            redirectPage: previousSnapshot.state.page,
+            isRefreshing: false,
+            pageCount: 1,
+            redirectPage: firstSnapshot.state.page,
+          }
+          pageSnapshotsRef.current.clear()
+          pageSnapshotsRef.current.set(firstSnapshot.state.page, {
+            fingerprint: firstSnapshot.fingerprint,
+            state: fallbackState,
           })
-          return
+          return fallbackState
         }
 
-        unsupportedPaginationSourcesRef.current.add(sourceKey)
-        const firstSnapshot = pageSnapshotsRef.current.get(1) ?? duplicateSnapshot
-        const fallbackState = {
-          ...firstSnapshot.state,
+        const nextState: CatalogPageState = {
           categories,
           errorMessage: '',
           isLoading: false,
-          pageCount: 1,
-          redirectPage: firstSnapshot.state.page,
-        }
-        pageSnapshotsRef.current.clear()
-        pageSnapshotsRef.current.set(firstSnapshot.state.page, {
-          fingerprint: firstSnapshot.fingerprint,
-          state: fallbackState,
-        })
-        setState(fallbackState)
-        return
-      }
-
-      const nextState: CatalogPageState = {
-        categories,
-        errorMessage: '',
-        isLoading: false,
-        items: result.items,
-        page,
-        pageCount: resolvePageCount(
+          isRefreshing: false,
+          items: result.items,
           page,
-          result.pageCount,
-          pageCountCeilingRef.current,
-          unsupportedPaginationSourcesRef.current.has(sourceKey),
-        ),
-        redirectPage: null,
-        total: result.total,
-      }
-      pageSnapshotsRef.current.set(page, { fingerprint, state: nextState })
-      setState(nextState)
-    } catch (error) {
-      if (activeRequestKeyRef.current !== requestIdentity) return
-      const fallbackSnapshot = getNearestSnapshot(pageSnapshotsRef.current, page)
-      if (fallbackSnapshot) {
-        const isSamePage = fallbackSnapshot.state.page === page
-        setState({
-          ...fallbackSnapshot.state,
-          errorMessage: isSamePage ? toErrorMessage(error) : '',
-          isLoading: false,
-          redirectPage: isSamePage ? null : fallbackSnapshot.state.page,
-        })
-      } else {
-        setState((current) => ({
-          ...current,
-          errorMessage: toErrorMessage(error),
-          isLoading: false,
+          pageCount: resolvePageCount(
+            page,
+            result.pageCount,
+            pageCountCeilingRef.current,
+            unsupportedPaginationRef.current,
+          ),
           redirectPage: null,
-        }))
+          total: result.total,
+        }
+        pageSnapshotsRef.current.set(page, { fingerprint, state: nextState })
+        return nextState
       }
-    }
-  }, [categoryId, keyword, page, requestKey, source, sourceKey])
+      const cachedState = cached ? applyResult(cached.result) : undefined
+      setState(
+        cachedState
+          ? {
+              ...cachedState,
+              isRefreshing: needsUpdate,
+              redirectPage: needsUpdate ? null : cachedState.redirectPage,
+            }
+          : { ...emptyPageState, categories: readCachedVodCategories(source), isLoading: true },
+      )
+      if (!needsUpdate) return
+      try {
+        const entry = await fetchVodCatalogPage(source, { sourceId: source.id, page, categoryId, keyword })
+        if (!isCurrent()) return
+        if (cached || force) {
+          pageCountCeilingRef.current = null
+          pageSnapshotsRef.current.clear()
+          unsupportedPaginationRef.current = false
+        }
+        setState(applyResult(entry.result))
+      } catch (error) {
+        if (!isCurrent()) return
+        if (cachedState) {
+          setState({ ...cachedState, errorMessage: toErrorMessage(error), isRefreshing: false, redirectPage: null })
+          return
+        }
+        const fallbackSnapshot = getNearestSnapshot(pageSnapshotsRef.current, page)
+        if (fallbackSnapshot) {
+          const isSamePage = fallbackSnapshot.state.page === page
+          setState({
+            ...fallbackSnapshot.state,
+            errorMessage: isSamePage ? toErrorMessage(error) : '',
+            isLoading: false,
+            isRefreshing: false,
+            redirectPage: isSamePage ? null : fallbackSnapshot.state.page,
+          })
+        } else {
+          setState((current) => ({
+            ...current,
+            errorMessage: toErrorMessage(error),
+            isLoading: false,
+            isRefreshing: false,
+            redirectPage: null,
+          }))
+        }
+      }
+    },
+    [categoryId, keyword, page, paginationContextKey],
+  )
 
   /** 切换目录请求上下文并加载当前分页 */
   useEffect(() => {
-    activeRequestKeyRef.current = requestKey
+    const source = sourceRef.current
+    requestIdRef.current += 1
     if (!source) {
       activeSourceKeyRef.current = ''
       pageCountCeilingRef.current = null
@@ -231,26 +293,44 @@ export function useVodCatalog({
       setState(emptyPageState)
       return
     }
-    if (paginationContextKeyRef.current !== paginationContextKey) {
+    if (paginationContextKeyRef.current !== paginationContextKey || appliedCacheRevisionRef.current !== cacheRevision) {
       paginationContextKeyRef.current = paginationContextKey
+      appliedCacheRevisionRef.current = cacheRevision
       pageCountCeilingRef.current = null
       pageSnapshotsRef.current.clear()
+      unsupportedPaginationRef.current = false
+      for (const result of readVodCatalogContext(paginationContextKey)) {
+        if (!result.items.length) continue
+        pageSnapshotsRef.current.set(result.page, {
+          fingerprint: createPageFingerprint(result.items),
+          state: { ...emptyPageState, ...result, redirectPage: null },
+        })
+      }
     }
     const categories =
       activeSourceKeyRef.current === sourceKey ? stateRef.current.categories : readCachedVodCategories(source)
     activeSourceKeyRef.current = sourceKey
-    if (page > 1 && unsupportedPaginationSourcesRef.current.has(sourceKey)) {
+    const firstPage = readVodCatalogPage(paginationContextKey, 1)
+    if (
+      page > 1 &&
+      unsupportedPaginationRef.current &&
+      firstPage &&
+      !isRecommendationCacheExpired(firstPage.fetchedAt)
+    ) {
       setState({ ...emptyPageState, categories, redirectPage: 1 })
       return
     }
     setState({ ...emptyPageState, categories, isLoading: true })
     void requestPage()
-  }, [page, paginationContextKey, requestKey, requestPage, source, sourceKey])
+    return () => {
+      requestIdRef.current += 1
+    }
+  }, [cacheRevision, page, paginationContextKey, requestPage, sourceKey])
 
   return useMemo(
     () => ({
       ...state,
-      retry: requestPage,
+      retry: () => requestPage(true),
     }),
     [requestPage, state],
   )

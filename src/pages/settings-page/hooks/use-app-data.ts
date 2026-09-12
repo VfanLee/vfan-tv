@@ -4,6 +4,8 @@ import { toast } from 'sonner'
 import type { AppDataClearSelection } from '@/types'
 import { clearAppData, exportDatabase, importDatabase, restartApp, restoreFactorySettings } from '@/platform/api'
 import { clearVodCategoryCache } from '@/platform/cache/vod-catalog-categories'
+import { clearVodCatalogPages } from '@/platform/cache/recommendation-cache'
+import { useAppDataStore } from '@/stores'
 import { clearIptvPreviewCache } from '../../iptv-page/preview-cache'
 
 // Rust 执行数据库操作，前端负责反馈与释放内存缓存。
@@ -123,5 +125,7 @@ function clearSourceStorage(): void {
 function clearCacheStorage(): void {
   clearIptvPlaylistCache()
   clearVodCategoryCache()
+  clearVodCatalogPages()
+  useAppDataStore.getState().clearRecommendationCache()
   clearIptvPreviewCache()
 }

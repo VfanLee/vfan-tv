@@ -24,6 +24,9 @@ export function HotPage(): React.JSX.Element {
   /** 当前豆瓣推荐分类对应的缓存状态 */
   const categoryCache = useAppDataStore((state) => state.hot[cacheKey])
   const loadHotPage = useAppDataStore((state) => state.loadHotPage)
+  const visitHotCategory = useAppDataStore((state) => state.visitHotCategory)
+  const retryHotCategory = useAppDataStore((state) => state.retryHotCategory)
+  const cacheRevision = useAppDataStore((state) => state.cacheRevision)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const selectedTypesRef = useRef<Record<string, HotRecommendationType>>(
     Object.fromEntries(
@@ -51,13 +54,20 @@ export function HotPage(): React.JSX.Element {
 
   /** 加载当前豆瓣分类的首批推荐内容 */
   useEffect(() => {
-    if (!categoryCache.initialized) void loadHotPage(activeSection.key, activeType)
-  }, [activeSection.key, activeType, categoryCache.initialized, loadHotPage])
+    void visitHotCategory(activeSection.key, activeType)
+  }, [activeSection.key, activeType, cacheRevision, visitHotCategory])
 
   /** 监听列表底部并加载下一页推荐内容 */
   useEffect(() => {
     const sentinel = sentinelRef.current
-    if (!sentinel || !categoryCache.hasMore || categoryCache.isLoading || categoryCache.errorMessage) return
+    if (
+      !sentinel ||
+      !categoryCache.initialized ||
+      !categoryCache.hasMore ||
+      categoryCache.isLoading ||
+      categoryCache.errorMessage
+    )
+      return
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -73,6 +83,7 @@ export function HotPage(): React.JSX.Element {
     activeType,
     categoryCache.errorMessage,
     categoryCache.hasMore,
+    categoryCache.initialized,
     categoryCache.isLoading,
     loadHotPage,
   ])
@@ -149,10 +160,12 @@ export function HotPage(): React.JSX.Element {
               <button
                 className="border-border bg-card hover:bg-accent focus-visible:ring-ring rounded-xl border px-4 py-2 outline-none focus-visible:ring-2"
                 type="button"
-                onClick={() => void loadHotPage(activeSection.key, activeType)}
+                onClick={() => void retryHotCategory(activeSection.key, activeType)}
               >
                 加载失败，点击重试
               </button>
+            ) : categoryCache.isRefreshing ? (
+              '正在更新推荐，当前内容仍可浏览'
             ) : categoryCache.isLoading || showInitialSkeleton ? (
               '正在加载更多'
             ) : categoryCache.hasMore ? (
