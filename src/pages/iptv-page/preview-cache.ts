@@ -1,17 +1,29 @@
-import Hls from 'hls.js'
-import mpegts from 'mpegts.js'
 import type { MediaStreamType } from '@/types'
+import { capturePreviewFrame } from './preview-frame'
 
-/** 频道预览缓存最多保留的条目数 */
+/** 成功封面与失败记录各自最多保留的条目数 */
 const MAX_PREVIEWS = 120
-/** 频道预览完整任务的最大并发数，为正式播放保留一个媒体探测槽位 */
+/** 预览任务的最大并发数，为正式播放保留媒体探测资源 */
 const MAX_CONCURRENT = 2
-/** 按播放地址保存的频道预览缓存 */
+/** 失败频道再次自动尝试前的冷却时间 */
+const FAILURE_COOLDOWN_MS = 30_000
+/** 按频道及线路配置缓存已生成的封面 */
 const cache = new Map<string, string>()
-/** 等待获取预览执行槽位的任务队列 */
+/** 尚在冷却中的失败预览 */
+const failures = new Map<string, { error: unknown; retryAt: number }>()
+/** 同一频道的多个可见卡片共用一个预览任务 */
+const pending = new Map<string, PreviewTask>()
+/** 等待预览执行槽位的可取消任务队列 */
 const waiters: Array<() => void> = []
-/** 当前正在执行的完整预览任务数 */
+/** 包含播放地址解析和会话释放的实际执行任务数 */
 let activeCount = 0
+
+interface PreviewTask {
+  controller: AbortController
+  promise: Promise<string>
+  consumers: number
+  settled: boolean
+}
 
 interface LivePreviewTarget {
   src: string
@@ -19,33 +31,119 @@ interface LivePreviewTarget {
   release?: () => Promise<void> | void
 }
 
-/** 清除 IPTV 预览缓存 */
+/** 清除预览缓存并取消旧任务，避免旧结果重新写入缓存 */
 export function clearIptvPreviewCache(): void {
   cache.clear()
+  failures.clear()
+  for (const task of pending.values()) task.controller.abort()
+  pending.clear()
 }
 
-/** 返回频道直播画面的 JPEG 预览图，并复用已有缓存 */
+/** 手动刷新无预览频道时允许重新尝试失败线路 */
+export function clearIptvPreviewFailures(): void {
+  for (const key of failures.keys()) pending.get(key)?.controller.abort()
+  failures.clear()
+}
+
+/** 读取成功封面并更新最近使用顺序，不发起预览请求 */
+export function readCachedLivePreview(key: string): string | undefined {
+  const image = cache.get(key)
+  if (image) {
+    cache.delete(key)
+    cache.set(key, image)
+  }
+  return image
+}
+
+/** 复用成功封面或进行中的预览，为每个调用方独立处理取消 */
 export async function getLivePreview(
   key: string,
   resolveTarget: () => Promise<LivePreviewTarget>,
   signal: AbortSignal,
 ): Promise<string> {
-  if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
-  const cached = cache.get(key)
-  if (cached) {
-    cache.delete(key)
-    cache.set(key, cached)
-    return cached
+  signal.throwIfAborted()
+  const cached = readCachedLivePreview(key)
+  if (cached) return cached
+  const failure = failures.get(key)
+  if (failure && failure.retryAt > Date.now()) throw failure.error
+  failures.delete(key)
+
+  let task = pending.get(key)
+  if (!task || task.controller.signal.aborted) {
+    const controller = new AbortController()
+    const created: PreviewTask = {
+      controller,
+      consumers: 0,
+      settled: false,
+      promise: runPreview(key, resolveTarget, controller.signal).finally(() => {
+        created.settled = true
+        if (pending.get(key) === created) pending.delete(key)
+      }),
+    }
+    pending.set(key, created)
+    task = created
   }
+  return subscribePreview(task, signal)
+}
+
+/** 最后一个调用方离开后取消共享任务，避免影响仍然可见的其他卡片 */
+function subscribePreview(task: PreviewTask, signal: AbortSignal): Promise<string> {
+  task.consumers += 1
+  return new Promise((resolve, reject) => {
+    let settled = false
+    /** 解除单个调用方的订阅并按需取消共享任务 */
+    const detach = (): void => {
+      settled = true
+      signal.removeEventListener('abort', abort)
+      task.consumers -= 1
+      if (!task.consumers && !task.settled) task.controller.abort()
+    }
+    /** 立即结束已离开可视区域的调用方 */
+    const abort = (): void => {
+      if (settled) return
+      detach()
+      reject(new DOMException('Aborted', 'AbortError'))
+    }
+    signal.addEventListener('abort', abort, { once: true })
+    task.promise.then(
+      (image) => {
+        if (settled) return
+        detach()
+        resolve(image)
+      },
+      (error: unknown) => {
+        if (settled) return
+        detach()
+        reject(error)
+      },
+    )
+    if (signal.aborted) abort()
+  })
+}
+
+/** 获取播放地址并抓取首帧，在所有阶段维持并发上限和资源释放 */
+async function runPreview(
+  key: string,
+  resolveTarget: () => Promise<LivePreviewTarget>,
+  signal: AbortSignal,
+): Promise<string> {
   await acquire(signal)
   let target: LivePreviewTarget | undefined
   try {
+    signal.throwIfAborted()
     target = await resolveTarget()
-    if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
-    const image = await captureFrame(target.src, target.type, signal)
+    signal.throwIfAborted()
+    const image = await capturePreviewFrame(target.src, target.type, signal)
+    signal.throwIfAborted()
     cache.set(key, image)
     while (cache.size > MAX_PREVIEWS) cache.delete(cache.keys().next().value as string)
     return image
+  } catch (error) {
+    if (!signal.aborted) {
+      failures.set(key, { error, retryAt: Date.now() + FAILURE_COOLDOWN_MS })
+      while (failures.size > MAX_PREVIEWS) failures.delete(failures.keys().next().value as string)
+    }
+    throw error
   } finally {
     try {
       await target?.release?.()
@@ -56,9 +154,9 @@ export async function getLivePreview(
   }
 }
 
-/** 获取一个预览执行槽位 */
+/** 获取一个预览执行槽位，排队期间离开的任务立即移除 */
 async function acquire(signal: AbortSignal): Promise<void> {
-  if (signal.aborted) throw new DOMException('Aborted', 'AbortError')
+  signal.throwIfAborted()
   if (activeCount < MAX_CONCURRENT) {
     activeCount += 1
     return
@@ -81,86 +179,8 @@ async function acquire(signal: AbortSignal): Promise<void> {
   })
 }
 
-/** 释放当前预览执行槽位 */
+/** 在实际任务退出后释放槽位，继续处理当前可见频道 */
 function release(): void {
   activeCount = Math.max(0, activeCount - 1)
   waiters.shift()?.()
-}
-
-/** 从直播地址截取画面并转换为 JPEG Data URL */
-async function captureFrame(src: string, type: MediaStreamType, signal: AbortSignal): Promise<string> {
-  const video = document.createElement('video')
-  video.muted = true
-  video.playsInline = true
-  video.crossOrigin = 'anonymous'
-  video.style.cssText = 'position:fixed;width:2px;height:2px;left:-100px;top:-100px;opacity:0;pointer-events:none'
-  document.body.append(video)
-  let hls: Hls | undefined
-  let mpegtsPlayer: ReturnType<typeof mpegts.createPlayer> | undefined
-  try {
-    if (type === 'hls' && Hls.isSupported()) {
-      hls = new Hls({ enableWorker: true, lowLatencyMode: true, maxBufferLength: 4 })
-      hls.loadSource(src)
-      hls.attachMedia(video)
-    } else if ((type === 'flv' || type === 'mpegts') && mpegts.isSupported()) {
-      mpegtsPlayer = mpegts.createPlayer({ type: type === 'flv' ? 'flv' : 'mpegts', isLive: true, url: src })
-      mpegtsPlayer.attachMediaElement(video)
-      mpegtsPlayer.load()
-    } else {
-      video.src = src
-    }
-    await waitForFrame(video, signal)
-    const width = video.videoWidth || 640
-    const height = video.videoHeight || 360
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.min(640, width)
-    canvas.height = Math.round((canvas.width * height) / width)
-    canvas.getContext('2d')?.drawImage(video, 0, 0, canvas.width, canvas.height)
-    return canvas.toDataURL('image/jpeg', 0.72)
-  } finally {
-    hls?.destroy()
-    if (mpegtsPlayer) {
-      try {
-        mpegtsPlayer.unload()
-        mpegtsPlayer.detachMediaElement()
-        mpegtsPlayer.destroy()
-      } catch {
-        // 忽略关闭预览连接时的异常。
-      }
-    }
-    video.pause()
-    video.removeAttribute('src')
-    video.load()
-    video.remove()
-  }
-}
-
-/** 等待视频加载首个可绘制画面 */
-function waitForFrame(video: HTMLVideoElement, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const timeout = window.setTimeout(() => finish(new Error('预览超时')), 8_000)
-    /** 移除画面监听器，并完成或拒绝等待任务 */
-    const finish = (error?: Error): void => {
-      window.clearTimeout(timeout)
-      video.removeEventListener('loadeddata', ready)
-      video.removeEventListener('canplay', ready)
-      video.removeEventListener('error', failed)
-      signal.removeEventListener('abort', aborted)
-      error ? reject(error) : resolve()
-    }
-    /** 处理媒体帧已就绪事件 */
-    const ready = (): void => {
-      if (video.videoWidth > 0) finish()
-      else void video.play().catch(() => undefined)
-    }
-    /** 处理媒体帧加载失败事件 */
-    const failed = (): void => finish(new Error('无法生成频道预览'))
-    /** 处理媒体帧捕获取消事件 */
-    const aborted = (): void => finish(new DOMException('Aborted', 'AbortError'))
-    video.addEventListener('loadeddata', ready)
-    video.addEventListener('canplay', ready)
-    video.addEventListener('error', failed)
-    signal.addEventListener('abort', aborted, { once: true })
-    void video.play().catch(() => undefined)
-  })
 }

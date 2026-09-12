@@ -49,6 +49,8 @@ export function IptvChannelLogo({
         <img
           alt=""
           className={cn('size-full object-contain', imageClassName)}
+          decoding="async"
+          loading="lazy"
           src={resolvedSrc}
           onError={() => setFailedSrc(resolvedSrc)}
         />

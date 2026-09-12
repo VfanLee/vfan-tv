@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { Play } from 'lucide-react'
 import type { IptvChannel, IptvSourceConfig } from '@/types'
 import { getIptvPlaybackTarget, releaseMediaPlaybackSession } from '@/platform/api'
-import { getLivePreview } from '../preview-cache'
+import { getLivePreview, readCachedLivePreview } from '../preview-cache'
+import { observePreviewVisibility } from '../preview-visibility'
 import { IptvChannelLogo } from './iptv-channel-logo'
 
 /** 渲染频道卡片 */
@@ -17,41 +18,65 @@ export function ChannelCard({
   source: IptvSourceConfig
   onOpen: () => void
 }): React.JSX.Element {
-  const requestKey = `${source.id}:${channel.id}:${channel.streams[0]?.id ?? ''}`
-  const successfulPreviewKeyRef = useRef('')
-  const [previewState, setPreviewState] = useState<{ key: string; image?: string; failed?: boolean }>({ key: '' })
-  const preview = previewState.key === requestKey ? previewState.image : undefined
+  const cardRef = useRef<HTMLButtonElement>(null)
+  const stream = channel.streams[0]
+  const streamId = stream?.id
+  /** 封面按源配置和首条线路配置复用，避免请求头变更后复用旧画面 */
+  const requestKey = JSON.stringify([
+    source.id,
+    source.url,
+    source.headers,
+    channel.id,
+    streamId,
+    stream?.url,
+    stream?.requestHeaders,
+  ])
+  const [previewState, setPreviewState] = useState<{ key: string; image?: string }>(() => ({
+    key: requestKey,
+    image: readCachedLivePreview(requestKey),
+  }))
+  const preview = previewState.key === requestKey ? previewState.image : readCachedLivePreview(requestKey)
 
-  /** 解析频道播放地址并截取预览画面 */
+  /** 复用已有封面，仅为持续可见的卡片解析播放地址和抓帧 */
   useEffect(() => {
-    const stream = channel.streams[0]
-    if (!stream || successfulPreviewKeyRef.current === requestKey) return
-    const controller = new AbortController()
-    void getLivePreview(
-      requestKey,
-      async () => {
-        const target = await getIptvPlaybackTarget(source.id, channel.id, stream.id)
-        return {
-          src: target.src,
-          type: target.streamType,
-          release: () => releaseMediaPlaybackSession(target.mediaSessionId),
-        }
-      },
-      controller.signal,
-    )
-      .then((image) => {
-        successfulPreviewKeyRef.current = requestKey
-        setPreviewState({ key: requestKey, image })
-      })
-      .catch((error: unknown) => {
-        if (controller.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')) return
-        setPreviewState({ key: requestKey, failed: true })
-      })
-    return () => controller.abort()
-  }, [channel.id, channel.streams, previewRetryEpoch, requestKey, source.id])
+    const element = cardRef.current
+    if (!element || !streamId || preview) return
+    let controller: AbortController | undefined
+    const stopObserving = observePreviewVisibility(element, (visible) => {
+      controller?.abort()
+      controller = undefined
+      if (!visible) return
+      const request = new AbortController()
+      controller = request
+      void getLivePreview(
+        requestKey,
+        async () => {
+          const target = await getIptvPlaybackTarget(source.id, channel.id, streamId)
+          return {
+            src: target.src,
+            type: target.streamType,
+            release: () => releaseMediaPlaybackSession(target.mediaSessionId),
+          }
+        },
+        request.signal,
+      )
+        .then((image) => {
+          if (request.signal.aborted) return
+          setPreviewState({ key: requestKey, image })
+        })
+        .catch(() => {
+          /* 失败保留频道图标，冷却或手动刷新后再尝试 */
+        })
+    })
+    return () => {
+      stopObserving()
+      controller?.abort()
+    }
+  }, [channel.id, streamId, preview, previewRetryEpoch, requestKey, source.id])
 
   return (
     <button
+      ref={cardRef}
       aria-label={`播放 ${channel.title}`}
       className="group focus-visible:ring-ring bg-card border-border block w-full overflow-hidden rounded-xl border text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-2 focus-visible:outline-none motion-reduce:hover:translate-y-0"
       type="button"
@@ -62,6 +87,8 @@ export function ChannelCard({
           <img
             alt=""
             className="size-full object-cover transition duration-300 group-hover:scale-[1.02]"
+            decoding="async"
+            loading="lazy"
             src={preview}
           />
         ) : (

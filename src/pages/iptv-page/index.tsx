@@ -5,37 +5,45 @@ import { DropdownMenu } from 'radix-ui'
 import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { useUiPreferencesStore } from '@/stores'
-import type { IptvChannel, IptvPlaylist, IptvSourceConfig } from '@/types'
+import type { IptvChannel, IptvPlaylist } from '@/types'
 import { EmptyState } from '@/components'
-import { getIptvCatalog, listIptvSources, onAppDataChange, openSettingsWindow } from '@/platform/api'
+import { openSettingsWindow } from '@/platform/api'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '@/ui/select'
 import { ChannelCard } from './components/channel-card'
+import { clearIptvPreviewFailures } from './preview-cache'
+import { useIptvCatalog, type CatalogRefreshStatus } from './use-iptv-catalog'
 
 /** 代表“全部频道分组”的筛选值 */
 const ALL_GROUPS = '__all__'
-
-type CatalogRefreshStatus = 'idle' | 'background' | 'manual' | 'failed'
 
 /** 渲染 IPTV 频道浏览页面 */
 export function IptvPage(): React.JSX.Element {
   const navigate = useNavigate()
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [sources, setSources] = useState<IptvSourceConfig[]>([])
-  const [sourceId, setSourceId] = useState(() => readWallState().sourceId)
-  const [sourceConfigRevision, setSourceConfigRevision] = useState(0)
-  const [playlist, setPlaylist] = useState<IptvPlaylist>()
+  const {
+    sources,
+    sourceId,
+    source,
+    selectSource: selectCatalogSource,
+    isLoadingSources,
+    sourcesError,
+    retrySources,
+    playlist,
+    isLoadingCatalog,
+    catalogRefreshStatus,
+    catalogError,
+    refreshCatalog: loadFreshCatalog,
+  } = useIptvCatalog(readWallState().sourceId)
   const [keyword, setKeyword] = useState(() => readWallState().keyword)
   const deferredKeyword = useDeferredValue(keyword.trim().toLowerCase())
   const [group, setGroup] = useState(() => readWallState().group)
   const [previewRetryEpoch, setPreviewRetryEpoch] = useState(0)
-  const [isLoading, setIsLoading] = useState(true)
-  const [catalogRefreshStatus, setCatalogRefreshStatus] = useState<CatalogRefreshStatus>('idle')
   const [containerWidth, setContainerWidth] = useState(900)
-  const catalogRequestIdRef = useRef(0)
   const restoredScrollRef = useRef(false)
-  const source = sources.find((item) => item.id === sourceId)
+  const isLoading = (isLoadingSources && !sources.length) || isLoadingCatalog
+  const pageError = !sources.length ? sourcesError : !playlist ? catalogError : undefined
   const isRefreshing = catalogRefreshStatus === 'background' || catalogRefreshStatus === 'manual'
   const groups = useMemo(() => [...new Set((playlist?.channels ?? []).map((channel) => channel.group))], [playlist])
   /** 根据频道分组和搜索词筛选后的频道列表 */
@@ -65,78 +73,6 @@ export function IptvPage(): React.JSX.Element {
     overscan: 2,
   })
   const virtualRows = virtualizer.getVirtualItems()
-
-  /** 加载可用 IPTV 源并订阅源数据变化 */
-  useEffect(() => {
-    let active = true
-    /** 重新加载可用的 IPTV 源并重置频道状态 */
-    const refreshSources = (invalidateCatalog = false): void => {
-      void listIptvSources()
-        .then((items) => {
-          if (!active) return
-          const available = items.filter((item) => !item.disabled)
-          setSources(available)
-          setSourceId((current) => (available.some((item) => item.id === current) ? current : (available[0]?.id ?? '')))
-          if (invalidateCatalog) setSourceConfigRevision((revision) => revision + 1)
-        })
-        .catch((error: unknown) => {
-          if (active) toast.error('IPTV 源读取失败', { description: toErrorMessage(error) })
-        })
-        .finally(() => {
-          if (active) setIsLoading(false)
-        })
-    }
-    refreshSources()
-    const unsubscribe = onAppDataChange((domain) => {
-      if (domain === 'iptv-sources' || domain === 'app-data') refreshSources(true)
-    })
-    return () => {
-      active = false
-      unsubscribe()
-    }
-  }, [])
-
-  /** 加载当前 IPTV 源的频道目录 */
-  useEffect(() => {
-    const requestId = ++catalogRequestIdRef.current
-    if (!sourceId) {
-      setPlaylist(undefined)
-      setCatalogRefreshStatus('idle')
-      setIsLoading(false)
-      return
-    }
-    let active = true
-    const isCurrent = (): boolean => active && catalogRequestIdRef.current === requestId
-    setIsLoading(true)
-    setCatalogRefreshStatus('idle')
-    void getIptvCatalog(sourceId)
-      .then((catalog) => {
-        if (!isCurrent()) return
-        setPlaylist(catalog)
-        if (!catalog.stale) return
-        setCatalogRefreshStatus('background')
-        void getIptvCatalog(sourceId, true)
-          .then((freshCatalog) => {
-            if (!isCurrent()) return
-            setPlaylist(freshCatalog)
-            setCatalogRefreshStatus('idle')
-          })
-          .catch(() => {
-            if (isCurrent()) setCatalogRefreshStatus('failed')
-          })
-      })
-      .catch((error: unknown) => {
-        if (!isCurrent()) return
-        setCatalogRefreshStatus('failed')
-        toast.error('IPTV 源加载失败', { description: toErrorMessage(error) })
-      })
-      .finally(() => {
-        if (isCurrent()) setIsLoading(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [sourceConfigRevision, sourceId])
 
   /** 监听频道墙容器宽度并更新列数计算 */
   useEffect(() => {
@@ -172,31 +108,28 @@ export function IptvPage(): React.JSX.Element {
     }
   }, [group, keyword, sourceId])
 
-  /** 从源站强制更新频道目录 */
+  /** 从源站更新目录并展示最新请求的执行结果 */
   const refreshCatalog = async (): Promise<void> => {
-    if (!sourceId) return
-    const requestId = ++catalogRequestIdRef.current
-    const previousPlaylist = playlist
-    setCatalogRefreshStatus('manual')
-    try {
-      const catalog = await getIptvCatalog(sourceId, true)
-      if (catalogRequestIdRef.current !== requestId) return
-      setPlaylist(catalog)
-      setCatalogRefreshStatus('idle')
-      showCatalogRefreshResult(previousPlaylist, catalog)
-    } catch (error) {
-      if (catalogRequestIdRef.current !== requestId) return
-      setCatalogRefreshStatus('failed')
-      toast.warning('更新失败，继续使用缓存频道', { description: toErrorMessage(error) })
+    if (isRefreshing) return
+    const result = await loadFreshCatalog()
+    if (!result) return
+    if (result.status === 'success') showCatalogRefreshResult(result.previous, result.catalog)
+    else {
+      toast.warning(result.hasPrevious ? '更新失败，保留已加载频道' : '频道加载失败', { description: result.error })
     }
+  }
+
+  /** 清除频道分组和搜索条件 */
+  const clearFilters = (): void => {
+    setGroup(ALL_GROUPS)
+    setKeyword('')
+    scrollRef.current?.scrollTo({ top: 0 })
   }
 
   /** 选择源 */
   const selectSource = (nextSourceId: string): void => {
-    catalogRequestIdRef.current += 1
-    setSourceId(nextSourceId)
-    setPlaylist(undefined)
-    setCatalogRefreshStatus('idle')
+    if (nextSourceId === sourceId) return
+    selectCatalogSource(nextSourceId)
     setGroup(ALL_GROUPS)
     restoredScrollRef.current = true
     scrollRef.current?.scrollTo({ top: 0 })
@@ -213,7 +146,7 @@ export function IptvPage(): React.JSX.Element {
               {playlist ? getCatalogSubtitle(playlist, catalogRefreshStatus) : '频道墙'}
             </p>
           </div>
-          <Select disabled={!sources.length || isLoading} value={sourceId} onValueChange={selectSource}>
+          <Select disabled={!sources.length || isLoadingSources} value={sourceId} onValueChange={selectSource}>
             <SelectTrigger aria-label="选择 IPTV 源" className="w-48 shrink-0">
               <Tv2 className="text-muted-foreground size-4" />
               <SelectValue placeholder="选择 IPTV 源" />
@@ -228,7 +161,7 @@ export function IptvPage(): React.JSX.Element {
               </SelectGroup>
             </SelectContent>
           </Select>
-          <Select disabled={!playlist || isLoading} value={group} onValueChange={setGroup}>
+          <Select disabled={!playlist} value={group} onValueChange={setGroup}>
             <SelectTrigger aria-label="选择频道分组" className="w-44 shrink-0">
               <ListFilter className="text-muted-foreground size-4" />
               <SelectValue placeholder="选择频道" />
@@ -246,8 +179,11 @@ export function IptvPage(): React.JSX.Element {
           </Select>
           <DropdownMenu.Root>
             <DropdownMenu.Trigger asChild>
-              <Button disabled={!sourceId || isLoading} variant="outline">
-                <RefreshCw className={isRefreshing ? 'animate-spin' : undefined} data-icon="inline-start" />
+              <Button disabled={!source || isLoadingSources} variant="outline">
+                <RefreshCw
+                  className={isRefreshing || isLoadingCatalog ? 'animate-spin' : undefined}
+                  data-icon="inline-start"
+                />
                 刷新
                 <ChevronDown className="text-muted-foreground size-4" data-icon="inline-end" />
               </Button>
@@ -268,8 +204,9 @@ export function IptvPage(): React.JSX.Element {
                 </DropdownMenu.Item>
                 <DropdownMenu.Item
                   className={REFRESH_MENU_ITEM_CLASS}
-                  disabled={isRefreshing}
+                  disabled={!playlist || isRefreshing}
                   onSelect={() => {
+                    clearIptvPreviewFailures()
                     setPreviewRetryEpoch((value) => value + 1)
                     toast.success('正在刷新无预览频道')
                   }}
@@ -291,6 +228,22 @@ export function IptvPage(): React.JSX.Element {
           </div>
         </div>
       </header>
+
+      {(sourcesError && sources.length > 0) || (catalogError && playlist) ? (
+        <div role="alert" className="border-border flex items-center gap-3 border-b px-5 py-3 text-sm sm:px-8">
+          <p className="min-w-0 flex-1">
+            {sourcesError ? '源列表更新失败，保留已加载的源。' : '频道更新失败，保留已加载的频道。'}
+            <span className="text-muted-foreground ml-1">{sourcesError ?? catalogError}</span>
+          </p>
+          <Button
+            variant="outline"
+            disabled={isLoadingSources || isRefreshing}
+            onClick={() => (sourcesError ? retrySources() : void refreshCatalog())}
+          >
+            重试
+          </Button>
+        </div>
+      ) : null}
 
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
         {filteredChannels.length && source ? (
@@ -321,23 +274,52 @@ export function IptvPage(): React.JSX.Element {
           <div className="flex min-h-[480px] items-center justify-center p-8">
             <EmptyState
               action={
-                !sources.length
+                pageError
                   ? {
-                      icon: Settings2,
-                      label: '添加 IPTV 源',
-                      onClick: () => void openSettingsWindow('iptv'),
+                      icon: RefreshCw,
+                      label: '重试',
+                      onClick: () => (!sources.length ? retrySources() : void refreshCatalog()),
                     }
-                  : undefined
+                  : !sources.length
+                    ? {
+                        icon: Settings2,
+                        label: '添加 IPTV 源',
+                        onClick: () => void openSettingsWindow('iptv'),
+                      }
+                    : !playlist?.channels.length
+                      ? {
+                          icon: RefreshCw,
+                          label: '从源更新频道',
+                          onClick: () => void refreshCatalog(),
+                        }
+                      : { icon: ListFilter, label: '清除筛选', onClick: clearFilters }
               }
-              description={!sources.length ? '先添加一个远程 M3U 或 TXT IPTV 源。' : '没有找到符合当前筛选的频道。'}
+              description={
+                pageError ??
+                (!sources.length
+                  ? '先添加一个远程 M3U 或 TXT IPTV 源。'
+                  : !playlist?.channels.length
+                    ? '该源未返回任何频道，可以从源更新后重试。'
+                    : '没有找到符合当前筛选的频道。')
+              }
               icon={Tv2}
-              title={!sources.length ? '还没有 IPTV 源' : '没有匹配频道'}
+              title={
+                pageError
+                  ? !sources.length
+                    ? 'IPTV 源读取失败'
+                    : '频道加载失败'
+                  : !sources.length
+                    ? '还没有 IPTV 源'
+                    : !playlist?.channels.length
+                      ? '源内暂无频道'
+                      : '没有匹配频道'
+              }
             />
           </div>
         ) : (
           <div className="text-muted-foreground flex min-h-[420px] items-center justify-center">
             <RefreshCw className="mr-2 size-5 animate-spin" />
-            正在加载频道…
+            {isLoadingSources && !sources.length ? '正在加载 IPTV 源…' : '正在加载频道…'}
           </div>
         )}
       </div>
@@ -372,7 +354,7 @@ function getCatalogSubtitle(playlist: IptvPlaylist, status: CatalogRefreshStatus
   } else if (status === 'manual') {
     parts.push('正在从源更新')
   } else if (status === 'failed') {
-    parts.push('更新失败，使用缓存')
+    parts.push('更新失败，保留已加载频道')
   } else if (playlist.cached) {
     parts.push(playlist.stale ? '缓存已过期' : '缓存')
   } else {
@@ -447,11 +429,6 @@ function readWallState(): WallState {
 /** 保存频道墙临时状态，不写数据库 */
 function writeWallState(value: WallState): void {
   wallState = { ...value }
-}
-
-/** 将未知错误转换为可展示的错误消息 */
-function toErrorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }
 
 export { IptvPlayerPage } from './player-page'
