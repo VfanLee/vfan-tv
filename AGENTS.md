@@ -15,6 +15,7 @@
 - `src-tauri/src/desktop/`：窗口、小窗和更新。
 - `src-tauri/migrations/`：SQLite 结构迁移。
 - `config/`：构建配置、版本检查与前端回归测试。
+- `scripts/`：版本升级等仓库维护脚本。
 - `docs/`：架构、发布与组件补丁记录。
 - `src-tauri/target/`、`src-tauri/gen/` 为生成目录，不提交到 Git。
 
@@ -35,7 +36,7 @@
 
 ## 开发与验证
 
-- 可用命令以 `package.json` 的 `scripts` 为准；`pnpm dev` 启动 Tauri，`pnpm dev:web` 仅提供前端预览，不提供本机数据服务。
+- 可用命令以 `package.json` 的 `scripts` 为准；`pnpm dev` 启动 Tauri，`pnpm dev:web` 仅提供前端预览，不提供本机数据服务。`pnpm bump-version <major|minor|patch|set X.Y.Z>` 只同步应用版本，不 commit、不打 tag。
 - `pnpm check` 执行应用版本、TypeScript、ESLint 和 Rust 编译检查；`pnpm test` 执行 Rust 与前端回归测试，部分 Rust 测试需要本机回环端口。
 - `pnpm format:check` 检查前端与 Rust 格式；`pnpm lint:rust` 执行 Clippy 严格检查。按改动范围选择检查，纯文档修改不需要运行应用或业务测试。
 - Tauri 构建钩子统一执行版本、类型检查及前端构建；不要通过其他入口绕开。`pnpm build:web` 只构建前端资源，`pnpm build:app` 只编译应用，不生成应用包或安装包。

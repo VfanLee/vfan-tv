@@ -1,6 +1,6 @@
 {
   "name": "vfan-tv",
-  "version": "0.12.1",
+  "version": "0.12.2",
   "private": true,
   "description": "一款免费开源、跨平台的桌面端影视聚合客户端（空壳）。",
   "homepage": "https://github.com/vfanlee/vfan-tv#readme",
@@ -22,6 +22,7 @@
     "build:web": "vite build --config config/vite.tauri.config.ts",
     "build:win:arm64": "tauri build --target aarch64-pc-windows-msvc --bundles nsis",
     "build:win:x64": "tauri build --target x86_64-pc-windows-msvc --bundles nsis",
+    "bump-version": "bash scripts/bump-version.sh",
     "check": "pnpm run check:versions && pnpm run typecheck && pnpm run lint && pnpm run check:rust",
     "check:rust": "cargo check --manifest-path src-tauri/Cargo.toml",
     "check:versions": "node config/check-versions.ts",
