@@ -33,6 +33,32 @@ jobs:
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
             gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "Vfan TV $GITHUB_REF_NAME" --generate-notes
 
+  check:
+    name: Check project
+    needs: prepare
+    if: github.ref_type == 'tag'
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - name: Set up Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: check
+          cache-on-failure: true
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check project
+        run: pnpm run check
+
   build:
     name: Build ${{ matrix.name }}
     needs: prepare
@@ -75,10 +101,13 @@ jobs:
           rustup toolchain install stable --profile minimal
           rustup default stable
           rustup target add '${{ matrix.target }}'
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.target }}
+          cache-on-failure: true
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Check project
-        run: pnpm run check
       - name: Build installer
         env:
           APPLE_SIGNING_IDENTITY: ${{ startsWith(matrix.os, 'macos-') && '-' || '' }}
@@ -106,7 +135,7 @@ jobs:
 
   publish:
     name: Publish release
-    needs: build
+    needs: [check, build]
     if: github.ref_type == 'tag'
     runs-on: ubuntu-latest
     steps:
