@@ -142,18 +142,25 @@ jobs:
       - name: Publish complete release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_NOTES: |
-            ## 更新内容
+        shell: bash
+        run: |
+          notes="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json body --jq -r .body)"
+          notes="${notes%%$'\n## 下载与安装'*}"
+          notes="${notes%%$'## 下载与安装'*}"
+          notes="$(printf '%s' "$notes" | sed -e :a -e '/^[[:space:]]*$/{$d;N;ba' -e '}')"
+          {
+            if [[ -n "$notes" ]]; then
+              printf '%s\n\n' "$notes"
+            fi
+            cat <<'EOF'
+          ## 下载与安装
 
-            - Windows x64 与 ARM64 安装器改为简体中文。
-            - 修复 GitHub Release 公开步骤无法识别仓库的问题。
+          - **macOS Apple Silicon**：下载 `*-macos-arm64.dmg`。
+          - **macOS Intel**：下载 `*-macos-x64.dmg`。
+          - **Windows x64**：下载 `*-windows-x64-setup.exe`。
+          - **Windows ARM64**：下载 `*-windows-arm64-setup.exe`。
 
-            ## 下载与安装
-
-            - **macOS Apple Silicon**：下载 `*-macos-arm64.dmg`。
-            - **macOS Intel**：下载 `*-macos-x64.dmg`。
-            - **Windows x64**：下载 `*-windows-x64-setup.exe`。
-            - **Windows ARM64**：下载 `*-windows-arm64-setup.exe`。
-
-            当前安装包未进行正式代码签名，系统可能显示安全提醒。Tauri 自动更新签名尚未配置，请从 Releases 页面手动下载安装。
-        run: gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest --notes "$RELEASE_NOTES"
+          当前安装包未进行正式代码签名，系统可能显示安全提醒。Tauri 自动更新签名尚未配置，请从 Releases 页面手动下载安装。
+          EOF
+          } > "$RUNNER_TEMP/release-notes.md"
+          gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest --notes-file "$RUNNER_TEMP/release-notes.md"
