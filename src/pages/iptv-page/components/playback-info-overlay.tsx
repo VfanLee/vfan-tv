@@ -1,8 +1,7 @@
-import { AlertTriangle, Check, Radio } from 'lucide-react'
 import type { IptvChannel, IptvChannelStream } from '@/types'
 import type { PlayerRuntimeInfo } from '@/components'
-import { cn } from '@/utils'
 import { IptvChannelLogo } from './iptv-channel-logo'
+import { PlaybackRouteSelector } from './playback-route-selector'
 
 interface PlaybackInfoOverlayProps {
   sourceId: string
@@ -26,28 +25,24 @@ export function PlaybackInfoOverlay({
   onOpenChange,
   onSelectStream,
 }: PlaybackInfoOverlayProps): React.JSX.Element {
-  const currentStreamIndex = Math.max(
-    0,
-    channel.streams.findIndex((stream) => stream.id === currentStream?.id),
-  )
   return (
     <div className="mt-5 mr-5 ml-auto w-[min(44rem,calc(100%-2.5rem))] text-white" data-player-overlay>
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-label="查看播放信息和线路"
-        className="w-full rounded-[1.25rem] border border-white/12 bg-zinc-950/80 px-6 py-5 text-left shadow-2xl focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-none sm:px-7 sm:py-6"
-        onClick={() => onOpenChange(!open)}
-      >
+      <div className="w-full rounded-[1.25rem] border border-white/12 bg-zinc-950/80 px-6 py-5 text-left shadow-2xl sm:px-7 sm:py-6">
         <div className="flex items-center gap-5 sm:gap-7">
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-2xl leading-tight font-bold tracking-tight sm:text-3xl">{channel.title}</h2>
             <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-semibold text-white/68 sm:text-base">
               <span>{formatVideoSummary(runtimeInfo)}</span>
               <span>{formatAudioLayout(runtimeInfo.audioChannels)}</span>
-              <span>
-                {currentStreamIndex + 1}/{channel.streams.length} 线路
-              </span>
+              <PlaybackRouteSelector
+                streams={channel.streams}
+                currentStreamId={currentStream?.id}
+                firstFrameMs={runtimeInfo.firstFrameMs}
+                failedStreamIds={failedStreamIds}
+                open={open}
+                onOpenChange={onOpenChange}
+                onSelectStream={onSelectStream}
+              />
               <span>{formatBitrate(runtimeInfo.videoBitrate)}</span>
             </div>
             <div className="mt-4 grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-5 text-base font-semibold sm:text-lg">
@@ -62,47 +57,7 @@ export function PlaybackInfoOverlay({
             src={channel.logo}
           />
         </div>
-      </button>
-
-      {open ? (
-        <div className="mt-2 max-h-[min(44vh,22rem)] overflow-y-auto rounded-2xl border border-white/12 bg-zinc-950/92 p-2 shadow-2xl">
-          <div className="px-3 pt-2 pb-1 text-xs font-medium tracking-wide text-white/45">播放线路</div>
-          {channel.streams.map((stream) => {
-            const isCurrent = stream.id === currentStream?.id
-            const failed = failedStreamIds.has(stream.id) && !isCurrent
-            return (
-              <button
-                key={stream.id}
-                type="button"
-                className={cn(
-                  'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left transition-colors focus-visible:ring-2 focus-visible:ring-white/60 focus-visible:outline-none',
-                  isCurrent ? 'bg-white text-zinc-950' : 'hover:bg-white/10',
-                )}
-                onClick={() => onSelectStream(stream.id)}
-              >
-                <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-current/10">
-                  {failed ? (
-                    <AlertTriangle className="size-4 text-amber-400" />
-                  ) : isCurrent ? (
-                    <Check className="size-4" />
-                  ) : (
-                    <Radio className="size-4" />
-                  )}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-sm font-medium">{stream.name}</span>
-                <span
-                  className={cn(
-                    'shrink-0 text-xs',
-                    isCurrent ? 'text-zinc-600' : failed ? 'text-amber-300' : 'text-white/45',
-                  )}
-                >
-                  {isCurrent ? '正在播放' : failed ? '尝试失败' : '可切换'}
-                </span>
-              </button>
-            )
-          })}
-        </div>
-      ) : null}
+      </div>
     </div>
   )
 }

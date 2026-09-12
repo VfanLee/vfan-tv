@@ -620,7 +620,10 @@ export function BasicPlayer({
     art.on('fullscreenWeb', settingsPosition.schedule)
 
     /** 将键盘焦点移到当前播放器 */
-    const focusPlayer = (): void => art.template.$player.focus()
+    const focusPlayer = (event: PointerEvent): void => {
+      if (event.target instanceof Element && event.target.closest('[data-player-overlay]')) return
+      art.template.$player.focus()
+    }
     /** 在播放器聚焦时处理方向键跳转 */
     const handleSeekShortcut = (event: KeyboardEvent): void => {
       if (
@@ -629,6 +632,7 @@ export function BasicPlayer({
         event.altKey ||
         event.ctrlKey ||
         event.metaKey ||
+        (event.target instanceof Element && Boolean(event.target.closest('[data-player-overlay]'))) ||
         !art.template.$player.contains(document.activeElement) ||
         isTextInputTarget(event.target)
       ) {
