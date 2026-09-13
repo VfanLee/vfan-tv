@@ -1,6 +1,7 @@
 export * from './app-error-boundary'
 export * from './confirm-dialog'
 export * from './app-layout'
+export * from './back-to-top'
 export * from './disclaimer-overlay'
 export * from './empty-state'
 export * from './settings-card'

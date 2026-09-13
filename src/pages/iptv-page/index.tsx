@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router'
 import { toast } from 'sonner'
 import { useUiPreferencesStore } from '@/stores'
 import type { IptvChannel, IptvPlaylist } from '@/types'
-import { EmptyState } from '@/components'
+import { BackToTop, EmptyState } from '@/components'
 import { openSettingsWindow } from '@/platform/api'
 import { Button } from '@/ui/button'
 import { Input } from '@/ui/input'
@@ -324,6 +324,7 @@ export function IptvPage(): React.JSX.Element {
           </div>
         )}
       </div>
+      <BackToTop scrollRef={scrollRef} />
     </div>
   )
 }

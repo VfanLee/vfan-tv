@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router'
 import { Clock3, Heart, Monitor, Moon, Search, Settings, Sun } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { cn } from '@/utils'
+import { BackToTop } from '@/components'
 import logoMarkUrl from '@/assets/logo-mark.svg'
 import applicationBackgroundUrl from '@/assets/application-background.png'
 import applicationBackgroundDarkUrl from '@/assets/application-background-dark.png'
@@ -17,12 +18,14 @@ const themeOptions: Array<{ mode: ThemeMode; label: string; icon: LucideIcon }> 
   { mode: 'dark', label: '暗黑', icon: Moon },
 ]
 
+/** 渲染主窗口导航、页面容器及页面悬浮操作 */
 export function AppLayout(): React.JSX.Element {
   const location = useLocation()
   const mainRef = useRef<HTMLElement>(null)
   const navigationVisibility = useLayoutPreferencesStore((state) => state.navigationVisibility)
   const showRadioBottomPlayer = location.pathname === '/radio'
 
+  /** 路由切换后重置主内容区的滚动位置 */
   useLayoutEffect(() => {
     const main = mainRef.current
     if (!main) return
@@ -55,6 +58,7 @@ export function AppLayout(): React.JSX.Element {
         <main ref={mainRef} className={cn('relative h-full min-w-0 overflow-y-auto', showRadioBottomPlayer && 'pb-28')}>
           <Outlet />
         </main>
+        {location.pathname === '/search' ? <BackToTop key={location.key} scrollRef={mainRef} /> : null}
         {showRadioBottomPlayer ? <RadioBottomPlayer /> : null}
       </section>
     </div>
