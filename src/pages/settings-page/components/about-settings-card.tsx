@@ -64,7 +64,7 @@ export function AboutSettingsCard(): React.JSX.Element {
       </div>
 
       <p className="border-primary/30 bg-primary/5 text-muted-foreground border-l-2 px-3 py-2 text-xs leading-5">
-        本应用为影视聚合客户端（空壳），不提供内容源。仅供个人学习与研究；请遵守当地法律，勿用于商业或公开服务。
+        仅供个人学习与研究；请遵守当地法律，勿用于商业或公开服务。
       </p>
 
       <div className="grid gap-4 sm:grid-cols-2">
