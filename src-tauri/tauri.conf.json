@@ -27,6 +27,8 @@
   },
   "bundle": {
     "active": true,
+    "publisher": "VfanLee",
+    "copyright": "© 2026 VfanLee",
     "icon": ["icons/icon.png", "icons/icon.ico", "icons/icon.icns"],
     "macOS": {
       "minimumSystemVersion": "14.0"

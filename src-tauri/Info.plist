@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleGetInfoString</key>
+  <string>Vfan TV - 免费开源的跨平台影视聚合客户端</string>
+  <key>NSHumanReadableCopyright</key>
+  <string>© 2026 VfanLee</string>
+</dict>
+</plist>
