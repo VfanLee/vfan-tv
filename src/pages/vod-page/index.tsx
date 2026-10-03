@@ -13,12 +13,14 @@ import { useRecentPlayback } from './hooks/use-recent-playback'
 import { useVodFavorite } from './hooks/use-vod-favorite'
 import { useVodPageHydration } from './hooks/use-vod-page-hydration'
 import { useVodSourceDiscovery } from './hooks/use-vod-source-discovery'
+import { useAcknowledgeVodUpdate, useVodDetailRefresh } from './hooks/use-vod-detail-refresh'
+import { useVodPlaybackSession } from './hooks/use-vod-playback-session'
+import { locateEpisode, locateEpisodePanel } from './playback-session'
 import type { EpisodeSelection, PlayerLocationState, PlayerTab } from './types'
 import {
   dedupeCandidates,
   getDefaultSelection,
   getDoubanScore,
-  getEpisodePlaybackCandidates,
   getEpisodeCount,
   getPlayLines,
   getSelectionByEpisodeUrl,
@@ -26,7 +28,6 @@ import {
   getVodDetailItems,
   getVodField,
   normalizeTitle,
-  shouldApplyLocationInitialTime,
 } from './utils'
 
 /** 渲染点播页面 */
@@ -38,7 +39,6 @@ export function VodPage(): React.JSX.Element {
   const keyword = useSearchContextStore((state) => state.keyword)
   const [activeTab, setActiveTab] = useState<PlayerTab>('episodes')
   const [isEpisodeDescending, setIsEpisodeDescending] = useState(false)
-  const [selection, setSelection] = useState<EpisodeSelection>()
   const [isTheaterMode, setIsTheaterMode] = useState(false)
   /** 路由携带的播放线路、剧集和进度 */
   const routeLocationState = location.state as PlayerLocationState | null
@@ -47,10 +47,16 @@ export function VodPage(): React.JSX.Element {
     () => candidates.find((item) => item.sourceId === sourceId && item.vodId === vodId),
     [candidates, sourceId, vodId],
   )
-  const hydration = useVodPageHydration(sourceId, vodId, Boolean(provisionalCurrent), routeLocationState)
+  const detailRefresh = useVodDetailRefresh(sourceId, vodId)
+  const hydration = useVodPageHydration(
+    sourceId,
+    vodId,
+    Boolean(provisionalCurrent || detailRefresh.detail),
+    routeLocationState,
+  )
   const locationState = hydration.restoredLocationState
 
-  const current = provisionalCurrent
+  const current = detailRefresh.detail ?? provisionalCurrent
   const resourceKey = `${sourceId ?? ''}:${vodId ?? ''}`
   const favorite = useVodFavorite(current, resourceKey)
   const currentTitleKey = normalizeTitle(current?.title ?? '')
@@ -58,8 +64,17 @@ export function VodPage(): React.JSX.Element {
   /** 第一条播放线路及其首集组成的默认播放选择 */
   const defaultSelection = useMemo(() => getDefaultSelection(lines), [lines])
   const locationEpisodeSelection = useMemo(
-    () => getSelectionByEpisodeUrl(lines, resourceKey, locationState?.episodeUrl),
-    [lines, locationState?.episodeUrl, resourceKey],
+    () =>
+      getSelectionByEpisodeUrl(lines, resourceKey, locationState?.episodeUrl) ??
+      locateEpisode(
+        lines,
+        resourceKey,
+        locationState?.episodeName
+          ? { name: locationState.episodeName, url: locationState.episodeUrl ?? '' }
+          : undefined,
+        locationState?.lineName,
+      ),
+    [lines, locationState, resourceKey],
   )
   const locationIndexedSelection = useMemo(
     () =>
@@ -74,28 +89,32 @@ export function VodPage(): React.JSX.Element {
   /** 当前准备播放的线路和剧集 */
   const requestedSelection = useMemo<EpisodeSelection>(
     () =>
-      selection?.resourceKey === resourceKey
-        ? selection
-        : (locationEpisodeSelection ??
-          locationIndexedSelection ?? {
-            resourceKey,
-            lineIndex: defaultSelection.lineIndex,
-            episodeIndex: defaultSelection.episodeIndex,
-          }),
-    [defaultSelection, locationEpisodeSelection, locationIndexedSelection, resourceKey, selection],
+      locationEpisodeSelection ??
+      locationIndexedSelection ?? {
+        resourceKey,
+        lineIndex: defaultSelection.lineIndex,
+        episodeIndex: defaultSelection.episodeIndex,
+      },
+    [defaultSelection, locationEpisodeSelection, locationIndexedSelection, resourceKey],
   )
-  /** 当前剧集按优先级排列的播放地址 */
-  const playbackCandidates = useMemo(
-    () => getEpisodePlaybackCandidates(lines, requestedSelection),
-    [lines, requestedSelection],
+  const playbackSession = useVodPlaybackSession(
+    `${resourceKey}:${location.key}`,
+    current,
+    requestedSelection,
+    locationState,
+    hydration.isHydrating,
   )
-  const requestedEpisode = lines[requestedSelection.lineIndex]?.episodes[requestedSelection.episodeIndex]
+  /** 一次主动播放期间保持不变的媒体候选与剧集列表 */
+  const playbackCandidates = playbackSession?.candidates ?? []
+  const playbackLines = useMemo(() => playbackSession?.lines ?? [], [playbackSession])
+  const playbackSelection = playbackSession?.selection ?? requestedSelection
+  const requestedEpisode = playbackLines[playbackSelection.lineIndex]?.episodes[playbackSelection.episodeIndex]
   const playbackResolution = useMediaPlaybackTarget(
     playbackCandidates.length > 0
       ? {
           candidates: playbackCandidates,
-          sourceId: current?.sourceId,
-          diagnostics: { sourceName: current?.sourceName, episodeName: requestedEpisode?.name },
+          sourceId: playbackSession?.item.sourceId,
+          diagnostics: { sourceName: playbackSession?.item.sourceName, episodeName: requestedEpisode?.name },
         }
       : undefined,
   )
@@ -104,17 +123,28 @@ export function VodPage(): React.JSX.Element {
     (candidate) => candidate.id === playbackTarget?.selectedCandidateId,
   )
   /** 播放器实际采用的线路和剧集 */
-  const activeSelection = useMemo<EpisodeSelection>(() => {
-    if (!selectedPlaybackCandidate) return requestedSelection
+  const resolvedSelection = useMemo<EpisodeSelection>(() => {
+    if (!selectedPlaybackCandidate) return playbackSelection
     const lineIndex = Number(selectedPlaybackCandidate.id)
-    const line = lines[lineIndex]
+    const line = playbackLines[lineIndex]
     const episodeIndex = line?.episodes.findIndex((episode) => episode.url === selectedPlaybackCandidate.url) ?? -1
-    if (!Number.isInteger(lineIndex) || !line || episodeIndex < 0) return requestedSelection
+    if (!Number.isInteger(lineIndex) || !line || episodeIndex < 0) return playbackSelection
     return { resourceKey, lineIndex, episodeIndex }
-  }, [lines, requestedSelection, resourceKey, selectedPlaybackCandidate])
+  }, [playbackLines, playbackSelection, resourceKey, selectedPlaybackCandidate])
+  const playingLine = playbackLines[resolvedSelection.lineIndex]
+  const activeEpisode = playingLine?.episodes[resolvedSelection.episodeIndex]
+  /** 将固定播放中的剧集映射到最新选集，移除的剧集不高亮其他条目 */
+  const mappedSelection = locateEpisodePanel(lines, resourceKey, activeEpisode, playingLine?.name)
+  const activeSelection = mappedSelection ?? {
+    resourceKey,
+    lineIndex: Math.max(
+      0,
+      lines.findIndex((line) => line.name === playingLine?.name),
+    ),
+    episodeIndex: -1,
+  }
   const activeLine = lines[activeSelection.lineIndex]
-  const activeEpisode = activeLine?.episodes[activeSelection.episodeIndex]
-  const recentPlayback = useRecentPlayback(current, activeLine, activeEpisode)
+  const recentPlayback = useRecentPlayback(current, playingLine, activeEpisode)
   const playbackProgressRef = recentPlayback.progressRef
   const saveRecentProgress = recentPlayback.save
   const playerSrc = selectedPlaybackCandidate?.url ?? activeEpisode?.url
@@ -122,23 +152,34 @@ export function VodPage(): React.JSX.Element {
   const previousEpisodeIndex = activeSelection.episodeIndex + (isEpisodeDescending ? 1 : -1)
   const nextEpisodeIndex = activeSelection.episodeIndex + (isEpisodeDescending ? -1 : 1)
   const hasPreviousEpisode = Boolean(
-    activeLine && previousEpisodeIndex >= 0 && previousEpisodeIndex < activeLine.episodes.length,
+    activeSelection.episodeIndex >= 0 &&
+    activeLine &&
+    previousEpisodeIndex >= 0 &&
+    previousEpisodeIndex < activeLine.episodes.length,
   )
-  const hasNextEpisode = Boolean(activeLine && nextEpisodeIndex >= 0 && nextEpisodeIndex < activeLine.episodes.length)
-  const locationMatchesPlaybackCandidate = Boolean(
-    locationState?.episodeUrl && playbackCandidates.some((candidate) => candidate.url === locationState.episodeUrl),
+  const hasNextEpisode = Boolean(
+    activeSelection.episodeIndex >= 0 &&
+    activeLine &&
+    nextEpisodeIndex >= 0 &&
+    nextEpisodeIndex < activeLine.episodes.length,
   )
-  const initialTime =
-    (locationMatchesPlaybackCandidate || shouldApplyLocationInitialTime(locationState, activeSelection, playerSrc)) &&
-    locationState?.initialTime
-      ? Math.max(0, Math.floor(locationState.initialTime))
-      : 0
-  const playerTitle = activeEpisode ? `${current?.title ?? '未知资源'} - ${activeEpisode.name}` : undefined
+  const initialTime = playbackSession?.initialTime ?? 0
+  const episodeRemoved = Boolean(detailRefresh.detail && activeEpisode && !mappedSelection)
+  useAcknowledgeVodUpdate(
+    sourceId,
+    vodId,
+    detailRefresh.updateRevision,
+    !isTheaterMode && activeTab === 'episodes' && lines.length > 0,
+  )
+  const playerTitle = activeEpisode ? `${playbackSession?.item.title ?? '未知资源'} - ${activeEpisode.name}` : undefined
   const sameTitleCandidates = useMemo(
     () =>
       dedupeCandidates(
         currentTitleKey
-          ? candidates.filter((item) => normalizeTitle(item.title) === currentTitleKey)
+          ? [
+              ...candidates.filter((item) => normalizeTitle(item.title) === currentTitleKey),
+              ...(current ? [current] : []),
+            ]
           : current
             ? [current]
             : [],
@@ -159,7 +200,6 @@ export function VodPage(): React.JSX.Element {
     activeSelection,
     current,
     currentTitleKey,
-    locationState,
     sameTitleCandidates,
   })
   const { isRefreshingSources, sourceProbeStates, refreshState, probeSources, refreshSources } = sourceDiscovery
@@ -209,13 +249,6 @@ export function VodPage(): React.JSX.Element {
       return
     }
 
-    const nextSelection = {
-      resourceKey,
-      lineIndex: activeSelection.lineIndex,
-      episodeIndex,
-    }
-
-    setSelection(nextSelection)
     navigate(`/vod/${sourceId}/${vodId}`, {
       replace: true,
       state: {
@@ -340,16 +373,40 @@ export function VodPage(): React.JSX.Element {
                     }}
                   />
 
-                  <div className="min-h-0 flex-1 overflow-hidden">
+                  <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                     {activeTab === 'episodes' ? (
-                      <EpisodesPanel
-                        activeLine={activeLine}
-                        activeSelection={activeSelection}
-                        isDescending={isEpisodeDescending}
-                        lines={lines}
-                        onSelectEpisode={selectEpisode}
-                        onToggleOrder={() => setIsEpisodeDescending((current) => !current)}
-                      />
+                      <>
+                        {detailRefresh.isRefreshing ? (
+                          <p className="text-muted-foreground mt-3 text-xs" role="status">
+                            正在更新选集，当前播放可继续。
+                          </p>
+                        ) : null}
+                        {detailRefresh.error ? (
+                          <div className="mt-3 text-xs text-amber-600" role="status">
+                            选集更新失败，保留已加载内容。
+                            <button type="button" className="ml-2 underline" onClick={detailRefresh.refresh}>
+                              重试
+                            </button>
+                            <p className="mt-1 break-words">{detailRefresh.error}</p>
+                          </div>
+                        ) : null}
+                        {episodeRemoved ? (
+                          <p className="mt-3 text-xs text-amber-600" role="status">
+                            当前剧集已不在最新列表中，播放可继续，请重新选集。
+                          </p>
+                        ) : null}
+                        <div className="min-h-0 flex-1">
+                          <EpisodesPanel
+                            activeLine={activeLine}
+                            activeSelection={activeSelection}
+                            isDescending={isEpisodeDescending}
+                            lines={lines}
+                            newEpisodeKeys={detailRefresh.newEpisodeKeys}
+                            onSelectEpisode={selectEpisode}
+                            onToggleOrder={() => setIsEpisodeDescending((current) => !current)}
+                          />
+                        </div>
+                      </>
                     ) : (
                       <SourcesPanel
                         isRefreshing={isRefreshingSources}

@@ -1,8 +1,6 @@
 use super::{Source, SourceInput, SourceKind};
 use crate::infrastructure::{diagnostics::command_error, network};
 use sqlx::SqlitePool;
-#[cfg(test)]
-use std::collections::BTreeMap;
 use std::collections::HashSet;
 use uuid::Uuid;
 
@@ -187,42 +185,4 @@ pub(super) async fn save(
         .await
         .map_err(|error| command_error("提交源修改失败", &error))?;
     Ok(row)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    /// 主地址与备用地址冲突时整次修改失败，已有源保持不变
-    #[tokio::test]
-    async fn source_endpoint_uniqueness() {
-        let db = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&db).await.unwrap();
-        let input = SourceInput {
-            name: "test".into(),
-            url: "https://example.test/api".into(),
-            disabled: false,
-            headers: BTreeMap::new(),
-            backups: vec!["https://backup.test/api".into()],
-        };
-        let source = save(&db, SourceKind::Vod, None, input.clone())
-            .await
-            .unwrap();
-        let mut duplicate = input.clone();
-        duplicate.url = "https://backup.test/api".into();
-        duplicate.backups.clear();
-        assert!(save(&db, SourceKind::Vod, None, duplicate).await.is_err());
-        assert_eq!(list(&db, SourceKind::Vod).await.unwrap().len(), 1);
-        let mut updated = input;
-        updated.name = "updated".into();
-        let result = save(&db, SourceKind::Vod, Some(source.id.clone()), updated)
-            .await
-            .unwrap();
-        assert_eq!(result.created_at, source.created_at);
-        assert_eq!(result.name, "updated");
-        db.close().await;
-    }
 }

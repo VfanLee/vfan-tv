@@ -13,7 +13,6 @@ src-tauri/gen/
 # Frontend and auxiliary outputs
 dist/
 release/
-coverage/
 
 # Caches
 .eslintcache

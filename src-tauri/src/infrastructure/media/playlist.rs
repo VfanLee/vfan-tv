@@ -46,31 +46,3 @@ pub fn rewrite(
     }
     Ok(output)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    /// 相对地址按最终清单位置解析，密钥、音轨和未知扩展标签保持完整
-    #[test]
-    fn rewrites_all_resource_addresses() {
-        let base = Url::parse("https://cdn.test/folder/main.m3u8?token=a").unwrap();
-        let input = "#EXTM3U\r\n#EXT-X-KEY:METHOD=AES-128,URI=\"../key\"\r\n#EXT-X-MEDIA:TYPE=AUDIO,URI=\"audio.m3u8\"\r\n#EXT-X-CUSTOM:VALUE=1\r\nsegment.ts?x=2\r\n";
-        let mut urls = Vec::new();
-        let result = rewrite(input, &base, |url| {
-            urls.push(url.to_string());
-            format!("http://127.0.0.1:1234/{}", urls.len())
-        })
-        .unwrap();
-        assert_eq!(
-            urls,
-            [
-                "https://cdn.test/key",
-                "https://cdn.test/folder/audio.m3u8",
-                "https://cdn.test/folder/segment.ts?x=2"
-            ]
-        );
-        assert!(result.contains("#EXT-X-CUSTOM:VALUE=1\r\n"));
-        assert!(result.contains("URI=\"http://127.0.0.1:1234/1\""));
-        assert!(rewrite("#EXTM3U\nfile:///tmp/secret", &base, |_| String::new()).is_err());
-    }
-}

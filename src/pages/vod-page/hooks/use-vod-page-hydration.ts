@@ -37,8 +37,7 @@ export function useVodPageHydration(
 
     const attemptKey = `${sourceId}:${vodId}`
     const needsCandidate = !hasCurrentCandidate
-    const needsPlaybackState =
-      !locationState?.episodeUrl && !(locationState?.initialTime && locationState.initialTime > 0)
+    const needsPlaybackState = !locationState
 
     if (!needsCandidate && !needsPlaybackState) return
 
@@ -78,6 +77,8 @@ export function useVodPageHydration(
             key: attemptKey,
             value: {
               episodeUrl: matchedRecent.episodeUrl,
+              episodeName: matchedRecent.episodeName,
+              lineName: matchedRecent.lineName,
               initialTime: matchedRecent.positionSeconds > 0 ? matchedRecent.positionSeconds : undefined,
             },
           })
@@ -97,7 +98,10 @@ export function useVodPageHydration(
     hasCurrentCandidate,
     keyword,
     locationState?.episodeUrl,
+    locationState?.episodeName,
+    locationState?.lineName,
     locationState?.initialTime,
+    locationState,
     mergeCandidates,
     setContext,
     sourceId,
@@ -108,7 +112,7 @@ export function useVodPageHydration(
   const restoredLocationState =
     restoredLocation && restoredLocation.key === hydrationKey ? restoredLocation.value : null
   const isCandidateHydrationPending = Boolean(
-    hydrationKey && apiAvailable && !hasCurrentCandidate && completedHydrationKey !== hydrationKey,
+    hydrationKey && apiAvailable && (!hasCurrentCandidate || !locationState) && completedHydrationKey !== hydrationKey,
   )
 
   return {

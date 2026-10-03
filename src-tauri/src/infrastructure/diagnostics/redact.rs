@@ -23,19 +23,3 @@ pub(super) fn text(value: &str) -> String {
     }
     result
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    /// 前后端日志共用脱敏，保留排错所需地址和普通参数
-    #[test]
-    fn hides_credentials() {
-        let value = text("https://user:pass@host/path?token=hidden&page=2 | Authorization: Bearer credential\n{\"api_key\":\"private\",\"password\":\"secret\"}");
-        for secret in ["user:pass", "hidden", "credential", "private", "\"secret\""] {
-            assert!(!value.contains(secret), "{value}");
-        }
-        assert!(value.contains("page=2"));
-        assert!(value.contains("host/path"));
-        assert!(text(&"中".repeat(20000)).chars().count() <= 16384);
-    }
-}

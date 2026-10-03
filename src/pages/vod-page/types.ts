@@ -26,6 +26,8 @@ export interface SourceProbeRequest {
 export interface PlayerLocationState {
   initialTime?: number
   episodeUrl?: string
+  episodeName?: string
+  lineName?: string
   preferredEpisodeIndex?: number
   preferredLineIndex?: number
 }

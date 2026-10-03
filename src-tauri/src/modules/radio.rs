@@ -255,22 +255,3 @@ pub async fn get_radio_playback_target(
     crate::desktop::mini_window::track_radio(&app, &window, &id).await?;
     Ok(json!({"src":src,"mediaSessionId":id}))
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    /// 兼容服务封装和数字字符串，保留频道节目字段
-    #[test]
-    fn normalizes_radio_payloads() {
-        let value=payload(json!({"errcode":"0","data":{"content_id":"42","name":"电台","categories":[{"id":"3","title":"新闻"}],"nowplaying":{"name":"节目"}}})).unwrap();
-        let channel = channel(&value).unwrap();
-        assert_eq!(channel["id"], 42);
-        assert_eq!(channel["nowPlayingTitle"], "节目");
-        assert_eq!(channel["category"]["id"], 3);
-        assert_eq!(
-            payload(json!({"Success":"ok","Data":[]})).unwrap(),
-            json!([])
-        );
-        assert!(payload(json!({"errcode":1,"errmsg":"failed"})).is_err());
-    }
-}

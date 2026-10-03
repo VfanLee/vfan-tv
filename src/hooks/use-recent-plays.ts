@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import type { RecentPlayItem } from '@/types'
-import { listRecentPlays, onAppDataChange, removeRecentPlay } from '@/platform/api'
+import { listRecentPlays, onAppDataChange, onRecentUpdatesChanged, removeRecentPlay } from '@/platform/api'
 
 interface UseRecentPlaysOptions {
   limit?: number
@@ -42,12 +42,14 @@ export function useRecentPlays({ limit }: UseRecentPlaysOptions = {}): {
     const unsubscribe = onAppDataChange((domain) => {
       if (domain === 'app-data') refresh()
     })
+    const unsubscribeUpdates = onRecentUpdatesChanged(refresh)
     refresh()
 
     return () => {
       active = false
       refreshRef.current = undefined
       unsubscribe()
+      unsubscribeUpdates()
     }
   }, [limit])
 

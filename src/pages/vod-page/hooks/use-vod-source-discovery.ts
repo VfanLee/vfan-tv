@@ -4,26 +4,13 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { VodSearchResult } from '@/types'
 import { cancelVodSearch, isApiAvailable, onVodSearchEvent, probeMediaSource, searchVod } from '@/platform/api'
 import { useSearchContextStore } from '@/stores'
-import type {
-  EpisodeSelection,
-  PlayerLocationState,
-  SourceProbeRequest,
-  SourceProbeState,
-  SourceRefreshState,
-} from '../types'
-import {
-  getCandidateKey,
-  getCorrespondingEpisodeUrl,
-  getEpisodeCount,
-  normalizeTitle,
-  runWithConcurrency,
-} from '../utils'
+import type { EpisodeSelection, SourceProbeRequest, SourceProbeState, SourceRefreshState } from '../types'
+import { getCandidateKey, getCorrespondingEpisodeUrl, normalizeTitle, runWithConcurrency } from '../utils'
 
 interface SourceDiscoveryOptions {
   activeSelection: EpisodeSelection
   current?: VodSearchResult
   currentTitleKey: string
-  locationState: PlayerLocationState | null
   sameTitleCandidates: VodSearchResult[]
 }
 
@@ -41,7 +28,6 @@ export function useVodSourceDiscovery({
   activeSelection,
   current,
   currentTitleKey,
-  locationState,
   sameTitleCandidates,
 }: SourceDiscoveryOptions): VodSourceDiscoveryState {
   const mergeCandidates = useSearchContextStore((state) => state.mergeCandidates)
@@ -51,7 +37,9 @@ export function useVodSourceDiscovery({
   const [refreshState, setRefreshState] = useState<SourceRefreshState>({ found: 0, failed: 0, finished: 0 })
   const refreshSearchIdRef = useRef<string | undefined>(undefined)
   const autoRefreshedSourcesRef = useRef<Set<string>>(new Set())
-  const autoHydratedTitleRef = useRef<Set<string>>(new Set())
+  /** 当前视频的详情由直接查询维护，同名搜索仅补充其他候选 */
+  const currentSourceId = current?.sourceId
+  const currentVodId = current?.vodId
 
   /** 搜索当前标题的同名点播源 */
   const refreshSources = useCallback(async (): Promise<void> => {
@@ -103,34 +91,16 @@ export function useVodSourceDiscovery({
     void refreshSources()
   }
 
-  /** 进入单集或恢复播放场景时自动搜索同名点播源 */
-  useEffect(() => {
-    if (!current || (!isDesktopRuntime() && !isApiAvailable()) || isRefreshingSources) return
-    const isRestoringRecentPlayback = locationState?.episodeUrl != null
-    const hydrateKey = `${current.sourceId}:${current.vodId}:${currentTitleKey}`
-    if (
-      (!isRestoringRecentPlayback && getEpisodeCount(current) !== 1) ||
-      !currentTitleKey ||
-      autoHydratedTitleRef.current.has(hydrateKey)
-    )
-      return
-    autoHydratedTitleRef.current.add(hydrateKey)
-    void refreshSources()
-  }, [
-    current,
-    currentTitleKey,
-    isRefreshingSources,
-    locationState?.episodeUrl,
-    locationState?.initialTime,
-    refreshSources,
-  ])
-
   /** 订阅补源搜索事件并合并同名点播结果 */
   useEffect(() => {
     return onVodSearchEvent((event) => {
       if (event.searchId !== refreshSearchIdRef.current) return
       if (event.type === 'source-result') {
-        const matchedItems = event.items.filter((item) => normalizeTitle(item.title) === currentTitleKey)
+        const matchedItems = event.items.filter(
+          (item) =>
+            normalizeTitle(item.title) === currentTitleKey &&
+            (item.sourceId !== currentSourceId || item.vodId !== currentVodId),
+        )
         if (matchedItems.length > 0) {
           mergeCandidates(matchedItems)
           setRefreshState((state) => ({
@@ -152,7 +122,7 @@ export function useVodSourceDiscovery({
         setIsRefreshingSources(false)
       }
     })
-  }, [currentTitleKey, mergeCandidates])
+  }, [currentTitleKey, currentSourceId, currentVodId, mergeCandidates])
 
   /** 探测候选点播源的对应剧集地址 */
   useEffect(() => {

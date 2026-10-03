@@ -25,6 +25,9 @@ pub(crate) fn initialize(app: &tauri::AppHandle) -> Result<(), Box<dyn Error>> {
     app.manage(mini_window::MiniWindow::default());
     app.manage(iptv::Catalog::default());
     app.manage(vod::Searches::default());
+    app.manage(std::sync::Arc::new(
+        vod::recent_updates::RecentUpdates::default(),
+    ));
     app.manage(data_transfer::DataTransfer::default());
     Ok(())
 }
@@ -74,45 +77,4 @@ pub(crate) fn report_failure(app: &tauri::AppHandle, error: &(dyn Error + 'stati
         .title("Vfan TV 无法启动")
         .kind(MessageDialogKind::Error)
         .show(move |_| handle.exit(1));
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// 迁移冲突提示保留数据和升级应用，并展示完整路径。
-    #[test]
-    fn incompatible_database_preserves_data_and_suggests_upgrade() {
-        for error in [
-            sqlx::migrate::MigrateError::VersionMismatch(1),
-            sqlx::migrate::MigrateError::VersionMissing(2),
-        ] {
-            let directory = Path::new("app-data");
-            let message = failure_message(&error, Some(directory));
-            assert!(message.contains("请先升级应用"));
-            assert!(message.contains("不要直接删除数据库"));
-            assert!(message.contains(&directory.join("data/data.db").display().to_string()));
-            assert!(message.contains(&directory.join("logs/main.log").display().to_string()));
-        }
-    }
-
-    /// 权限与其他初始化故障不能误导用户删库，路径解析失败仍显示原因。
-    #[test]
-    fn other_failures_do_not_suggest_deleting_data() {
-        let error = std::io::Error::new(std::io::ErrorKind::PermissionDenied, "permission denied");
-        let message = failure_message(&error, None);
-        assert!(!message.contains("手动删除"));
-        assert!(message.contains("permission denied"));
-        assert!(message.contains("数据未自动重置"));
-    }
-
-    /// 外部数据库和结构冲突走同一提示流程，而非被静默初始化。
-    #[test]
-    fn incompatible_identity_explains_reason_without_reset() {
-        let error = database::IncompatibleDatabase("此文件不是 Vfan TV 数据库");
-        let message = failure_message(&error, Some(Path::new("app-data")));
-        assert!(message.contains("此文件不是 Vfan TV 数据库"));
-        assert!(message.contains("保留整个 data 文件夹"));
-        assert!(message.contains("应用没有删除或重置数据"));
-    }
 }

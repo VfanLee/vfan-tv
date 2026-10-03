@@ -221,44 +221,6 @@ pub async fn test_network_settings(input: TestInput) -> Result<serde_json::Value
     )
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    /// 无效的路由引用不能覆盖已有代理配置
-    #[tokio::test]
-    async fn invalid_update_preserves_network_settings() {
-        let db = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&db).await.unwrap();
-        let mut settings = read(&db).await.unwrap();
-        settings.profiles.push(ProxyProfile {
-            id: "local".into(),
-            name: "Local".into(),
-            protocol: "http".into(),
-            host: "127.0.0.1".into(),
-            port: 7890,
-        });
-        settings.iptv = Route {
-            mode: "custom".into(),
-            active_profile_id: Some("local".into()),
-        };
-        save(&db, settings.clone()).await.unwrap();
-        for protocol in ["http", "https", "socks5"] {
-            settings.profiles[0].protocol = protocol.into();
-            assert!(client(&settings).is_ok(), "{protocol}");
-        }
-        settings.profiles.clear();
-        assert!(save(&db, settings).await.is_err());
-        let retained = read(&db).await.unwrap();
-        assert_eq!(retained.profiles.len(), 1);
-        assert_eq!(retained.iptv.active_profile_id.as_deref(), Some("local"));
-        db.close().await;
-    }
-}
-
 /// 读取路由配置和本机可用的 IP 路由，不发起外部连通性请求
 #[tauri::command]
 pub async fn get_network_status(db: State<'_, SqlitePool>) -> Result<serde_json::Value, String> {

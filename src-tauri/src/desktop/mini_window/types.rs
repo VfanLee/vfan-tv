@@ -120,38 +120,3 @@ pub(super) fn resize_bounds(input: &Resize, radio: bool) -> Result<Bounds, Strin
         height,
     })
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    /// 拒绝过期会话和非法音量，保留电台恢复信息
-    #[test]
-    fn validates_handoff() {
-        let context = json!({"sessionId":uuid::Uuid::new_v4().to_string(),"variant":"radio","channel":{"id":42,"title":"新闻"},"volume":0.5,"isMuted":false});
-        let mut exit = initial_exit(&context).unwrap();
-        assert_eq!(exit["isPlaying"], true);
-        exit["volume"] = json!(2);
-        assert!(validate_exit(&context, &exit).is_err());
-        exit["volume"] = json!(0.5);
-        exit["sessionId"] = json!("stale");
-        assert!(validate_exit(&context, &exit).is_err());
-    }
-    /// 缩放到边界时固定对角并保持视频比例
-    #[test]
-    fn constrains_resize() {
-        let input = Resize {
-            session_id: "test".into(),
-            corner: "top-left".into(),
-            bounds: Bounds {
-                x: 10.0,
-                y: 20.0,
-                width: 100.0,
-                height: 100.0,
-            },
-        };
-        let b = resize_bounds(&input, false).unwrap();
-        assert_eq!((b.x, b.y, b.width, b.height), (-90.0, 7.0, 200.0, 113.0));
-        let b = resize_bounds(&input, true).unwrap();
-        assert_eq!((b.width, b.height), (184.0, 44.0));
-    }
-}

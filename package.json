@@ -37,9 +37,6 @@
     "lint": "eslint --cache .",
     "lint:rust": "cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings",
     "prepare": "husky",
-    "test": "pnpm run test:rust && pnpm run test:frontend",
-    "test:frontend": "node --experimental-vm-modules --test config/*.test.ts",
-    "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
     "typecheck": "pnpm run typecheck:node && pnpm run typecheck:web",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false"

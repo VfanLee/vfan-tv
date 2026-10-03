@@ -1,4 +1,5 @@
 mod api;
+pub(crate) mod recent_updates;
 use crate::{
     infrastructure::network,
     modules::sources::{self, Source, SourceKind},

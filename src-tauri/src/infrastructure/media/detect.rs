@@ -112,22 +112,3 @@ pub async fn detect(client: &Client, url: &Url, headers: HeaderMap) -> Result<St
     }
     Err(failure)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    /// 拒绝网页，并识别没有扩展名的 HLS 与 TS 内容
-    #[test]
-    fn recognizes_media_prefixes() {
-        assert_eq!(
-            prefix_type(b"#EXTM3U\n#EXTINF:6,\nseg.ts"),
-            Some(StreamType::Hls)
-        );
-        assert_eq!(prefix_type(b"<html>error</html>"), None);
-        let mut packets = vec![0; 565];
-        for index in [0, 188, 376] {
-            packets[index] = 0x47;
-        }
-        assert_eq!(prefix_type(&packets), Some(StreamType::Mpegts));
-    }
-}

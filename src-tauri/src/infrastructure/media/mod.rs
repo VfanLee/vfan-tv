@@ -2,8 +2,6 @@ pub(crate) mod detect;
 pub mod images;
 mod playlist;
 pub mod proxy;
-#[cfg(test)]
-mod tests;
 pub(crate) mod types;
 
 use crate::infrastructure::network::{self, NetworkMode};

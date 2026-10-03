@@ -31,6 +31,13 @@ pub(super) async fn clear_selected<R: tauri::Runtime>(
     db: &SqlitePool,
     selection: ClearSelection,
 ) -> Result<(), String> {
+    let updates =
+        app.try_state::<std::sync::Arc<crate::modules::vod::recent_updates::RecentUpdates>>();
+    let _updates_guard = if let Some(updates) = &updates {
+        Some(updates.invalidate().await)
+    } else {
+        None
+    };
     let mut tx = db
         .begin()
         .await
@@ -88,6 +95,13 @@ pub async fn restore_factory_settings(
     transfer: State<'_, DataTransfer>,
 ) -> Result<(), String> {
     let _guard = transfer.0.try_lock().map_err(|_| "已有数据操作正在进行")?;
+    let updates =
+        app.try_state::<std::sync::Arc<crate::modules::vod::recent_updates::RecentUpdates>>();
+    let _updates_guard = if let Some(updates) = &updates {
+        Some(updates.invalidate().await)
+    } else {
+        None
+    };
     let mut tx = db
         .begin()
         .await

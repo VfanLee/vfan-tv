@@ -3,7 +3,7 @@ use super::{cancelled, DataTransfer, TransferResult};
 use crate::infrastructure::diagnostics::command_error;
 use sqlx::SqlitePool;
 use std::path::Path;
-use tauri::State;
+use tauri::{Manager, State};
 use tauri_plugin_dialog::DialogExt;
 use uuid::Uuid;
 
@@ -74,8 +74,10 @@ pub async fn import_database(
     transfer: State<'_, DataTransfer>,
 ) -> Result<TransferResult, String> {
     let _guard = transfer.0.try_lock().map_err(|_| "已有数据操作正在进行")?;
+    let dialog_app = app.clone();
     let file = tauri::async_runtime::spawn_blocking(move || {
-        app.dialog()
+        dialog_app
+            .dialog()
             .file()
             .add_filter("SQLite", &["db"])
             .blocking_pick_file()
@@ -96,6 +98,13 @@ pub async fn import_database(
         .2;
     let directory = Path::new(&data_path).parent().ok_or("数据目录无效")?;
     let safety = directory.join(format!("before-restore-{}.db", Uuid::new_v4()));
+    let updates =
+        app.try_state::<std::sync::Arc<crate::modules::vod::recent_updates::RecentUpdates>>();
+    let _updates_guard = if let Some(updates) = &updates {
+        Some(updates.invalidate().await)
+    } else {
+        None
+    };
     restore(&db, &path, &safety).await?;
     Ok(TransferResult {
         cancelled: false,

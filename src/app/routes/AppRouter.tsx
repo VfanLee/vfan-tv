@@ -15,6 +15,7 @@ import {
   SettingsPage,
 } from '@/pages'
 import { useLayoutPreferencesStore } from '@/stores'
+import { useRecentUpdates } from '@/hooks'
 
 const router = createHashRouter([
   { path: 'mini-window', element: <MiniWindowPage /> },
@@ -47,7 +48,9 @@ export function AppRouter(): React.JSX.Element {
   return <RouterProvider router={router} />
 }
 
+/** 按首页样式展示内容，并后台检查最近播放的剧集更新 */
 function StyleHomePage(): React.JSX.Element {
+  useRecentUpdates()
   const appStyle = useLayoutPreferencesStore((state) => state.appStyle)
   return appStyle === 'catalog' ? <CatalogHomePage /> : <HomePage />
 }

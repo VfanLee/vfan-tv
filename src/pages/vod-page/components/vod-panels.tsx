@@ -3,6 +3,7 @@ import type { PlayLine, VodSearchResult } from '@/types'
 import { cn } from '@/utils'
 import type { EpisodeSelection, SourceProbeState, SourceRefreshState } from '../types'
 import { getCandidateKey } from '../utils'
+import { getEpisodeUpdateKey } from '../episode-updates'
 
 /** 渲染当前播放标题 */
 export function NowPlayingTitle({ title }: { title?: string }): React.JSX.Element {
@@ -35,6 +36,7 @@ export function EpisodesPanel({
   activeSelection,
   isDescending,
   lines,
+  newEpisodeKeys,
   onSelectEpisode,
   onToggleOrder,
 }: {
@@ -42,6 +44,7 @@ export function EpisodesPanel({
   activeSelection: EpisodeSelection
   isDescending: boolean
   lines: PlayLine[]
+  newEpisodeKeys: readonly string[]
   onSelectEpisode: (episodeIndex: number) => void
   onToggleOrder: () => void
 }): React.JSX.Element {
@@ -73,7 +76,7 @@ export function EpisodesPanel({
           <button
             key={`${episode.name}-${episode.url}`}
             className={cn(
-              'focus-visible:ring-ring flex h-12 min-w-0 items-center justify-center rounded-xl border px-2 text-sm font-semibold transition-colors outline-none focus-visible:ring-2',
+              'focus-visible:ring-ring relative flex h-12 min-w-0 items-center justify-center rounded-xl border px-2 text-sm font-semibold transition-colors outline-none focus-visible:ring-2',
               activeSelection.episodeIndex === episodeIndex
                 ? 'border-primary bg-accent text-primary'
                 : 'border-border bg-muted text-muted-foreground hover:border-input hover:text-foreground',
@@ -83,6 +86,11 @@ export function EpisodesPanel({
             onClick={() => onSelectEpisode(episodeIndex)}
           >
             <span className="truncate">{episode.name}</span>
+            {newEpisodeKeys.includes(getEpisodeUpdateKey(episode.name)) ? (
+              <span className="bg-primary text-primary-foreground absolute top-0 right-0 rounded-tr-xl rounded-bl-md px-1.5 py-0.5 text-[10px] leading-none font-semibold">
+                新
+              </span>
+            ) : null}
           </button>
         ))}
       </div>

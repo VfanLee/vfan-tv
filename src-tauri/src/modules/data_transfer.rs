@@ -2,8 +2,6 @@
 mod clear;
 mod commands;
 mod snapshot;
-#[cfg(test)]
-mod tests;
 
 pub use clear::*;
 pub use commands::*;

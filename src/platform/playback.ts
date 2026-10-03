@@ -1,6 +1,8 @@
 import type { FavoriteItem, RecentPlayItem, VodSearchResult } from '@/types'
 
+/** 从最新检查详情或观看快照恢复点播候选项 */
 export function recentPlayToVodSearchResult(item: RecentPlayItem): VodSearchResult {
+  if (item.updateInfo?.latestDetail) return item.updateInfo.latestDetail
   return {
     sourceId: item.sourceId,
     sourceName: item.sourceName,
@@ -15,6 +17,7 @@ export function recentPlayToVodSearchResult(item: RecentPlayItem): VodSearchResu
   }
 }
 
+/** 从收藏快照恢复点播候选项 */
 export function favoriteToVodSearchResult(item: FavoriteItem): VodSearchResult {
   return {
     sourceId: item.sourceId,
@@ -36,6 +39,7 @@ export function favoriteToVodSearchResult(item: FavoriteItem): VodSearchResult {
   }
 }
 
+/** 解析保存的点播详情快照 */
 function parseRaw(rawJson: string | undefined): unknown | undefined {
   if (!rawJson) {
     return undefined

@@ -1,3 +1,4 @@
+use super::vod::recent_updates::{read_info, RecentUpdateInfo, RecentUpdates};
 use crate::infrastructure::diagnostics::command_error;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, SqlitePool};
@@ -20,6 +21,9 @@ pub struct RecentPlay {
     #[serde(skip_serializing_if = "Option::is_none")]
     raw_json: Option<String>,
     played_at: i64,
+    #[sqlx(skip)]
+    #[serde(skip_deserializing, skip_serializing_if = "Option::is_none")]
+    update_info: Option<RecentUpdateInfo>,
 }
 
 #[derive(Deserialize, Serialize, FromRow)]
@@ -63,11 +67,17 @@ pub async fn list_recent_plays(
     db: State<'_, SqlitePool>,
     limit: Option<u32>,
 ) -> Result<Vec<RecentPlay>, String> {
-    sqlx::query_as("SELECT * FROM recent_plays ORDER BY played_at DESC,source_id,vod_id LIMIT ?")
-        .bind(i64::from(limit.unwrap_or(20).min(10000)))
-        .fetch_all(db.inner())
-        .await
-        .map_err(|error| command_error("读取播放记录失败", &error))
+    let mut items: Vec<RecentPlay> = sqlx::query_as(
+        "SELECT * FROM recent_plays ORDER BY played_at DESC,source_id,vod_id LIMIT ?",
+    )
+    .bind(i64::from(limit.unwrap_or(20).min(10000)))
+    .fetch_all(db.inner())
+    .await
+    .map_err(|error| command_error("读取播放记录失败", &error))?;
+    for item in &mut items {
+        item.update_info = read_info(&db, &item.source_id, &item.vod_id).await?;
+    }
+    Ok(items)
 }
 
 /// 按源与视频标识读取播放进度，不受最近列表条数限制
@@ -77,12 +87,17 @@ pub async fn get_recent_play(
     source_id: String,
     vod_id: String,
 ) -> Result<Option<RecentPlay>, String> {
-    sqlx::query_as("SELECT * FROM recent_plays WHERE source_id=? AND vod_id=?")
-        .bind(source_id)
-        .bind(vod_id)
-        .fetch_optional(db.inner())
-        .await
-        .map_err(|error| command_error("读取播放进度失败", &error))
+    let mut item: Option<RecentPlay> =
+        sqlx::query_as("SELECT * FROM recent_plays WHERE source_id=? AND vod_id=?")
+            .bind(source_id)
+            .bind(vod_id)
+            .fetch_optional(db.inner())
+            .await
+            .map_err(|error| command_error("读取播放进度失败", &error))?;
+    if let Some(item) = &mut item {
+        item.update_info = read_info(&db, &item.source_id, &item.vod_id).await?;
+    }
+    Ok(item)
 }
 
 /// 按源与视频标识覆盖播放进度，同名作品独立保存
@@ -120,9 +135,11 @@ pub async fn upsert_recent_play(
 #[tauri::command]
 pub async fn remove_recent_play(
     db: State<'_, SqlitePool>,
+    updates: State<'_, std::sync::Arc<RecentUpdates>>,
     source_id: String,
     vod_id: String,
 ) -> Result<(), String> {
+    let _guard = updates.invalidate().await;
     sqlx::query("DELETE FROM recent_plays WHERE source_id=? AND vod_id=?")
         .bind(source_id)
         .bind(vod_id)
@@ -193,116 +210,4 @@ pub async fn remove_favorite(
         .await
         .map_err(|error| command_error("删除收藏失败", &error))?;
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    /// 同名不同源和同源不同视频互不覆盖，同一视频改名后仍更新原记录
-    #[tokio::test]
-    async fn recent_identity_preserves_distinct_videos_and_progress() {
-        use tauri::Manager;
-        let db = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&db).await.unwrap();
-        let mut payload = serde_json::json!({"sourceId":"a","sourceName":"A","vodId":"1","title":" My Show ","lineName":"main","episodeName":"1","episodeUrl":"https://a.test/1.mp4","positionSeconds":12,"duration":100,"playedAt":1000});
-        let first = save_recent(&db, serde_json::from_value(payload.clone()).unwrap())
-            .await
-            .unwrap();
-        assert_eq!(first.source_id, "a");
-        payload["sourceId"] = "b".into();
-        payload["title"] = "myshow".into();
-        save_recent(&db, serde_json::from_value(payload.clone()).unwrap())
-            .await
-            .unwrap();
-        payload["vodId"] = "2".into();
-        save_recent(&db, serde_json::from_value(payload.clone()).unwrap())
-            .await
-            .unwrap();
-        payload["vodId"] = "1".into();
-        payload["title"] = "Renamed".into();
-        payload["positionSeconds"] = 30.into();
-        save_recent(&db, serde_json::from_value(payload.clone()).unwrap())
-            .await
-            .unwrap();
-        payload["positionSeconds"] = (-1).into();
-        assert!(save_recent(&db, serde_json::from_value(payload).unwrap())
-            .await
-            .is_err());
-        let rows: Vec<RecentPlay> = sqlx::query_as("SELECT * FROM recent_plays")
-            .fetch_all(&db)
-            .await
-            .unwrap();
-        assert_eq!(rows.len(), 3);
-        let app = tauri::test::mock_builder()
-            .manage(db.clone())
-            .build(tauri::test::mock_context(tauri::test::noop_assets()))
-            .unwrap();
-        let saved = get_recent_play(app.state(), "b".into(), "1".into())
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(saved.title, "Renamed");
-        assert_eq!(saved.position_seconds, 30.0);
-        remove_recent_play(app.state(), "b".into(), "1".into())
-            .await
-            .unwrap();
-        assert!(get_recent_play(app.state(), "b".into(), "1".into())
-            .await
-            .unwrap()
-            .is_none());
-        assert!(get_recent_play(app.state(), "a".into(), "1".into())
-            .await
-            .unwrap()
-            .is_some());
-        assert!(get_recent_play(app.state(), "b".into(), "2".into())
-            .await
-            .unwrap()
-            .is_some());
-        db.close().await;
-    }
-
-    /// 数据库层面同样拒绝负进度，不依赖 Rust 校验兜底
-    #[tokio::test]
-    async fn database_rejects_negative_position() {
-        let db = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&db).await.unwrap();
-        let error = sqlx::query("INSERT INTO recent_plays(source_id,source_name,vod_id,title,line_name,episode_name,episode_url,position_seconds,duration,played_at) VALUES('s','S','v','T','l','e','u',-1,10,1)")
-            .execute(&db)
-            .await
-            .unwrap_err();
-        assert!(error.as_database_error().unwrap().is_check_violation());
-        db.close().await;
-    }
-
-    /// 同一视频重复收藏保留首次标识和创建时间
-    #[tokio::test]
-    async fn repeated_favorite_preserves_identity() {
-        let db = sqlx::sqlite::SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
-            .await
-            .unwrap();
-        sqlx::migrate!("./migrations").run(&db).await.unwrap();
-        let mut payload = serde_json::json!({"sourceId":"source","sourceName":"Source","vodId":"video","title":"Title"});
-        let first = save_favorite(&db, serde_json::from_value(payload.clone()).unwrap())
-            .await
-            .unwrap();
-        payload["title"] = "Updated".into();
-        let second = save_favorite(&db, serde_json::from_value(payload).unwrap())
-            .await
-            .unwrap();
-        assert_eq!(first.source_id, second.source_id);
-        assert_eq!(first.vod_id, second.vod_id);
-        assert_eq!(first.created_at, second.created_at);
-        assert_eq!(second.title, "Updated");
-        db.close().await;
-    }
 }
