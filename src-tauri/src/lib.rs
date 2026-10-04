@@ -101,6 +101,8 @@ pub fn run() {
             vod::get_vod_catalog_page,
             vod::probe_media_source,
             vod::get_vod_detail,
+            preferences::get_vod_episode_order,
+            preferences::set_vod_episode_order,
             vod::recent_updates::check_recent_updates,
             vod::recent_updates::refresh_recent_vod_detail,
             vod::recent_updates::acknowledge_recent_update,

@@ -1,8 +1,66 @@
 use crate::infrastructure::diagnostics::command_error;
 use serde::Serialize;
 use serde_json::Value;
+use sha2::{Digest, Sha384};
 use sqlx::{FromRow, SqlitePool};
 use tauri::{Emitter, State};
+
+/// 按来源与视频独立保存选集排序的偏好域。
+const VOD_EPISODE_ORDER_SCOPE: &str = "vod-episode-order";
+
+/// 将视频标识编码为固定长度偏好键，避免长标识超过数据库键长度。
+fn vod_episode_order_key(source_id: &str, vod_id: &str) -> Result<String, String> {
+    if source_id.trim().is_empty() || vod_id.trim().is_empty() {
+        return Err("视频标识不能为空".into());
+    }
+    let identity = serde_json::to_vec(&(source_id, vod_id))
+        .map_err(|error| command_error("视频标识无效", &error))?;
+    Ok(format!("{:x}", Sha384::digest(identity)))
+}
+
+/// 读取指定来源视频的选集排序，未设置时使用正序。
+#[tauri::command]
+pub async fn get_vod_episode_order(
+    db: State<'_, SqlitePool>,
+    source_id: String,
+    vod_id: String,
+) -> Result<bool, String> {
+    let key = vod_episode_order_key(&source_id, &vod_id)?;
+    let value: Option<String> =
+        sqlx::query_scalar("SELECT value FROM ui_preferences WHERE scope=? AND key=?")
+            .bind(VOD_EPISODE_ORDER_SCOPE)
+            .bind(key)
+            .fetch_optional(db.inner())
+            .await
+            .map_err(|error| command_error("读取选集排序失败", &error))?;
+    value
+        .map(|value| serde_json::from_str::<bool>(&value))
+        .transpose()
+        .map(|value| value.unwrap_or(false))
+        .map_err(|error| command_error("选集排序数据无效", &error))
+}
+
+/// 保存指定来源视频的选集排序并通知窗口同步。
+#[tauri::command]
+pub async fn set_vod_episode_order(
+    window: tauri::WebviewWindow,
+    app: tauri::AppHandle,
+    db: State<'_, SqlitePool>,
+    source_id: String,
+    vod_id: String,
+    is_descending: bool,
+) -> Result<(), String> {
+    let key = vod_episode_order_key(&source_id, &vod_id)?;
+    set_ui_preference(
+        window,
+        app,
+        db,
+        VOD_EPISODE_ORDER_SCOPE.into(),
+        key,
+        Value::Bool(is_descending),
+    )
+    .await
+}
 
 #[derive(Serialize)]
 pub struct Preference {
@@ -95,6 +153,16 @@ pub async fn set_ui_preference(
 
 /// 校验外观偏好的业务类型和值域
 fn validate_preference(scope: &str, key: &str, value: &Value) -> Result<(), String> {
+    if scope == VOD_EPISODE_ORDER_SCOPE {
+        return if key.len() == 96
+            && key.bytes().all(|character| character.is_ascii_hexdigit())
+            && value.is_boolean()
+        {
+            Ok(())
+        } else {
+            Err("选集排序偏好无效".into())
+        };
+    }
     if scope == "radio" {
         let valid = match key {
             "volume" => value

@@ -1,6 +1,6 @@
 import { isDesktopRuntime } from '@/platform/tauri'
-import { useEffect, useState } from 'react'
-import { CircleUserRound, Download, MessageCircle, Rocket, SquareArrowOutUpRight } from 'lucide-react'
+import { useEffect, useState, type ReactNode } from 'react'
+import { CircleUserRound, Download, MessageCircle, RefreshCw, Rocket, SquareArrowOutUpRight } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { FaGithub } from 'react-icons/fa'
 import logoMarkUrl from '@/assets/logo-mark.svg'
@@ -24,6 +24,9 @@ export function AboutSettingsCard(): React.JSX.Element {
   const updateResult = useAppUpdateStore((state) => state.result)
   const latestVersion = updateResult?.latestVersion
   const updateAvailable = updateResult?.updateAvailable === true
+  const isChecking = useAppUpdateStore((state) => state.isChecking)
+  const checkError = useAppUpdateStore((state) => state.checkError)
+  const check = useAppUpdateStore((state) => state.check)
   const isDownloading = useAppUpdateStore((state) => state.isDownloading)
   const isDownloaded = useAppUpdateStore((state) => state.isDownloaded)
   const downloadProgress = useAppUpdateStore((state) => state.downloadProgress)
@@ -71,7 +74,35 @@ export function AboutSettingsCard(): React.JSX.Element {
         <VersionItem label="当前版本" value={currentVersion ? `v${currentVersion}` : '读取中'} />
         <VersionItem
           label="最新版本"
-          value={latestVersion ? (updateAvailable ? `v${latestVersion}（有更新）` : `v${latestVersion}`) : '检查中'}
+          value={
+            !apiAvailable
+              ? '当前环境不支持'
+              : isChecking
+                ? '检查中'
+                : checkError
+                  ? '检查失败'
+                  : latestVersion
+                    ? updateAvailable
+                      ? `v${latestVersion}（有更新）`
+                      : `v${latestVersion}`
+                    : '未检查'
+          }
+          title={checkError}
+          action={
+            apiAvailable ? (
+              <Button
+                aria-label={checkError ? '重新检查更新' : '检查更新'}
+                aria-busy={isChecking}
+                disabled={isChecking || isDownloading}
+                size="icon-xs"
+                title={checkError ? '重新检查更新' : '检查更新'}
+                variant="ghost"
+                onClick={() => void check()}
+              >
+                <RefreshCw className={cn(isChecking && 'animate-spin')} />
+              </Button>
+            ) : null
+          }
         />
       </div>
 
@@ -112,11 +143,26 @@ export function AboutSettingsCard(): React.JSX.Element {
 }
 
 /** 渲染版本项 */
-function VersionItem({ label, value }: { label: string; value: string }): React.JSX.Element {
+function VersionItem({
+  label,
+  value,
+  title,
+  action,
+}: {
+  label: string
+  value: string
+  title?: string
+  action?: ReactNode
+}): React.JSX.Element {
   return (
     <div>
-      <div className="text-muted-foreground text-xs font-medium">{label}</div>
-      <div className="mt-1 text-base font-semibold">{value}</div>
+      <div className="text-muted-foreground flex h-6 items-center gap-1 text-xs font-medium">
+        {label}
+        {action}
+      </div>
+      <div className="mt-1 text-base font-semibold" role="status" title={title}>
+        {value}
+      </div>
     </div>
   )
 }

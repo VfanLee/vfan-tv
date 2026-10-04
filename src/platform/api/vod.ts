@@ -1,6 +1,6 @@
 import { invoke } from '@tauri-apps/api/core'
 import { listen, type UnlistenFn } from '@tauri-apps/api/event'
-import { isDesktopRuntime } from '../tauri'
+import { isDesktopRuntime, subscribeDesktopEvent } from '../tauri'
 import type {
   MediaProbeInput,
   MediaProbeResult,
@@ -40,6 +40,26 @@ export function getVodCatalogPage(input: VodCatalogRequest): Promise<VodCatalogP
 export function getVodDetail(sourceId: string, vodId: string): Promise<VodSearchResult> {
   if (isDesktopRuntime()) return invoke('get_vod_detail', { sourceId, vodId })
   throw new Error('当前运行环境不支持此操作')
+}
+
+/** 读取指定来源视频的选集排序 */
+export function getVodEpisodeOrder(sourceId: string, vodId: string): Promise<boolean> {
+  if (isDesktopRuntime()) return invoke('get_vod_episode_order', { sourceId, vodId })
+  throw new Error('当前运行环境不支持此操作')
+}
+
+/** 保存指定来源视频的选集排序 */
+export function setVodEpisodeOrder(sourceId: string, vodId: string, isDescending: boolean): Promise<void> {
+  if (isDesktopRuntime()) return invoke('set_vod_episode_order', { sourceId, vodId, isDescending })
+  throw new Error('当前运行环境不支持此操作')
+}
+
+/** 订阅选集排序变更及偏好重置，卸载时释放监听 */
+export function onVodEpisodeOrderChanged(listener: () => void): () => void {
+  if (!isDesktopRuntime()) return () => {}
+  return subscribeDesktopEvent<{ scope: string } | null | string>('ui-preferences-changed', (payload) => {
+    if (!payload || typeof payload !== 'object' || payload.scope === 'vod-episode-order') listener()
+  })
 }
 
 /** 探测线路响应延迟与 HLS 分辨率 */

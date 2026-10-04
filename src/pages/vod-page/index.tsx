@@ -15,6 +15,7 @@ import { useVodPageHydration } from './hooks/use-vod-page-hydration'
 import { useVodSourceDiscovery } from './hooks/use-vod-source-discovery'
 import { useAcknowledgeVodUpdate, useVodDetailRefresh } from './hooks/use-vod-detail-refresh'
 import { useVodPlaybackSession } from './hooks/use-vod-playback-session'
+import { useVodEpisodeOrder } from './hooks/use-vod-episode-order'
 import { locateEpisode, locateEpisodePanel } from './playback-session'
 import type { EpisodeSelection, PlayerLocationState, PlayerTab } from './types'
 import {
@@ -38,7 +39,9 @@ export function VodPage(): React.JSX.Element {
   const candidates = useSearchContextStore((state) => state.candidates)
   const keyword = useSearchContextStore((state) => state.keyword)
   const [activeTab, setActiveTab] = useState<PlayerTab>('episodes')
-  const [isEpisodeDescending, setIsEpisodeDescending] = useState(false)
+  const episodeOrder = useVodEpisodeOrder(sourceId, vodId)
+  /** 当前来源视频独立保存的选集展示顺序 */
+  const isEpisodeDescending = episodeOrder.isDescending
   const [isTheaterMode, setIsTheaterMode] = useState(false)
   /** 路由携带的播放线路、剧集和进度 */
   const routeLocationState = location.state as PlayerLocationState | null
@@ -400,10 +403,11 @@ export function VodPage(): React.JSX.Element {
                             activeLine={activeLine}
                             activeSelection={activeSelection}
                             isDescending={isEpisodeDescending}
+                            isOrderBusy={episodeOrder.isBusy}
                             lines={lines}
                             newEpisodeKeys={detailRefresh.newEpisodeKeys}
                             onSelectEpisode={selectEpisode}
-                            onToggleOrder={() => setIsEpisodeDescending((current) => !current)}
+                            onToggleOrder={episodeOrder.toggle}
                           />
                         </div>
                       </>

@@ -15,6 +15,7 @@ import {
 import { openExternalUrl } from '@/utils'
 
 interface AppUpdateState {
+  checkError?: string
   currentVersion: string
   downloadProgress?: UpdateDownloadProgress
   isChecking: boolean
@@ -42,13 +43,14 @@ export const useAppUpdateStore = create<AppUpdateState>((set, get) => ({
   setCurrentVersion: (version) => set({ currentVersion: version }),
   check: async (silent = false) => {
     if (get().isChecking || get().isDownloading) return
-    set({ isChecking: true })
+    set({ isChecking: true, checkError: undefined })
     try {
       const result = await checkForUpdates()
-      set({ result, isChecking: false })
+      set({ result, isChecking: false, checkError: undefined })
     } catch (error) {
-      set({ isChecking: false })
-      if (!silent) toast.error('检查更新失败', { description: getDisplayErrorMessage(error) })
+      const checkError = getDisplayErrorMessage(error)
+      set({ isChecking: false, checkError, result: undefined })
+      if (!silent) toast.error('检查更新失败', { description: checkError })
     }
   },
   download: async () => {
@@ -95,7 +97,7 @@ export function useAppUpdateSync(checkOnMount = true): void {
       if (!active) return
 
       if (event.status === 'checking') {
-        useAppUpdateStore.setState({ isChecking: true })
+        useAppUpdateStore.setState({ isChecking: true, checkError: undefined })
         return
       }
 
@@ -108,6 +110,7 @@ export function useAppUpdateSync(checkOnMount = true): void {
         useAppUpdateStore.setState({
           result: event.result,
           isChecking: false,
+          checkError: undefined,
         })
         return
       }
@@ -115,6 +118,8 @@ export function useAppUpdateSync(checkOnMount = true): void {
       if (event.status === 'downloaded') {
         useAppUpdateStore.setState({
           result: event.result,
+          isChecking: false,
+          checkError: undefined,
           isDownloading: false,
           isDownloaded: true,
           downloadProgress: { bytesPerSecond: 0, percent: 100, total: 0, transferred: 0 },
@@ -123,9 +128,11 @@ export function useAppUpdateSync(checkOnMount = true): void {
       }
 
       if (event.status === 'error') {
+        const state = useAppUpdateStore.getState()
         useAppUpdateStore.setState({
           isChecking: false,
           isDownloading: false,
+          ...(state.isChecking || !state.result ? { checkError: event.message, result: undefined } : {}),
           ...(event.result ? { result: event.result } : {}),
         })
       }

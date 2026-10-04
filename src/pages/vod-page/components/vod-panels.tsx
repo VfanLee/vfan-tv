@@ -35,6 +35,7 @@ export function EpisodesPanel({
   activeLine,
   activeSelection,
   isDescending,
+  isOrderBusy,
   lines,
   newEpisodeKeys,
   onSelectEpisode,
@@ -43,6 +44,7 @@ export function EpisodesPanel({
   activeLine?: PlayLine
   activeSelection: EpisodeSelection
   isDescending: boolean
+  isOrderBusy: boolean
   lines: PlayLine[]
   newEpisodeKeys: readonly string[]
   onSelectEpisode: (episodeIndex: number) => void
@@ -63,7 +65,9 @@ export function EpisodesPanel({
         <h2 className="text-foreground text-sm font-semibold">共 {activeLine?.episodes.length ?? 0} 集</h2>
         <button
           aria-label={`切换为${isDescending ? '正序' : '倒序'}`}
-          className="border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring inline-flex h-8 items-center gap-1.5 rounded-xl border px-2.5 text-xs font-semibold outline-none focus-visible:ring-2"
+          aria-busy={isOrderBusy}
+          disabled={isOrderBusy}
+          className="border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring inline-flex h-8 items-center gap-1.5 rounded-xl border px-2.5 text-xs font-semibold outline-none focus-visible:ring-2 disabled:cursor-wait disabled:opacity-60"
           type="button"
           onClick={onToggleOrder}
         >

@@ -23,7 +23,11 @@ jobs:
         shell: bash
         run: |
           version="$(node -p "require('./package.json').version")"
-          test "$GITHUB_REF_NAME" = "v$version"
+          expected_tag="v$version"
+          if [[ "$GITHUB_REF_NAME" != "$expected_tag" ]]; then
+            echo "::error::发布标签 ${GITHUB_REF_NAME} 与应用版本 ${version} 不一致，预期标签为 ${expected_tag}。请先同步并提交应用版本，再创建发布标签。"
+            exit 1
+          fi
       - name: Create draft release
         if: github.ref_type == 'tag'
         env:
