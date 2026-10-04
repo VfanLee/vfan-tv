@@ -18,6 +18,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .node-version
       - name: Verify release tag
         if: github.ref_type == 'tag'
         shell: bash
@@ -34,8 +39,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
+          node config/generate-release-notes.ts "$GITHUB_REF_NAME" "$GITHUB_REPOSITORY" > "$RUNNER_TEMP/release-notes.md"
           gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1 || \
-            gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "Vfan TV $GITHUB_REF_NAME" --generate-notes
+            gh release create "$GITHUB_REF_NAME" --draft --verify-tag --title "Vfan TV $GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/release-notes.md"
 
   check:
     name: Check project
@@ -165,8 +171,6 @@ jobs:
           - **macOS Intel**：下载 `*-macos-x64.dmg`。
           - **Windows x64**：下载 `*-windows-x64-setup.exe`。
           - **Windows ARM64**：下载 `*-windows-arm64-setup.exe`。
-
-          当前安装包未进行正式代码签名，系统可能显示安全提醒。Tauri 自动更新签名尚未配置，请从 Releases 页面手动下载安装。
           EOF
           } > "$RUNNER_TEMP/release-notes.md"
           gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false --latest --notes-file "$RUNNER_TEMP/release-notes.md"
