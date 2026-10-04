@@ -150,7 +150,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          notes="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json body --jq -r .body)"
+          notes="$(gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --json body --jq '.body')"
           notes="${notes%%$'\n## 下载与安装'*}"
           notes="${notes%%$'## 下载与安装'*}"
           notes="$(printf '%s' "$notes" | sed -e :a -e '/^[[:space:]]*$/{$d;N;ba' -e '}')"
